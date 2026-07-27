@@ -128,6 +128,10 @@ builder.Services.AddScoped<PetShop.Interfaces.IAttendanceService, PetShop.Servic
 builder.Services.AddScoped<PetShop.Interfaces.IPayrollService, PetShop.Services.PayrollService>();
 builder.Services.AddScoped<PetShop.Interfaces.IBoardingRepository, PetShop.Repositories.BoardingRepository>();
 builder.Services.AddScoped<PetShop.Interfaces.IBoardingService, PetShop.Services.BoardingService>();
+builder.Services.AddScoped<PetShop.Interfaces.IChatbotService, PetShop.Services.ChatbotService>();
+builder.Services.Configure<PetShop.Models.ChatbotOptions>(
+    builder.Configuration.GetSection(PetShop.Models.ChatbotOptions.SectionName));
+builder.Services.AddHttpClient<PetShop.Interfaces.IAiProviderService, PetShop.Services.AI.GeminiProviderService>();
 
 builder.Services.Configure<PetShop.Models.PayOSOptions>(
     builder.Configuration.GetSection(PetShop.Models.PayOSOptions.SectionName));

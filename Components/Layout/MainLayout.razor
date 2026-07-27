@@ -2,7 +2,12 @@
 @inject PetShop.Services.CartStateService CartState
 @inject IJSRuntime JS
 
-@Body
+<div class="chatbot-layout @(isChatOpen ? "chatbot-open" : string.Empty)">
+    <div class="chatbot-layout-content">
+        @Body
+    </div>
+    <ChatbotWidget IsOpen="@isChatOpen" IsOpenChanged="HandleChatOpenChanged" />
+</div>
 
 <div id="blazor-error-ui">
     An unhandled error has occurred.
@@ -12,6 +17,9 @@
 
 @code {
     private bool _cartInitialized;
+    private bool isChatOpen;
+
+    private void HandleChatOpenChanged(bool open) => isChatOpen = open;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

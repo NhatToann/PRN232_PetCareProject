@@ -1,0 +1,184 @@
+@inject PetShop.Interfaces.IChatbotService ChatbotService
+@inject PetShop.Services.UserSessionService UserSession
+
+@if (!IsOpen)
+{
+    <button type="button" class="chatbot-fab" @onclick="OpenAsync" aria-label="Mở ChatBot">
+        <i class="fas fa-robot" aria-hidden="true"></i>
+        <span class="chatbot-fab-tooltip">Trợ lý ảo PetShop</span>
+    </button>
+}
+
+@if (IsOpen)
+{
+    <div class="chatbot-widget open">
+        <div class="chatbot-widget-header">
+            <div class="chatbot-widget-header-left">
+                <div class="chatbot-widget-avatar">
+                    <i class="fas fa-robot" aria-hidden="true"></i>
+                </div>
+                <div class="chatbot-widget-info">
+                    <h3 class="chatbot-widget-title">LeadBot</h3>
+                    <span class="chatbot-widget-status">
+                        <span class="status-indicator"></span>
+                        Online Now
+                    </span>
+                </div>
+            </div>
+            <div class="chatbot-widget-actions">
+                <button type="button" class="chatbot-widget-close" @onclick="CloseAsync" aria-label="Đóng">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="chatbot-messages">
+            @foreach (var msg in messages)
+            {
+                <div class="chatbot-message @(msg.Sender == "user" ? "user" : "bot")">
+                    @if (msg.Sender == "bot")
+                    {
+                        <div class="chatbot-message-avatar">
+                            <i class="fas fa-robot" aria-hidden="true"></i>
+                        </div>
+                    }
+                    <div class="chatbot-message-content">
+                        <div class="chatbot-message-bubble">@msg.Text</div>
+                        <span class="chatbot-message-time">@FormatTime(msg.Timestamp)</span>
+                    </div>
+                </div>
+            }
+
+            @if (isTyping)
+            {
+                <div class="chatbot-message bot">
+                    <div class="chatbot-message-avatar">
+                        <i class="fas fa-robot" aria-hidden="true"></i>
+                    </div>
+                    <div class="chatbot-message-content">
+                        <div class="typing-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <form class="chatbot-input-form" @onsubmit="SendAsync" @onsubmit:preventDefault>
+            <input type="text"
+                   class="chatbot-input"
+                   placeholder="Reply to LeadBot..."
+                   value="@inputValue"
+                   @oninput="e => inputValue = e.Value?.ToString() ?? string.Empty"
+                   disabled="@isTyping"
+                   maxlength="500" />
+            <button type="submit" class="chatbot-send" disabled="@(isTyping || string.IsNullOrWhiteSpace(inputValue))">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </button>
+        </form>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private readonly List<ChatbotUiMessage> messages = new()
+    {
+        new(1, "Chào bạn! Mình là LeadBot - trợ lý AI của PetShop. Mình có thể hỗ trợ bạn về sản phẩm, dịch vụ và lịch hẹn.", "bot", DateTime.Now.AddMinutes(-2)),
+        new(2, "Bạn muốn tìm hiểu về dịch vụ nào?", "bot", DateTime.Now.AddMinutes(-1))
+    };
+
+    private bool hasLoadedSession;
+    private bool isTyping;
+    private string inputValue = string.Empty;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || hasLoadedSession) return;
+
+        hasLoadedSession = true;
+        try
+        {
+            await UserSession.LoadAsync();
+        }
+        catch
+        {
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OpenAsync()
+    {
+        IsOpen = true;
+        await IsOpenChanged.InvokeAsync(true);
+    }
+
+    private async Task CloseAsync()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private async Task SendAsync()
+    {
+        var text = inputValue.Trim();
+        if (string.IsNullOrWhiteSpace(text) || isTyping) return;
+
+        inputValue = string.Empty;
+        messages.Add(new ChatbotUiMessage(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), text, "user", DateTime.Now));
+        isTyping = true;
+
+        try
+        {
+            var customerId = UserSession.CurrentUser?.UserId;
+            var history = messages
+                .Where(m => m.Sender is "user" or "bot")
+                .TakeLast(10)
+                .Select(m => new ChatHistoryItemDto
+                {
+                    Role = m.Sender == "user" ? "user" : "assistant",
+                    Content = m.Text
+                })
+                .ToList();
+
+            var response = await ChatbotService.GetResponseAsync(new ChatMessageRequestDto
+            {
+                Message = text,
+                CustomerId = customerId,
+                History = history
+            });
+
+            messages.Add(new ChatbotUiMessage(
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 1,
+                string.IsNullOrWhiteSpace(response.Reply)
+                    ? "Xin lỗi, mình chưa hiểu ý bạn. Bạn có thể diễn đạt lại được không?"
+                    : response.Reply,
+                "bot",
+                DateTime.Now));
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[ChatbotWidget] SendAsync failed: {ex.GetType().Name}");
+            messages.Add(new ChatbotUiMessage(
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + 1,
+                "Xin lỗi, mình đang gặp sự cố kết nối. Bạn vui lòng thử lại sau nhé!",
+                "bot",
+                DateTime.Now));
+        }
+        finally
+        {
+            isTyping = false;
+        }
+    }
+
+    private static string FormatTime(DateTime date) => date.ToString("HH:mm");
+
+    private sealed record ChatbotUiMessage(long Id, string Text, string Sender, DateTime Timestamp);
+}

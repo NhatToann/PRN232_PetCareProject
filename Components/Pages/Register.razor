@@ -1,7 +1,10 @@
 @page "/register"
 @layout PetShop_PRN222.Components.Layout.EmptyLayout
 @inject PetShop.Interfaces.IAuthClient AuthClient
+@inject PetShop.Services.UserSessionService UserSession
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Đăng ký – Pet Toy Shop</PageTitle>
 
@@ -145,9 +148,13 @@
 
         @if (step == "register")
         {
-            <button type="button" class="google-login-btn" disabled="@isBusy">
+            <button type="button"
+                    id="google-register-btn"
+                    class="google-login-btn"
+                    onclick="window.blazorAuth?.promptGoogle?.()"
+                    disabled="@(isBusy || !googleReady)">
                 <img src="https://developers.google.com/identity/images/g-logo.png" alt="google" />
-                <span>Đăng nhập với Google</span>
+                <span>@(googleLoginLoading ? "Đang đăng nhập..." : "Đăng nhập với Google")</span>
             </button>
 
             <p>Đã có tài khoản? <a href="/login">Đăng nhập</a></p>
@@ -173,14 +180,89 @@
     private bool registerLoading;
     private bool otpLoading;
     private bool resendLoading;
+    private bool googleLoginLoading;
+    private bool googleReady;
     private int resendCountdown;
 
-    private bool isBusy => registerLoading || otpLoading || resendLoading;
+    private bool isBusy => registerLoading || otpLoading || resendLoading || googleLoginLoading;
 
     private string? error;
     private string? success;
 
     private System.Threading.Timer? countdownTimer;
+    private DotNetObjectReference<Register>? googleCallbackRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        var result = await AuthClient.GetGoogleClientIdAsync();
+        if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Data?.Message))
+        {
+            await InitGoogleAsync(result.Data.Message);
+        }
+    }
+
+    private async Task InitGoogleAsync(string clientId)
+    {
+        try
+        {
+            googleCallbackRef?.Dispose();
+            googleCallbackRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("blazorAuth.initGoogle", clientId, googleCallbackRef, "google-register-btn");
+            googleReady = true;
+            StateHasChanged();
+        }
+        catch
+        {
+            error = "Google Login chưa sẵn sàng. Vui lòng thử lại.";
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnGoogleCredential(string idToken)
+    {
+        await SignInWithGoogleAsync(new PetShop.Models.GoogleLoginRequestDto(idToken, null));
+    }
+
+    [JSInvokable]
+    public async Task OnGoogleAccessToken(string accessToken)
+    {
+        await SignInWithGoogleAsync(new PetShop.Models.GoogleLoginRequestDto(null, accessToken));
+    }
+
+    [JSInvokable]
+    public void OnGoogleError(string message)
+    {
+        error = string.IsNullOrWhiteSpace(message)
+            ? "Google Login chưa sẵn sàng. Vui lòng thử lại."
+            : message;
+        StateHasChanged();
+    }
+
+    private async Task SignInWithGoogleAsync(PetShop.Models.GoogleLoginRequestDto request)
+    {
+        if (googleLoginLoading) return;
+
+        error = null;
+        success = null;
+        googleLoginLoading = true;
+        StateHasChanged();
+
+        var result = await AuthClient.GoogleLoginAsync(request);
+
+        if (!result.IsSuccess || result.Data is null)
+        {
+            error = result.Error ?? "Đăng nhập Google thất bại.";
+            googleLoginLoading = false;
+            StateHasChanged();
+            return;
+        }
+
+        await UserSession.SignInAsync(result.Data);
+        Navigation.NavigateTo(result.Data.Role.Equals("staff", StringComparison.OrdinalIgnoreCase) ? "/system" : "/", replace: true);
+    }
 
     private async Task HandleRegisterAsync()
     {
@@ -301,5 +383,9 @@
         countdownTimer = null;
     }
 
-    public void Dispose() => StopCountdown();
+    public void Dispose()
+    {
+        StopCountdown();
+        googleCallbackRef?.Dispose();
+    }
 }

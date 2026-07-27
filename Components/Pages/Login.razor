@@ -61,7 +61,7 @@
         <!-- Google Login -->
         <button type="button" id="google-login-btn"
                 class="google-login-btn"
-                @onclick="HandleGoogleLoginAsync"
+                onclick="window.blazorAuth?.promptGoogle?.()"
                 disabled="@(isBusy || !googleReady)">
             <img src="https://developers.google.com/identity/images/g-logo.png" alt="google" />
             <span>@(loginLoading ? "Đang đăng nhập..." : "Đăng nhập với Google")</span>
@@ -109,7 +109,7 @@
     {
         try
         {
-            await JS.InvokeVoidAsync("blazorAuth.initGoogle", clientId, DotNetObjectReference.Create(this));
+            await JS.InvokeVoidAsync("blazorAuth.initGoogle", clientId, DotNetObjectReference.Create(this), "google-login-btn");
             googleReady = true;
             StateHasChanged();
         }
@@ -122,6 +122,26 @@
     [JSInvokable]
     public async Task OnGoogleCredential(string idToken)
     {
+        await SignInWithGoogleAsync(new PetShop.Models.GoogleLoginRequestDto(idToken, null));
+    }
+
+    [JSInvokable]
+    public async Task OnGoogleAccessToken(string accessToken)
+    {
+        await SignInWithGoogleAsync(new PetShop.Models.GoogleLoginRequestDto(null, accessToken));
+    }
+
+    [JSInvokable]
+    public void OnGoogleError(string message)
+    {
+        error = string.IsNullOrWhiteSpace(message)
+            ? "Google Login chưa sẵn sàng. Vui lòng thử lại."
+            : message;
+        StateHasChanged();
+    }
+
+    private async Task SignInWithGoogleAsync(PetShop.Models.GoogleLoginRequestDto request)
+    {
         // Prevent double-invocation if Google fires the JS callback twice for
         // any reason (focus changes, popup lifecycle edge cases). The backend
         // does not have an idempotency token for the Google flow.
@@ -131,7 +151,7 @@
         loginLoading = true;
         StateHasChanged();
 
-        var result = await AuthClient.GoogleLoginAsync(new PetShop.Models.GoogleLoginRequestDto(idToken, null));
+        var result = await AuthClient.GoogleLoginAsync(request);
 
         if (!result.IsSuccess || result.Data is null)
         {
@@ -181,17 +201,4 @@
         }
     }
 
-    private async Task HandleGoogleLoginAsync()
-    {
-        if (!googleReady) return;
-        error = null;
-        try
-        {
-            await JS.InvokeVoidAsync("blazorAuth.promptGoogle");
-        }
-        catch
-        {
-            error = "Google Login chưa sẵn sàng. Vui lòng thử lại.";
-        }
-    }
 }
