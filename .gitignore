@@ -14,12 +14,22 @@ obj/
 wwwroot/appsettings*.json
 
 # User-specific secrets — NEVER commit
+# LƯU Ý: appsettings.json / appsettings.Development.json đã được track từ trước
+# trong lịch sử git, nên .gitignore KHÔNG có tác dụng với chúng.
+# Dùng `git rm --cached` để gỡ khỏi index (xem README § Mật khẩu & dữ liệu seed).
 appsettings.json
 appsettings.Development.json
+
+# Slides tài liệu PRN232 (file .pptx nặng ~18MB) — không đưa vào git
+drive-download-*/
+_slides/
+_extract_slides.ps1
 
 # Logs
 *.log
 logs/
+run_out.log
+run_err.log
 
 # OS files
 .DS_Store

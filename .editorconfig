@@ -1,0 +1,86 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,csproj,props,targets,sln}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.razor]
+indent_size = 4
+
+[*.{csproj,props,targets}]
+indent_size = 2
+
+[*.cs]
+# --- Style ---
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = true:warning
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_style_readonly_field = true:warning
+dotnet_style_prefer_conditional_expression_over_return = false:suggestion
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_nullability = enable:warning
+csharp_prefer_simple_using_statement = true:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_prefer_pattern_matching = true:suggestion
+dotnet_diagnostic.CA1305.severity = none
+
+# --- Naming ---
+dotnet_naming_rule.private_fields_underscore.severity = warning
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_prefix
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers =
+
+dotnet_naming_style.underscore_prefix.required_prefix = _
+dotnet_naming_style.underscore_prefix.capitalization = camel_case
+
+# --- Formatting ---
+dotnet_diagnostic.IDE0055.severity = suggestion
+dotnet_diagnostic.IDE0090.severity = suggestion
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_space_after_cast = false
+csharp_preserve_single_line_blocks = true
+
+# --- Warnings bật thành error cho lỗi nghiêm trọng ---
+dotnet_diagnostic.CS8600.severity = error   # dereference null
+dotnet_diagnostic.CS8602.severity = error
+dotnet_diagnostic.CS8603.severity = error
+dotnet_diagnostic.CS8604.severity = error
+dotnet_diagnostic.CS8618.severity = error   # non-nullable chưa khởi tạo
+dotnet_diagnostic.CS8619.severity = error
+dotnet_diagnostic.CS8625.severity = error
+dotnet_diagnostic.CS8601.severity = error
+dotnet_diagnostic.CS8605.severity = error
+dotnet_diagnostic.CS0162.severity = error   # unreachable code
+dotnet_diagnostic.CS0164.severity = error
+dotnet_diagnostic.CS0219.severity = error
+dotnet_diagnostic.CS0168.severity = error   # biến không dùng
+dotnet_diagnostic.CS4014.severity = error   # Task không await
+dotnet_diagnostic.CS0067.severity = error
+
+[tests/**/*.cs]
+# Test không cần nullability cứng nhắc
+dotnet_diagnostic.CS8618.severity = none
+dotnet_diagnostic.CS8625.severity = none
