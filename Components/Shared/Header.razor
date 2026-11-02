@@ -3,6 +3,7 @@
 @inject PetShop.Services.CartStateService CartState
 @inject PetShop.Services.UserSessionService UserSession
 @inject NavigationManager Navigation
+@inject ILogger<Header> Logger
 @implements IDisposable
 
 <header class="header">
@@ -123,9 +124,9 @@
             return;
         }
 
-        try { await CartState.LoadAsync(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Header.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
+        try { await CartState.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[Header.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
         _cartReady = true;
-        try { await UserSession.LoadAsync(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Header.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
+        try { await UserSession.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[Header.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
         var products = await ProductCatalog.GetProductsAsync();
         allProductNames = products.Data?.Select(product => product.Name).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().ToArray() ?? Array.Empty<string>();
         isLoadingSuggestions = false;

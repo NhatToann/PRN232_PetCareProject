@@ -3,6 +3,7 @@
 @inject PetShop.Services.UserSessionService UserSession
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<Cart> Logger
 @implements IDisposable
 
 <PageTitle>Giỏ hàng</PageTitle>
@@ -139,8 +140,8 @@
         if (firstRender)
         {
             _cartReady = true;
-            try { await CartState.LoadAsync(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Cart.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
-            try { await UserSession.LoadAsync(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Cart.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
+            try { await CartState.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[Cart.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
+            try { await UserSession.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[Cart.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
             SelectedItems = CartState.Items.Select(item => item.ProductId).ToHashSet();
             StateHasChanged();
         }

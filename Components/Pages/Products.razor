@@ -87,7 +87,7 @@
 </div>
 
 @code {
-    private IReadOnlyList<PetShop.Models.ProductDto_temp> products = Array.Empty<PetShop.Models.ProductDto_temp>();
+    private IReadOnlyList<PetShop.Models.ProductDto> products = Array.Empty<PetShop.Models.ProductDto>();
     private IReadOnlyList<ProductsSidebar.CategoryOption> categories = Array.Empty<ProductsSidebar.CategoryOption>();
     private bool cartDrawerOpen;
     private bool isLoading = true;
@@ -99,7 +99,7 @@
         isLoading = true;
         error = null;
         var result = await ProductCatalog.GetProductsAsync(Keyword, null);
-        products = result.Data ?? Array.Empty<PetShop.Models.ProductDto_temp>();
+        products = result.Data ?? Array.Empty<PetShop.Models.ProductDto>();
         error = result.Error;
         categories = BuildCategories(products);
         isLoading = false;
@@ -114,7 +114,7 @@
     [SupplyParameterFromQuery(Name = "q")] private string? Keyword { get; set; }
     [SupplyParameterFromQuery(Name = "categoryId")] private int? selectedCategoryId { get; set; }
 
-    private IReadOnlyList<PetShop.Models.ProductDto_temp> filteredProducts =>
+    private IReadOnlyList<PetShop.Models.ProductDto> filteredProducts =>
         selectedCategoryId is null
             ? products
             : products.Where(p => p.CategoryId == selectedCategoryId).ToArray();
@@ -154,7 +154,7 @@
     private void GoDeletedProducts() => Navigation.NavigateTo("/products/deleted");
     private void GoSystem() => Navigation.NavigateTo("/system");
 
-    private static IReadOnlyList<ProductsSidebar.CategoryOption> BuildCategories(IReadOnlyList<PetShop.Models.ProductDto_temp> source)
+    private static IReadOnlyList<ProductsSidebar.CategoryOption> BuildCategories(IReadOnlyList<PetShop.Models.ProductDto> source)
     {
         var map = new Dictionary<int, string>();
         foreach (var product in source)

@@ -1,6 +1,7 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @inject PetShop.Services.CartStateService CartState
 @inject IJSRuntime JS
+@inject ILogger<MainLayout> Logger
 
 @Body
 
@@ -20,7 +21,7 @@
             _cartInitialized = true;
             CartState.AttachRuntime(JS);
             try { await CartState.LoadAsync(); }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[MainLayout.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
+            catch (Exception ex) { Logger.LineWarning($"[MainLayout.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
         }
     }
 }

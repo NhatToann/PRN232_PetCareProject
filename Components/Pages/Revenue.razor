@@ -1,4 +1,4 @@
-﻿@page "/revenue"
+@page "/revenue"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
 @using PetShop.Data
@@ -194,26 +194,16 @@ else
         pendingOrders = monthOrders.Count(o => o.Status == "Chờ xác nhận" || o.Status == "Đang xử lý" || o.Status == "Đang đóng gói" || o.Status == "Chờ giao hàng");
         cancelledOrders = monthOrders.Count(o => o.Status == "Đã hủy" || o.Status == "Đã huỷ");
 
-        Dictionary<int, int> soldDict = new Dictionary<int, int>();
-        try
-        {
-            using (var command = db.Database.GetDbConnection().CreateCommand())
-            {
-                command.CommandText = "SELECT product_id, SUM(ISNULL(quantity, 0)) FROM Order_Detail WHERE product_id IS NOT NULL GROUP BY product_id";
-                if (command.Connection.State != System.Data.ConnectionState.Open) await command.Connection.OpenAsync();
-                using (var reader = await command.ExecuteReaderAsync())
-                {
-                    while (await reader.ReadAsync())
-                    {
-                        if (!reader.IsDBNull(0) && !reader.IsDBNull(1))
-                        {
-                            soldDict[reader.GetInt32(0)] = Convert.ToInt32(reader.GetValue(1));
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
+        // Tổng số lượng đã bán theo sản phẩm (gộp nhiều dòng Order_Detail của cùng 1 sản phẩm).
+        var soldRows = await db.OrderDetails
+            .AsNoTracking()
+            .Where(d => d.ProductId != null)
+            .Select(d => new { d.ProductId, d.Quantity })
+            .ToListAsync();
+
+        var soldDict = soldRows
+            .GroupBy(d => d.ProductId!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity ?? 0));
 
         var products = await db.Products.AsNoTracking().ToListAsync();
         topProducts = products.Select(p => new TopProd

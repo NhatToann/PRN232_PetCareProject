@@ -1,6 +1,7 @@
 @page "/spa-booking-history"
 @inject PetShop.Interfaces.ISpaBookingClient SpaClient
 @inject PetShop.Services.UserSessionService UserSession
+@inject ILogger<SpaBookingHistory> Logger
 @implements IDisposable
 
 <PageTitle>Lịch sử đặt spa – Pet Toy Shop</PageTitle>
@@ -191,7 +192,7 @@
     private async Task ReloadAsync()
     {
         try { await UserSession.LoadAsync(); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[SpaBookingHistory.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
+        catch (Exception ex) { Logger.LineWarning($"[SpaBookingHistory.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
 
         isLoading = true;
         error = null;

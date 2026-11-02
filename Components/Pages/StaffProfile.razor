@@ -1,11 +1,10 @@
-﻿@page "/system/profile"
+@page "/system/profile"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
-@using PetShop.Data
-@using Microsoft.EntityFrameworkCore
 @using PetShop.Models
-@using Microsoft.Extensions.DependencyInjection
-@inject IServiceProvider ServiceProvider
+@using PetShop.Services
+@inject IStaffProfileService ProfileService
+@inject UserSessionService UserSession
 @inject NavigationManager Navigation
 
 <PageTitle>Hồ Sơ Của Tôi</PageTitle>
@@ -23,7 +22,17 @@
                     <img src="https://ui-avatars.com/api/?name=@(staff.Name)&background=6c5ce7&color=fff&size=150" class="rounded-circle shadow-lg border border-4 border-white" />
                 </div>
                 <h3 class="fw-bold text-dark">@staff.Name</h3>
-                <span class="badge bg-primary px-3 py-2 rounded-pill mb-4 fs-6">Chức vụ: @(staff.Role.ToUpper())</span>
+                <span class="badge bg-primary px-3 py-2 rounded-pill mb-4 fs-6">Chức vụ: @((staff.Position.Length > 0 ? staff.Position : staff.Role).ToUpper())</span>
+
+                @if (!string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    <div class="alert alert-danger rounded-4 fw-bold">@errorMessage</div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(successMessage))
+                {
+                    <div class="alert alert-success rounded-4 fw-bold"><i class="fas fa-check-circle me-2"></i> @successMessage</div>
+                }
 
                 <div class="text-start mt-4">
                     <div class="mb-3">
@@ -38,8 +47,16 @@
                         <label class="fw-bold text-muted mb-2">Địa chỉ Email</label>
                         <input type="email" class="form-control form-control-lg bg-light border-0 shadow-none" @bind="staff.Email" />
                     </div>
-                    <button class="btn btn-primary btn-lg w-100 rounded-pill fw-bold shadow" style="background: linear-gradient(135deg, #6c5ce7, #a29bfe); border:none;" @onclick="SaveProfile">
-                        <i class="fas fa-save me-2"></i> Lưu Cập Nhật
+                    <button class="btn btn-primary btn-lg w-100 rounded-pill fw-bold shadow" style="background: linear-gradient(135deg, #6c5ce7, #a29bfe); border:none;" @onclick="SaveProfile" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span>Đang lưu...</span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-save me-2"></i><span>Lưu Cập Nhật</span>
+                        }
                     </button>
                 </div>
             }
@@ -48,28 +65,67 @@
 </div>
 
 @code {
-    private Customer? staff;
+    private StaffProfileDto? staff;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private bool isSaving;
 
     protected override async Task OnInitializedAsync()
     {
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
-        staff = await db.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == 2);
+        await UserSession.LoadAsync();
+        var user = UserSession.CurrentUser;
+        if (user is null)
+        {
+            errorMessage = "Chưa đăng nhập. Vui lòng đăng nhập lại.";
+            return;
+        }
+
+        staff = await ProfileService.GetProfileAsync(user.UserId, user.Email);
+        if (staff is null)
+        {
+            errorMessage = "Không tìm thấy hồ sơ của bạn trong hệ thống.";
+        }
     }
 
     private async Task SaveProfile()
     {
-        if (staff != null)
+        if (staff is null || isSaving)
         {
-            // GIẢI PHÁP VÀNG: Dùng SQL Thuần để update, né 100% lỗi Tracking gây đứng hình
-            using var scope = ServiceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
+            return;
+        }
 
-            string sql = "UPDATE Customer SET name = @p0, phone = @p1, email = @p2 WHERE customer_id = 2";
-            await db.Database.ExecuteSqlRawAsync(sql, staff.Name, staff.Phone ?? "", staff.Email ?? "");
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+        isSaving = true;
 
-            // Ép tải lại trang cứng để đổi tên luôn trên Layout góc phải
+        try
+        {
+            var ok = await ProfileService.UpdateProfileAsync(staff);
+            if (!ok)
+            {
+                errorMessage = "Không tìm thấy hồ sơ để cập nhật.";
+                return;
+            }
+
+            successMessage = "Đã lưu thông tin cá nhân.";
+
+            // Cập nhật lại session để tên/email hiển thị ở thanh trên cập nhật ngay.
+            var user = UserSession.CurrentUser;
+            if (user is not null)
+            {
+                await UserSession.SignInAsync(user with { Name = staff.Name, Email = staff.Email });
+            }
+
+            await Task.Delay(700);
             Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Lưu hồ sơ thất bại: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
         }
     }
 }

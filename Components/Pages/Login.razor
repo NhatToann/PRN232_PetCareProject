@@ -4,6 +4,7 @@
 @inject PetShop.Services.UserSessionService UserSession
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<Login> Logger
 
 <PageTitle>Đăng nhập – Pet Toy Shop</PageTitle>
 
@@ -89,7 +90,7 @@
 
         // Already logged in → redirect
         try { await UserSession.LoadAsync(); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Login.razor] OnAfterRenderAsync LoadAsync threw: {ex.GetType().Name}"); }
+        catch (Exception ex) { Logger.LineWarning($"[Login.razor] OnAfterRenderAsync LoadAsync threw: {ex.GetType().Name}"); }
         if (UserSession.IsAuthenticated)
         {
             Navigation.NavigateTo(UserSession.CurrentUser!.Role == "staff" ? "/system" : "/", replace: true);

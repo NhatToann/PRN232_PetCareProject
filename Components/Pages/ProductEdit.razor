@@ -1,4 +1,4 @@
-﻿@page "/products/edit/{Id:int}"
+@page "/products/edit/{Id:int}"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
 @using PetShop.Data
@@ -27,6 +27,10 @@ else
         @if (!string.IsNullOrEmpty(successMessage))
         {
             <div class="alert alert-success fs-5 rounded-4 shadow-sm fw-bold"><i class="fas fa-check-circle me-2"></i> @successMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger fs-5 rounded-4 shadow-sm fw-bold"><i class="fas fa-exclamation-circle me-2"></i> @errorMessage</div>
         }
         <EditForm Model="@product" OnValidSubmit="UpdateProduct">
             <DataAnnotationsValidator />
@@ -62,6 +66,7 @@ else
     [Parameter] public int Id { get; set; }
     private Product? product;
     private string successMessage = "";
+    private string errorMessage = "";
     private decimal InputPrice = 0;
 
     protected override async Task OnInitializedAsync()
@@ -86,18 +91,18 @@ else
 
             product!.Price = InputPrice * 1000;
 
-            // Xử lý chống lỗi DateTime SQL
+            // Chống lỗi DateTime SQL: SQL Server không chấp nhận DateTime trước năm 1753.
+            // Lưu ý: DateTime? khi box sẽ thành DateTime (hoặc null), nên dùng DateTime cho cả hai nhánh.
             foreach (var prop in product.GetType().GetProperties())
             {
-                if (prop.PropertyType == typeof(DateTime))
+                if (prop.PropertyType != typeof(DateTime) && prop.PropertyType != typeof(DateTime?))
                 {
-                    var val = (DateTime)prop.GetValue(product);
-                    if (val < new DateTime(1753, 1, 1)) prop.SetValue(product, DateTime.Now);
+                    continue;
                 }
-                else if (prop.PropertyType == typeof(DateTime?))
+
+                if (prop.GetValue(product) is DateTime val && val < new DateTime(1753, 1, 1))
                 {
-                    var val = (DateTime?)prop.GetValue(product);
-                    if (val.HasValue && val.Value < new DateTime(1753, 1, 1)) prop.SetValue(product, DateTime.Now);
+                    prop.SetValue(product, DateTime.Now);
                 }
             }
 
@@ -109,6 +114,10 @@ else
             await Task.Delay(1000);
             Navigation.NavigateTo("/products/list");
         }
-        catch (Exception) { }
+        catch (Exception ex)
+        {
+            successMessage = string.Empty;
+            errorMessage = $"Lưu sản phẩm thất bại: {ex.Message}";
+        }
     }
 }

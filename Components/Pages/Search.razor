@@ -150,8 +150,8 @@
 
     [SupplyParameterFromQuery(Name = "q")] private string? Keyword { get; set; }
 
-    private IReadOnlyList<PetShop.Models.ProductDto_temp> products = Array.Empty<PetShop.Models.ProductDto_temp>();
-    private IReadOnlyList<PetShop.Models.ProductCategoryFilterDto_temp> categories = Array.Empty<PetShop.Models.ProductCategoryFilterDto_temp>();
+    private IReadOnlyList<PetShop.Models.ProductDto> products = Array.Empty<PetShop.Models.ProductDto>();
+    private IReadOnlyList<PetShop.Models.ProductCategoryFilterDto> categories = Array.Empty<PetShop.Models.ProductCategoryFilterDto>();
     private int? selectedCategoryId;
     private string sortBy = "relevant";
     private int currentPage = 1;
@@ -168,11 +168,11 @@
 
     private string PriceSortValue => sortBy is "price_asc" or "price_desc" ? sortBy : string.Empty;
 
-    private IReadOnlyList<PetShop.Models.ProductDto_temp> sortedProducts => SortProducts(products, sortBy);
+    private IReadOnlyList<PetShop.Models.ProductDto> sortedProducts => SortProducts(products, sortBy);
 
     private int totalPages => Math.Max(1, (int)Math.Ceiling(sortedProducts.Count / (double)PageSize));
 
-    private IEnumerable<PetShop.Models.ProductDto_temp> paginatedProducts
+    private IEnumerable<PetShop.Models.ProductDto> paginatedProducts
     {
         get
         {
@@ -207,11 +207,11 @@
         var categoryTask = ProductCatalog.GetCategoriesAsync();
 
         var productResult = await productTask;
-        products = productResult.Data ?? Array.Empty<PetShop.Models.ProductDto_temp>();
+        products = productResult.Data ?? Array.Empty<PetShop.Models.ProductDto>();
         error = productResult.Error;
 
         var categoryResult = await categoryTask;
-        categories = categoryResult.Data ?? Array.Empty<PetShop.Models.ProductCategoryFilterDto_temp>();
+        categories = categoryResult.Data ?? Array.Empty<PetShop.Models.ProductCategoryFilterDto>();
 
         isLoading = false;
     }
@@ -270,7 +270,7 @@
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
 
-    private static IReadOnlyList<PetShop.Models.ProductDto_temp> SortProducts(IReadOnlyList<PetShop.Models.ProductDto_temp> source, string sort)
+    private static IReadOnlyList<PetShop.Models.ProductDto> SortProducts(IReadOnlyList<PetShop.Models.ProductDto> source, string sort)
     {
         var list = source.ToList();
         return sort switch

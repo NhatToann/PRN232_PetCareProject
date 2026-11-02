@@ -2,6 +2,7 @@
 @inject PetShop.Services.CartStateService CartState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<CartDrawer> Logger
 @implements IDisposable
 
 @if (!_isReady)
@@ -95,7 +96,7 @@ else if (Open)
         if (firstRender)
         {
             _isReady = true;
-            try { await CartState.LoadAsync(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[CartDrawer.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
+            try { await CartState.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[CartDrawer.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
             StateHasChanged();
         }
     }

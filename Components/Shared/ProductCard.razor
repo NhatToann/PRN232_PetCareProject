@@ -3,6 +3,7 @@
 @inject PetShop.Services.UserSessionService UserSession
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<ProductCard> Logger
 
 @if (Variant == "search")
 {
@@ -145,10 +146,10 @@ else
 }
 
 @code {
-    [Parameter, EditorRequired] public ProductDto_temp Product { get; set; } = default!;
+    [Parameter, EditorRequired] public ProductDto Product { get; set; } = default!;
     [Parameter] public string Variant { get; set; } = "default";
     [Parameter] public bool ShowActions { get; set; } = true;
-    [Parameter] public EventCallback<ProductDto_temp> OnAddToCart { get; set; }
+    [Parameter] public EventCallback<ProductDto> OnAddToCart { get; set; }
 
     private bool isAdding;
 
@@ -214,7 +215,7 @@ else
         {
             // Cart drawer might already be closed by the time we are done — surface
             // the exception in the debug output so the issue is visible during dev.
-            System.Diagnostics.Debug.WriteLine($"[ProductCard.razor] AddAsync threw: {ex.GetType().Name} {ex.Message}");
+            Logger.LineWarning($"[ProductCard.razor] AddAsync threw: {ex.GetType().Name} {ex.Message}");
             throw;
         }
         finally

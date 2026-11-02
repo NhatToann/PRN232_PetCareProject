@@ -1,7 +1,8 @@
-﻿@page "/"
+@page "/"
 @inject PetShop.Interfaces.IProductCatalogClient ProductCatalog
 @inject PetShop.Services.CartStateService CartState
 @inject PetShop.Services.UserSessionService UserSession
+@inject ILogger<Home> Logger
 @implements IDisposable
 
 <PageTitle>Pet Toy Shop</PageTitle>
@@ -33,7 +34,7 @@
 </div>
 
 @code {
-    private IReadOnlyList<PetShop.Models.ProductDto_temp> products = Array.Empty<PetShop.Models.ProductDto_temp>();
+    private IReadOnlyList<PetShop.Models.ProductDto> products = Array.Empty<PetShop.Models.ProductDto>();
     private bool isLoadingProducts = true;
     private string? productError;
     private bool cartDrawerOpen;
@@ -56,8 +57,8 @@
     {
         if (firstRender)
         {
-            try { await UserSession.LoadAsync(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Home.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
-            try { await CartState.LoadAsync(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Home.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
+            try { await UserSession.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[Home.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
+            try { await CartState.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[Home.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
             StateHasChanged();
         }
     }
@@ -67,7 +68,7 @@
         isLoadingProducts = true;
         productError = null;
         var result = await ProductCatalog.GetProductsAsync();
-        products = result.Data ?? Array.Empty<PetShop.Models.ProductDto_temp>();
+        products = result.Data ?? Array.Empty<PetShop.Models.ProductDto>();
         productError = result.Error;
         isLoadingProducts = false;
     }
@@ -84,7 +85,7 @@
         return Task.CompletedTask;
     }
 
-    private async Task ShowAddedToastAsync(PetShop.Models.ProductDto_temp product)
+    private async Task ShowAddedToastAsync(PetShop.Models.ProductDto product)
     {
         toastMessage = "Đã thêm sản phẩm vào giỏ hàng!";
         toastVisible = true;

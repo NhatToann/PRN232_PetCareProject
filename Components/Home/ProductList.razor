@@ -63,16 +63,16 @@
     private const int FeaturedPreviewCount = 10;
     private bool showAllProducts;
 
-    [Parameter] public IReadOnlyList<ProductDto_temp> Products { get; set; } = Array.Empty<ProductDto_temp>();
+    [Parameter] public IReadOnlyList<ProductDto> Products { get; set; } = Array.Empty<ProductDto>();
     [Parameter] public bool Loading { get; set; }
     [Parameter] public string? Error { get; set; }
     [Parameter] public string Keyword { get; set; } = string.Empty;
-    [Parameter] public EventCallback<ProductDto_temp> OnAddToCart { get; set; }
+    [Parameter] public EventCallback<ProductDto> OnAddToCart { get; set; }
     [Parameter] public EventCallback OnRetry { get; set; }
 
     private bool HasMoreOnHome => string.IsNullOrWhiteSpace(Keyword) && Products.Count > FeaturedPreviewCount;
 
-    private IEnumerable<ProductDto_temp> VisibleProducts => showAllProducts ? Products : Products.Take(FeaturedPreviewCount);
+    private IEnumerable<ProductDto> VisibleProducts => showAllProducts ? Products : Products.Take(FeaturedPreviewCount);
 
     protected override void OnParametersSet()
     {

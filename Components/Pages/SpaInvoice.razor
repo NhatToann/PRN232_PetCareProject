@@ -3,6 +3,7 @@
 @inject UserSessionService UserSession
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<SpaInvoice> Logger
 @implements IDisposable
 
 <PageTitle>Hóa đơn spa – Pet Toy Shop</PageTitle>
@@ -266,7 +267,7 @@
         try { await UserSession.LoadAsync(); }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[SpaInvoice] UserSession.LoadAsync: {ex.Message}");
+            Logger.LineWarning($"[SpaInvoice] UserSession.LoadAsync: {ex.Message}");
         }
         await ReloadAsync();
     }

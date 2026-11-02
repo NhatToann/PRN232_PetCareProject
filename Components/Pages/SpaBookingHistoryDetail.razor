@@ -3,6 +3,7 @@
 @inject PetShop.Services.UserSessionService UserSession
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<SpaBookingHistoryDetail> Logger
 @implements IDisposable
 
 <PageTitle>Chi tiết đặt lịch spa - Pet Toy Shop</PageTitle>
@@ -209,7 +210,7 @@
         invoice = null;
 
         try { await UserSession.LoadAsync(); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[SpaBookingHistoryDetail.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
+        catch (Exception ex) { Logger.LineWarning($"[SpaBookingHistoryDetail.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
 
         if (HistoryId <= 0 || CurrentCustomerId <= 0)
         {

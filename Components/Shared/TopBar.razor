@@ -2,6 +2,7 @@
 @inject PetShop.Services.CartStateService CartState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<TopBar> Logger
 @implements IDisposable
 
 <div class="top-bar">
@@ -98,7 +99,7 @@
     {
         if (firstRender)
         {
-            try { await UserSession.LoadAsync(); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[TopBar] OnAfterRenderAsync LoadAsync threw: {ex.GetType().Name}"); }
+            try { await UserSession.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[TopBar] OnAfterRenderAsync LoadAsync threw: {ex.GetType().Name}"); }
             StateHasChanged();
         }
     }
