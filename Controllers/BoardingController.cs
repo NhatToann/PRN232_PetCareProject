@@ -2,8 +2,10 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PetShop.Data;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
+using PetShop.Services;
 
 namespace PetShop.Controllers
 {
@@ -16,13 +18,16 @@ namespace PetShop.Controllers
         private const string BoardingStatusDaThanhToan = "Đã thanh toán";
 
         private readonly IBoardingService _service;
+        private readonly ILogger<BoardingController> _logger;
         private readonly ShopPetDatabaseContext _db;
         private readonly IPayOSService _payOS;
         private readonly IEmailService _email;
 
-        public BoardingController(IBoardingService service, ShopPetDatabaseContext db, IPayOSService payOS, IEmailService email)
+        public BoardingController(IBoardingService service, ShopPetDatabaseContext db, IPayOSService payOS, IEmailService email,
+            ILogger<BoardingController> logger)
         {
             _service = service;
+            _logger = logger;
             _db = db;
             _payOS = payOS;
             _email = email;
@@ -170,13 +175,13 @@ namespace PetShop.Controllers
             }
             catch (DbUpdateException ex)
             {
-                Console.WriteLine($"[BoardingController] DbUpdateException: {ex.Message}");
-                Console.WriteLine($"[BoardingController] Inner: {ex.InnerException?.Message}");
+                _logger.Line($"[BoardingController] DbUpdateException: {ex.Message}");
+                _logger.Line($"[BoardingController] Inner: {ex.InnerException?.Message}");
                 return StatusCode(500, new BoardingCheckoutResponse(false, "Lỗi cơ sở dữ liệu khi lưu đặt phòng: " + ex.InnerException?.Message, null, null, null, request.PaymentMethod));
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BoardingController] Exception: {ex.Message}");
+                _logger.Line($"[BoardingController] Exception: {ex.Message}");
                 return StatusCode(500, new BoardingCheckoutResponse(false, "Lỗi khi xử lý đặt phòng: " + ex.Message, null, null, null, request.PaymentMethod));
             }
         }
@@ -197,7 +202,7 @@ namespace PetShop.Controllers
         {
             if (string.IsNullOrWhiteSpace(customer.Email))
             {
-                Console.WriteLine($"[BoardingController] Customer {customer.CustomerId} has no email — skipping email.");
+                _logger.Line($"[BoardingController] Customer {customer.CustomerId} has no email — skipping email.");
                 return;
             }
 
@@ -223,11 +228,11 @@ namespace PetShop.Controllers
                     "Chưa thanh toán",
                     ct
                 );
-                Console.WriteLine($"[BoardingController] Confirmation email sent to {customer.Email} for booking #{booking.BookingId}.");
+                _logger.Line($"[BoardingController] Confirmation email sent to {customer.Email} for booking #{booking.BookingId}.");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BoardingController] Failed to send boarding email: {ex.Message}");
+                _logger.Line($"[BoardingController] Failed to send boarding email: {ex.Message}");
             }
         }
 

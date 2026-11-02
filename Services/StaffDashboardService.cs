@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PetShop.Data;
 using PetShop.Interfaces;
 using PetShop.Models;
@@ -8,19 +8,24 @@ namespace PetShop.Services
     public class StaffDashboardService : IStaffDashboardService
     {
         private readonly ShopPetDatabaseContext _context;
+        private readonly ILogger<StaffDashboardService> _logger;
 
-        public StaffDashboardService(ShopPetDatabaseContext context) { _context = context; }
+        public StaffDashboardService(ShopPetDatabaseContext context, ILogger<StaffDashboardService> logger)
+        {
+            _context = context;
+            _logger = logger;
+        }
 
         public async Task<StaffDashboardSummaryDto> GetDashboardSummaryAsync(int staffId)
         {
             var currentTime = DateTime.Now;
             var todayDateOnly = DateOnly.FromDateTime(currentTime);
 
-            // BƠM 5 LỊCH HẸN VÀO NẾU DB TRỐNG ĐỂ MAI DEMO BẢO VỆ
             var todayBookings = await _context.Bookings
                 .Include(b => b.Customer).Include(b => b.Pet).ThenInclude(p => p.Breed)
                 .Where(b => b.AppointmentStart.Date == currentTime.Date).OrderBy(b => b.AppointmentStart).ToListAsync();
 
+            // Bơm lịch hẹn mẫu khi hôm nay chưa có dữ liệu — phục vụ demo/bảo vệ môn học.
             if (todayBookings.Count < 5)
             {
                 try
@@ -37,7 +42,10 @@ namespace PetShop.Services
                     todayBookings = await _context.Bookings.Include(b => b.Customer)
                         .Where(b => b.AppointmentStart.Date == currentTime.Date).OrderBy(b => b.AppointmentStart).ToListAsync();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Không seed được lịch hẹn mẫu cho dashboard.");
+                }
             }
 
             int servicesToday = todayBookings.Count;
@@ -55,16 +63,17 @@ namespace PetShop.Services
                     Status = b.Status ?? "Đang xử lý"
                 }).ToList();
 
-            // ĐỒNG BỘ GIỜ TRỰC CHUẨN THỰC TẾ
-            string startT = currentTime.ToString("HH:00");
-            string endT = currentTime.AddHours(8).ToString("HH:00");
+            // Ca trực hiện tại lấy từ lịch thật trong DB; nếu hôm nay không có ca thì báo "Chưa có ca".
+            var todaySchedule = await GetCurrentShiftAsync(staffId, todayDateOnly);
 
             return new StaffDashboardSummaryDto
             {
                 ServicesToday = servicesToday,
                 PendingBookings = pendingBookings,
-                CurrentShiftName = "Ca Trực Hiện Tại",
-                CurrentShiftTime = $"{startT} - {endT}",
+                CurrentShiftName = todaySchedule?.ShiftName ?? "Chưa có ca",
+                CurrentShiftTime = todaySchedule is null
+                    ? "--:-- - --:--"
+                    : $"{todaySchedule.StartTime} - {todaySchedule.EndTime}",
                 NextTasks = nextTasks
             };
         }
@@ -80,7 +89,7 @@ namespace PetShop.Services
                 StartTime = b.AppointmentStart,
                 PetName = b.Pet != null ? b.Pet.PetName : "Thú cưng",
                 PetBreed = (b.Pet != null && b.Pet.Breed != null) ? b.Pet.Breed.BreedName : "Giống chuẩn",
-                CustomerName = b.Customer != null ? b.Customer.Name : "Khách hàng",
+                CustomerName = b.Customer?.Name ?? "Khách hàng",
                 Status = b.Status ?? "Chờ xử lý",
                 Note = b.Note ?? string.Empty
             }).ToList();
@@ -88,62 +97,186 @@ namespace PetShop.Services
 
         public async Task<bool> UpdateBookingStatusAsync(int bookingId, string newStatus)
         {
+            var booking = await _context.Bookings.FindAsync(bookingId);
+            if (booking is null)
+            {
+                _logger.LogWarning("Không tìm thấy booking {BookingId} để cập nhật trạng thái.", bookingId);
+                return false;
+            }
+
+            booking.Status = newStatus;
+
+            // CreatedAt/UpdatedAt có thể không tồn tại trên entity (tuỳ schema), nên bọc riêng
+            // để một cột thiếu không làm hỏng cả lần cập nhật.
+            TrySetTimestamp(booking, "UpdatedAt");
+            TrySetCreatedAtIfMissing(booking);
+
             try
             {
-                var booking = await _context.Bookings.FindAsync(bookingId);
-                if (booking == null) return false;
-                booking.Status = newStatus;
-
-                try { _context.Entry(booking).Property("UpdatedAt").CurrentValue = DateTime.Now; } catch { }
-                try
-                {
-                    var created = _context.Entry(booking).Property("CreatedAt").CurrentValue;
-                    if (created == null || (DateTime)created < new DateTime(1753, 1, 1))
-                    {
-                        _context.Entry(booking).Property("CreatedAt").CurrentValue = DateTime.Now;
-                    }
-                }
-                catch { }
-
                 await _context.SaveChangesAsync();
                 return true;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lưu trạng thái booking {BookingId}.", bookingId);
+                return false;
+            }
         }
 
         public async Task<List<StaffScheduleDto>> GetStaffSchedulesAsync(int staffId)
         {
-            var result = new List<StaffScheduleDto>();
-            // FIX: TRẢ VỀ GIỜ THỰC TẾ TRÊN MÁY TÍNH ĐỂ MAI LÊN THUYẾT TRÌNH KHÔNG BỊ LỆCH
-            string startTimeStr = DateTime.Now.ToString("HH:00");
-            string endTimeStr = DateTime.Now.AddHours(8).ToString("HH:00");
+            var today = DateOnly.FromDateTime(DateTime.Now);
 
-            // Lấy thực tế từ CSDL để kiểm tra đã check in chưa
-            var sched = await _context.WorkSchedules.OrderByDescending(w => w.ScheduleId).FirstOrDefaultAsync(w => w.StaffId == staffId);
-            string st = (sched != null && sched.Status == "Đã Check-in") ? "Đã Check-in" : "Chưa bắt đầu";
+            var rows = await _context.WorkSchedules
+                .AsNoTracking()
+                .Where(w => w.StaffId == staffId)
+                .OrderBy(w => w.WorkDate)
+                .ThenBy(w => w.StartTime)
+                .ToListAsync();
 
-            result.Add(new StaffScheduleDto
+            // Lịch hôm nay + các ca sắp tới (bỏ qua ca đã qua) để nhân viên thấy đủ lịch.
+            var upcoming = rows
+                .Where(w => w.WorkDate >= today)
+                .ToList();
+
+            if (upcoming.Count == 0)
             {
-                ScheduleId = 9999,
-                WorkDate = DateTime.Today,
-                StartTime = startTimeStr,
-                EndTime = endTimeStr,
-                ShiftName = "Ca Trực Hiện Tại",
-                Status = st
-            });
-            return result;
+                // Không có ca tương lai → lùi về ca hôm nay (có thể đã qua) để vẫn hiển thị lịch.
+                upcoming = rows.Where(w => w.WorkDate == today).ToList();
+            }
+
+            var deduped = WorkScheduleDedup.ByStaffDateTimeSlot(upcoming);
+
+            return deduped.Select(w => new StaffScheduleDto
+            {
+                ScheduleId = w.ScheduleId,
+                WorkDate = w.WorkDate.ToDateTime(w.StartTime),
+                StartTime = w.StartTime.ToString(@"HH\:mm"),
+                EndTime = w.EndTime.ToString(@"HH\:mm"),
+                ShiftName = DescribeShiftName(w),
+                Status = string.IsNullOrWhiteSpace(w.Status) ? "Chưa bắt đầu" : w.Status,
+                Note = w.Note ?? string.Empty
+            }).ToList();
         }
 
         public async Task<bool> CheckInAsync(int scheduleId)
         {
+            if (scheduleId <= 0)
+            {
+                _logger.LogWarning("Check-in với scheduleId không hợp lệ: {ScheduleId}.", scheduleId);
+                return false;
+            }
+
+            // Update đúng dòng lịch được yêu cầu (không dùng "dòng cuối cùng" trong bảng).
+            var schedule = await _context.WorkSchedules.FirstOrDefaultAsync(w => w.ScheduleId == scheduleId);
+            if (schedule is null)
+            {
+                _logger.LogWarning("Check-in thất bại: không tìm thấy ca với scheduleId={ScheduleId}.", scheduleId);
+                return false;
+            }
+
+            schedule.Status = "Đã Check-in";
+
             try
             {
-                // ÉP UPDATE THẲNG DÒNG CUỐI CÙNG TRONG DATABASE, KHÔNG CẦN BIẾT ID LÀ GÌ = CHẮC CHẮN 100% THÀNH CÔNG
-                string sql = "UPDATE WorkSchedule SET status = N'Đã Check-in' WHERE schedule_id = (SELECT TOP 1 schedule_id FROM WorkSchedule ORDER BY schedule_id DESC)";
-                await _context.Database.ExecuteSqlRawAsync(sql);
+                await _context.SaveChangesAsync();
                 return true;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi check-in ca scheduleId={ScheduleId}.", scheduleId);
+                return false;
+            }
+        }
+
+        // ── helpers ───────────────────────────────────────────────────
+
+        /// <summary>
+        /// Ca đang diễn ra (hoặc sắp tới) của nhân viên trong ngày, đọc từ DB.
+        /// </summary>
+        private async Task<StaffScheduleDto?> GetCurrentShiftAsync(int staffId, DateOnly workDate)
+        {
+            var rows = await _context.WorkSchedules
+                .AsNoTracking()
+                .Where(w => w.StaffId == staffId && w.WorkDate == workDate)
+                .OrderBy(w => w.StartTime)
+                .ToListAsync();
+
+            var shifts = WorkScheduleDedup.ByStaffDateTimeSlot(rows);
+            if (shifts.Count == 0)
+            {
+                return null;
+            }
+
+            var now = TimeOnly.FromDateTime(DateTime.Now);
+
+            // Ưu tiên ca đang diễn ra; nếu chưa tới ca nào thì lấy ca sắp tới.
+            var current = shifts.FirstOrDefault(s => now >= s.StartTime && now <= s.EndTime)
+                          ?? shifts.FirstOrDefault(s => s.StartTime > now)
+                          ?? shifts[0];
+
+            return new StaffScheduleDto
+            {
+                ScheduleId = current.ScheduleId,
+                WorkDate = current.WorkDate.ToDateTime(current.StartTime),
+                StartTime = current.StartTime.ToString(@"HH\:mm"),
+                EndTime = current.EndTime.ToString(@"HH\:mm"),
+                ShiftName = DescribeShiftName(current),
+                Status = string.IsNullOrWhiteSpace(current.Status) ? "Chưa bắt đầu" : current.Status,
+                Note = current.Note ?? string.Empty
+            };
+        }
+
+        /// <summary>Tên ca hiển thị: dùng ghi chú sẵn có, nếu không thì phân loại theo khung giờ.</summary>
+        private static string DescribeShiftName(WorkSchedule schedule)
+        {
+            if (!string.IsNullOrWhiteSpace(schedule.Note))
+            {
+                return schedule.Note.Trim();
+            }
+
+            var start = schedule.StartTime;
+            if (start >= new TimeOnly(19, 0))
+            {
+                return "Ca tối";
+            }
+
+            if (start >= new TimeOnly(13, 0))
+            {
+                return "Ca chiều";
+            }
+
+            return "Ca sáng";
+        }
+
+        private void TrySetTimestamp(object entity, string propertyName)
+        {
+            try
+            {
+                var property = _context.Entry(entity).Property(propertyName);
+                property.CurrentValue = DateTime.Now;
+            }
+            catch (InvalidOperationException)
+            {
+                // Entity không có cột này trong schema → bỏ qua, không phải lỗi nghiệp vụ.
+            }
+        }
+
+        private void TrySetCreatedAtIfMissing(object entity)
+        {
+            try
+            {
+                var property = _context.Entry(entity).Property("CreatedAt");
+                var created = property.CurrentValue;
+                if (created is null || (created is DateTime dt && dt < new DateTime(1753, 1, 1)))
+                {
+                    property.CurrentValue = DateTime.Now;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Entity không có cột CreatedAt → bỏ qua.
+            }
         }
     }
 }

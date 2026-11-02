@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -7,10 +8,13 @@ namespace PetShop.Services;
 public sealed class ReviewClient : IReviewClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<ReviewClient> _logger;
 
-    public ReviewClient(HttpClient httpClient)
+    public ReviewClient(HttpClient httpClient,
+        ILogger<ReviewClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public Task<FrontendApiResult<IReadOnlyList<ReviewDisplayDto>>> GetProductReviewsAsync(
@@ -50,6 +54,7 @@ public sealed class ReviewClient : IReviewClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }
@@ -75,6 +80,7 @@ public sealed class ReviewClient : IReviewClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }

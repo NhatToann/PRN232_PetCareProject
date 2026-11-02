@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PetShop.Data;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -8,10 +9,13 @@ namespace PetShop.Services
     public sealed class PayrollService : IPayrollService
     {
         private readonly ShopPetDatabaseContext _db;
+        private readonly ILogger<PayrollService> _logger;
 
-        public PayrollService(ShopPetDatabaseContext db)
+        public PayrollService(ShopPetDatabaseContext db,
+            ILogger<PayrollService> logger)
         {
             _db = db;
+            _logger = logger;
         }
 
         public async Task<PayrollListResultDto> GeneratePayrollForStaffAsync(
@@ -33,7 +37,7 @@ namespace PetShop.Services
 
             if (monthlyBase == 0)
             {
-                Console.WriteLine($"[GeneratePayrollForStaff] StaffId={staffId} — No MonthlyBaseSalary configured.");
+                _logger.Line($"[GeneratePayrollForStaff] StaffId={staffId} — No MonthlyBaseSalary configured.");
                 return new PayrollListResultDto("error",
                     $"Nhan vien #{staffId} chua duoc cau hinh luong thang (MonthlyBaseSalary). Vui long Admin cai dat luong truoc.", []);
             }
@@ -98,7 +102,7 @@ namespace PetShop.Services
                 record.BaseSalary, record.ActualShifts, standardShifts,
                 record.TotalSalary, record.CreatedAt);
 
-            Console.WriteLine($"[GeneratePayrollForStaff] StaffId={staffId}, Period={periodStart}→{periodEnd}, " +
+            _logger.Line($"[GeneratePayrollForStaff] StaffId={staffId}, Period={periodStart}→{periodEnd}, " +
                 $"ActualShifts={actualShifts}, StandardShifts={standardShifts}, " +
                 $"BaseSalary={monthlyBase}, TotalSalary={totalSalary}");
 
@@ -264,7 +268,7 @@ namespace PetShop.Services
                 result.HourlyRate, (decimal?)result.MonthlyBaseSalary, result.StandardShifts,
                 result.UpdatedAt);
 
-            Console.WriteLine($"[UpdateSalaryConfig] StaffId={dto.StaffId}, MonthlyBase={dto.MonthlyBaseSalary}, StandardShifts={dto.StandardShifts}");
+            _logger.Line($"[UpdateSalaryConfig] StaffId={dto.StaffId}, MonthlyBase={dto.MonthlyBaseSalary}, StandardShifts={dto.StandardShifts}");
 
             return new PayrollConfigResultDto("success", $"Da cap nhat luong cho nhan vien {staff.Name}.", dto2);
         }

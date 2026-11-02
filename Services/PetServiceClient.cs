@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -7,10 +8,13 @@ namespace PetShop.Services;
 public sealed class PetServiceClient : IPetServiceClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<PetServiceClient> _logger;
 
-    public PetServiceClient(HttpClient httpClient)
+    public PetServiceClient(HttpClient httpClient,
+        ILogger<PetServiceClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public Task<FrontendApiResult<IReadOnlyList<PetServiceDto>>> GetAllAsync(string? keyword = null, CancellationToken ct = default)
@@ -45,6 +49,7 @@ public sealed class PetServiceClient : IPetServiceClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<PetServiceDetailDto>.Failure(ex.Message);
         }
     }
@@ -75,6 +80,7 @@ public sealed class PetServiceClient : IPetServiceClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }

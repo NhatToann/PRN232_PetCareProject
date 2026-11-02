@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -7,10 +8,13 @@ namespace PetShop.Services;
 public sealed class SpaBookingClient : ISpaBookingClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<SpaBookingClient> _logger;
 
-    public SpaBookingClient(HttpClient httpClient)
+    public SpaBookingClient(HttpClient httpClient,
+        ILogger<SpaBookingClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public async Task<FrontendApiResult<IReadOnlyList<PetSummaryDto>>> GetPetsAsync(int currentCustomerId, CancellationToken ct = default)
@@ -41,6 +45,7 @@ public sealed class SpaBookingClient : ISpaBookingClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<IReadOnlyList<PetSummaryDto>>.Failure(ex.Message);
         }
     }
@@ -76,6 +81,7 @@ public sealed class SpaBookingClient : ISpaBookingClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<SpaAvailabilityResponse>.Failure(ex.Message);
         }
     }
@@ -145,6 +151,7 @@ public sealed class SpaBookingClient : ISpaBookingClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<SpaBookingInvoiceDto?>.Failure(ex.Message);
         }
     }
@@ -204,6 +211,7 @@ public sealed class SpaBookingClient : ISpaBookingClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<PayOSCheckoutResult>.Failure(ex.Message);
         }
     }
@@ -231,6 +239,7 @@ public sealed class SpaBookingClient : ISpaBookingClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<PayOSPaymentStatusResult>.Failure(ex.Message);
         }
     }
@@ -256,6 +265,7 @@ public sealed class SpaBookingClient : ISpaBookingClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }
@@ -281,6 +291,7 @@ public sealed class SpaBookingClient : ISpaBookingClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }
@@ -316,6 +327,7 @@ public sealed class SpaBookingClient : ISpaBookingClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }

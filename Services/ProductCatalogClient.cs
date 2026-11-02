@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -8,46 +9,49 @@ namespace PetShop.Services;
 public sealed class ProductCatalogClient : IProductCatalogClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<ProductCatalogClient> _logger;
 
-    public ProductCatalogClient(HttpClient httpClient)
+    public ProductCatalogClient(HttpClient httpClient,
+        ILogger<ProductCatalogClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
-    public Task<ProductCatalogResult<IReadOnlyList<ProductDto_temp>>> GetProductsAsync(string? keyword = null, int? categoryId = null, CancellationToken cancellationToken = default)
+    public Task<ProductCatalogResult<IReadOnlyList<ProductDto>>> GetProductsAsync(string? keyword = null, int? categoryId = null, CancellationToken cancellationToken = default)
     {
         var query = BuildQuery(("keyword", Normalize(keyword)), ("categoryId", categoryId?.ToString()));
-        return GetJsonAsync<IReadOnlyList<ProductDto_temp>>($"api/products-temp{query}", Array.Empty<ProductDto_temp>(), cancellationToken);
+        return GetJsonAsync<IReadOnlyList<ProductDto>>($"api/products{query}", Array.Empty<ProductDto>(), cancellationToken);
     }
 
-    public Task<ProductCatalogResult<IReadOnlyList<ProductCategoryFilterDto_temp>>> GetCategoriesAsync(string? keyword = null, CancellationToken cancellationToken = default)
+    public Task<ProductCatalogResult<IReadOnlyList<ProductCategoryFilterDto>>> GetCategoriesAsync(string? keyword = null, CancellationToken cancellationToken = default)
     {
         var query = BuildQuery(("keyword", Normalize(keyword)));
-        return GetJsonAsync<IReadOnlyList<ProductCategoryFilterDto_temp>>($"api/products-temp/categories{query}", Array.Empty<ProductCategoryFilterDto_temp>(), cancellationToken);
+        return GetJsonAsync<IReadOnlyList<ProductCategoryFilterDto>>($"api/products/categories{query}", Array.Empty<ProductCategoryFilterDto>(), cancellationToken);
     }
 
-    public async Task<ProductCatalogResult<ProductDto_temp?>> GetProductAsync(int productId, CancellationToken cancellationToken = default)
+    public async Task<ProductCatalogResult<ProductDto?>> GetProductAsync(int productId, CancellationToken cancellationToken = default)
     {
         if (productId <= 0)
         {
-            return ProductCatalogResult<ProductDto_temp?>.Failure("Product id is invalid.");
+            return ProductCatalogResult<ProductDto?>.Failure("Product id is invalid.");
         }
 
         try
         {
-            using var response = await _httpClient.GetAsync($"api/products-temp/{productId}", cancellationToken);
+            using var response = await _httpClient.GetAsync($"api/products/{productId}", cancellationToken);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                return ProductCatalogResult<ProductDto_temp?>.Success(null);
+                return ProductCatalogResult<ProductDto?>.Success(null);
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                return ProductCatalogResult<ProductDto_temp?>.Failure(await ReadErrorAsync(response, cancellationToken), (int)response.StatusCode);
+                return ProductCatalogResult<ProductDto?>.Failure(await ReadErrorAsync(response, cancellationToken), (int)response.StatusCode);
             }
 
-            var data = await response.Content.ReadFromJsonAsync<ProductDto_temp>(cancellationToken);
-            return ProductCatalogResult<ProductDto_temp?>.Success(data);
+            var data = await response.Content.ReadFromJsonAsync<ProductDto>(cancellationToken);
+            return ProductCatalogResult<ProductDto?>.Success(data);
         }
         catch (OperationCanceledException)
         {
@@ -55,7 +59,8 @@ public sealed class ProductCatalogClient : IProductCatalogClient
         }
         catch (Exception ex)
         {
-            return ProductCatalogResult<ProductDto_temp?>.Failure(ex.Message);
+            _logger.LineError(ex, ex.Message);
+            return ProductCatalogResult<ProductDto?>.Failure(ex.Message);
         }
     }
 
@@ -78,6 +83,7 @@ public sealed class ProductCatalogClient : IProductCatalogClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return ProductCatalogResult<T>.Failure(ex.Message);
         }
     }

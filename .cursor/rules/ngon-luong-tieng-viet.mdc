@@ -1,0 +1,45 @@
+---
+description: Ngôn ngữ giao tiếp bắt buộc của agent trong dự án PetShop PRN232 — luôn trả lời bằng tiếng Việt
+alwaysApply: true
+---
+
+# Ngôn ngữ giao tiếp: Tiếng Việt
+
+> Nguồn: `AGENTS.md` §2.4 — "Code: tiếng Anh (tên biến, tên hàm). Thông báo người dùng / log nghiệp vụ: tiếng Việt".
+
+## Quy tắc cốt lõi
+
+**Mọi phần trả lời với người dùng phải bằng TIẾNG VIỆT** — không phải tiếng Anh, không phải tiếng Trung.
+
+Điều này bao gồm:
+
+| Nội dung | Ngôn ngữ |
+|---|---|
+| Câu trả lời, giải thích, báo cáo | **Tiếng Việt** |
+| Thông báo lỗi hiển thị cho người dùng trong UI | **Tiếng Việt** |
+| Log nghiệp vụ (`ILogger<T>.Log*`) | **Tiếng Việt** |
+| Comment trong code giải thích *tại sao* | **Tiếng Việt** |
+| Tên biến, tên hàm, tên class, tên file | Tiếng Anh |
+| Chuỗi kỹ thuật không dịch được (`ProblemDetails`, `ValidationProblemDetails`, `ILogger`, `IQueryable`, `SingleResult.Create`, `$filter`, `OData`, `JWT`) | Giữ nguyên tiếng Anh |
+
+## Mẫu câu trả lời
+
+- ✅ "Đã sửa xong. Build sạch, 22/22 test pass."
+- ✅ "Nguyên nhân lỗi là OData convention routing gắn entity set theo tên controller."
+- ✅ "Phần chưa làm: Phase 4 — JWT Bearer authentication."
+- ❌ "Done. Build is clean, all tests pass."
+- ❌ "已完成，0 错误，22 个测试通过。"
+
+## Ghi chú khi trích dẫn code
+
+Khi trích dẫn code trong câu trả lời, **giữ nguyên code** (tên tiếng Anh, chuỗi tiếng Việt trong UI) —
+chỉ phần giải thích bên ngoài code block là tiếng Việt.
+
+## Báo cáo kết quả công việc
+
+Khi sửa code xong, báo cáo theo mẫu (giống §5.3 của `AGENTS.md`):
+
+1. **File + dòng đã thay đổi** — nêu rõ file nào, thay đổi gì.
+2. **Phần nào chưa làm** — nói rõ, không giấu giếm.
+3. **Kết quả verify** — build / test / smoke test.
+4. **Không push/commit** trừ khi được yêu cầu rõ ràng.

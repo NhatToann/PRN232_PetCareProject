@@ -73,6 +73,43 @@ namespace PetShop.Repositories
                 || await _db.Admins.AnyAsync(x => x.Username.Trim().ToLower() == normalizedEmail, ct);
         }
 
+        public async Task<int> UpgradePasswordHashAsync(string email, string newPasswordHash, CancellationToken ct = default)
+        {
+            var normalizedEmail = NormalizeEmail(email);
+            var upgraded = 0;
+
+            var customer = await _db.Customers.FirstOrDefaultAsync(
+                x => (x.Email ?? string.Empty).Trim().ToLower() == normalizedEmail, ct);
+            if (customer is not null)
+            {
+                customer.Password = newPasswordHash;
+                upgraded++;
+            }
+
+            var staff = await _db.Staff.FirstOrDefaultAsync(
+                x => (x.Email ?? string.Empty).Trim().ToLower() == normalizedEmail, ct);
+            if (staff is not null)
+            {
+                staff.Password = newPasswordHash;
+                upgraded++;
+            }
+
+            var doctor = await _db.Doctors.FirstOrDefaultAsync(
+                x => (x.Email ?? string.Empty).Trim().ToLower() == normalizedEmail, ct);
+            if (doctor is not null)
+            {
+                doctor.Password = newPasswordHash;
+                upgraded++;
+            }
+
+            if (upgraded > 0)
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+
+            return upgraded;
+        }
+
         private static string NormalizeEmail(string input)
         {
             return (input ?? string.Empty).Trim().ToLowerInvariant();

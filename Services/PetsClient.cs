@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -7,11 +8,14 @@ namespace PetShop.Services;
 public sealed class PetsClient : IPetsClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<PetsClient> _logger;
     private readonly UserSessionService _userSession;
 
-    public PetsClient(HttpClient httpClient, UserSessionService userSession)
+    public PetsClient(HttpClient httpClient,
+        ILogger<PetsClient> logger, UserSessionService userSession)
     {
         _httpClient = httpClient;
+        _logger = logger;
         _userSession = userSession;
     }
 
@@ -42,6 +46,7 @@ public sealed class PetsClient : IPetsClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<IReadOnlyList<PetWithBreedPriceDto>>.Failure(ex.Message);
         }
     }
@@ -76,6 +81,7 @@ public sealed class PetsClient : IPetsClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<IReadOnlyList<PetWithBreedPriceDto>>.Failure(ex.Message);
         }
     }
@@ -105,6 +111,7 @@ public sealed class PetsClient : IPetsClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<IReadOnlyList<PetManageDto>>.Failure(ex.Message);
         }
     }
@@ -128,6 +135,7 @@ public sealed class PetsClient : IPetsClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<IReadOnlyList<SpeciesOptionDto>>.Failure(ex.Message);
         }
     }
@@ -154,6 +162,7 @@ public sealed class PetsClient : IPetsClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<IReadOnlyList<BreedOptionDto>>.Failure(ex.Message);
         }
     }
@@ -181,6 +190,7 @@ public sealed class PetsClient : IPetsClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<PetManageDto>.Failure(ex.Message);
         }
     }
@@ -208,6 +218,7 @@ public sealed class PetsClient : IPetsClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<PetManageDto>.Failure(ex.Message);
         }
     }
@@ -231,6 +242,7 @@ public sealed class PetsClient : IPetsClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<bool>.Failure(ex.Message);
         }
     }

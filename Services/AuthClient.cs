@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -7,10 +8,13 @@ namespace PetShop.Services;
 public sealed class AuthClient : IAuthClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<AuthClient> _logger;
 
-    public AuthClient(HttpClient httpClient)
+    public AuthClient(HttpClient httpClient,
+        ILogger<AuthClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public Task<FrontendApiResult<AuthResponseDto>> LoginAsync(LoginRequestDto request, CancellationToken cancellationToken = default) =>
@@ -44,6 +48,7 @@ public sealed class AuthClient : IAuthClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<SimpleMessageDto>.Failure(ex.Message);
         }
     }
@@ -69,6 +74,7 @@ public sealed class AuthClient : IAuthClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }

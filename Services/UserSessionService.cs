@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using PetShop.Models;
 
@@ -9,10 +9,12 @@ public sealed class UserSessionService
 {
     private const string AuthKey = "authUser";
     private readonly ProtectedLocalStorage _storage;
+    private readonly ILogger<UserSessionService> _logger;
 
-    public UserSessionService(ProtectedLocalStorage storage)
+    public UserSessionService(ProtectedLocalStorage storage, ILogger<UserSessionService> logger)
     {
         _storage = storage;
+        _logger = logger;
     }
 
     public event Action? Changed;
@@ -22,40 +24,19 @@ public sealed class UserSessionService
     public bool IsAuthenticated => CurrentUser is not null;
 
     private Task? _loadTask;
-    private static long _loadInvocationCount;
-    private static long _loadTotalMs;
 
     public async Task<AuthResponseDto?> LoadAsync()
     {
-        Interlocked.Increment(ref _loadInvocationCount);
-        var sw = Stopwatch.StartNew();
-        try
+        // Share the in-flight load across concurrent callers.
+        // The first caller populates _loadTask; everyone else awaits the same task.
+        if (_loadTask is null)
         {
-            // Share the in-flight load across concurrent callers.
-            // The first caller populates _loadTask; everyone else awaits the same task.
-            if (_loadTask is null)
-            {
-                _loadTask = LoadCoreAsync();
-            }
-            await _loadTask;
-            return CurrentUser;
+            _loadTask = LoadCoreAsync();
         }
-        finally
-        {
-            sw.Stop();
-            Interlocked.Add(ref _loadTotalMs, sw.ElapsedMilliseconds);
-            if (Interlocked.CompareExchange(ref _verboseLogCounter, 1, 0) == 0)
-            {
-                var invocationCount = Interlocked.Read(ref _loadInvocationCount);
-                var totalMs = Interlocked.Read(ref _loadTotalMs);
-                var avgMs = invocationCount > 0 ? totalMs / invocationCount : 0;
-                Debug.WriteLine($"[UserSession] LoadAsync complete. totalInvocations={invocationCount} totalMs={totalMs} avgMs={avgMs} CurrentUser={(CurrentUser is null ? "null" : $"id={CurrentUser.UserId}")}");
-            }
-        }
-    }
 
-    // Emit a one-shot summary line per process so verbose calls do not flood the output.
-    private static int _verboseLogCounter;
+        await _loadTask;
+        return CurrentUser;
+    }
 
     private async Task LoadCoreAsync()
     {
@@ -87,7 +68,7 @@ public sealed class UserSessionService
         catch (Exception ex) when (ex is JSDisconnectedException or InvalidOperationException)
         {
             // Storage unavailable (reconnect / pre-render). The in-memory session is already updated.
-            Debug.WriteLine($"[UserSession] SignInAsync storage write skipped: {ex.GetType().Name}");
+            _logger.Line($"[UserSession] SignInAsync storage write skipped: {ex.GetType().Name}");
         }
         NotifyChangedSafe();
     }
@@ -101,7 +82,7 @@ public sealed class UserSessionService
         }
         catch (Exception ex) when (ex is JSDisconnectedException or InvalidOperationException)
         {
-            Debug.WriteLine($"[UserSession] SignOutAsync storage delete skipped: {ex.GetType().Name}");
+            _logger.Line($"[UserSession] SignOutAsync storage delete skipped: {ex.GetType().Name}");
         }
         NotifyChangedSafe();
     }
@@ -116,7 +97,7 @@ public sealed class UserSessionService
         {
             // A subscriber may be unsubscribed or in a bad state — never let the storage op failure
             // propagate because of event fan-out.
-            Debug.WriteLine($"[UserSession] Changed handler threw: {ex.GetType().Name}");
+            _logger.Line($"[UserSession] Changed handler threw: {ex.GetType().Name}");
         }
     }
 }

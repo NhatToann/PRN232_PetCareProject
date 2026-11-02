@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Http;
 
 namespace PetShop.Data
 {
+    /// <summary>
+    /// Tiện ích lưu/đọc object dạng JSON trong ISession.
+    /// Dùng bởi CartController để giữ giỏ hàng của khách trong session.
+    /// </summary>
     public static class SessionExtensions
     {
         public static void SetJson<T>(this ISession session, string key, T value)

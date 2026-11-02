@@ -1,9 +1,12 @@
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
+using PetShop.Services;
 
 namespace PetShop.Controllers
 {
@@ -12,10 +15,13 @@ namespace PetShop.Controllers
     public sealed class SpaBookingController : ControllerBase
     {
         private readonly ISpaBookingService _service;
+        private readonly ILogger<SpaBookingController> _logger;
 
-        public SpaBookingController(ISpaBookingService service)
+        public SpaBookingController(ISpaBookingService service,
+            ILogger<SpaBookingController> logger)
         {
             _service = service;
+            _logger = logger;
         }
 
         [HttpGet("pets")]
@@ -109,7 +115,7 @@ namespace PetShop.Controllers
         [HttpPatch("{bookingId:int}/status")]
         public async Task<ActionResult<object>> UpdateStatus(int bookingId, [FromBody] UpdateBookingStatusRequest request, CancellationToken ct)
         {
-            Console.WriteLine($"[SpaBooking] UpdateStatus {bookingId} -> {request.Status}");
+            _logger.Line($"[SpaBooking] UpdateStatus {bookingId} -> {request.Status}");
 
             try
             {
@@ -144,9 +150,18 @@ namespace PetShop.Controllers
             }
         }
 
-        public sealed record SpaAvailabilityRequest(DateTime Start, int DurationMin, int Quantity);
+        public sealed record SpaAvailabilityRequest(
+            [Required(ErrorMessage = "Thời gian bắt đầu không được để trống.")]
+            DateTime Start,
+            [Range(5, 480, ErrorMessage = "Thời lượng phải từ 5 đến 480 phút.")]
+            int DurationMin,
+            [Range(1, 20, ErrorMessage = "Số lượng thú cưng phải từ 1 đến 20.")]
+            int Quantity);
 
-        public sealed record UpdateBookingStatusRequest(string Status);
+        public sealed record UpdateBookingStatusRequest(
+            [Required(ErrorMessage = "Trạng thái không được để trống.")]
+            [StringLength(30, ErrorMessage = "Trạng thái không được vượt quá 30 ký tự.")]
+            string Status);
 
         private static string? TryExtractSuggestedStart(string? message)
         {

@@ -1,7 +1,9 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PetShop.Data;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 using PetShop.Services;
@@ -13,11 +15,14 @@ namespace PetShop.Controllers
     public sealed class PayOSController : ControllerBase
     {
         private readonly IPayOSService _payOS;
+        private readonly ILogger<PayOSController> _logger;
         private readonly ShopPetDatabaseContext _db;
 
-        public PayOSController(IPayOSService payOS, ShopPetDatabaseContext db)
+        public PayOSController(IPayOSService payOS, ShopPetDatabaseContext db,
+            ILogger<PayOSController> logger)
         {
             _payOS = payOS;
+            _logger = logger;
             _db = db;
         }
 
@@ -173,22 +178,22 @@ namespace PetShop.Controllers
         public async Task<IActionResult> Webhook([FromBody] JsonElement payload, [FromHeader(Name = "x-payos-signature")] string? signature, CancellationToken ct)
         {
             var raw = payload.GetRawText();
-            Console.WriteLine($"[PayOS] Webhook received. Signature: {signature ?? "(null)"}");
+            _logger.Line($"[PayOS] Webhook received. Signature: {signature ?? "(null)"}");
 
             if (!_payOS.VerifyWebhook(raw, signature))
             {
-                Console.WriteLine("[PayOS] Invalid signature.");
+                _logger.Line("[PayOS] Invalid signature.");
                 return Unauthorized(new { message = "Invalid signature" });
             }
 
             var result = await _payOS.HandleWebhookAsync(raw, ct);
             if (!result.Success)
             {
-                Console.WriteLine($"[PayOS] HandleWebhook failed: {result.Message}");
+                _logger.Line($"[PayOS] HandleWebhook failed: {result.Message}");
                 return BadRequest(new { message = result.Message });
             }
 
-            Console.WriteLine($"[PayOS] Webhook handled: {result.Message}");
+            _logger.Line($"[PayOS] Webhook handled: {result.Message}");
             return Ok(new { message = result.Message });
         }
 
@@ -210,7 +215,7 @@ namespace PetShop.Controllers
                 var isPaid = string.Equals(payment.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase);
                 return Ok(new PayOSPaymentStatusResult(
                     orderCode,
-                    isPaid ? "PAID" : payment.PaymentStatus,
+                    isPaid ? "PAID" : (payment.PaymentStatus ?? "unknown"),
                     isPaid,
                     (int)payment.Amount,
                     null));
@@ -324,27 +329,43 @@ namespace PetShop.Controllers
                 if (emailService is not null)
                 {
                     await emailService.SendOrderInvoiceEmailAsync(toEmail, customerName, orderCodeDisplay, items, total, ct);
-                    Console.WriteLine($"[PayOS] Invoice email sent to {toEmail} for order #{order.OrderId}.");
+                    _logger.Line($"[PayOS] Invoice email sent to {toEmail} for order #{order.OrderId}.");
                     return Ok(new { message = $"Hoa don da duoc gui toi {toEmail}." });
                 }
                 else
                 {
-                    Console.WriteLine("[PayOS] EmailService not available — skipping invoice email.");
+                    _logger.Line("[PayOS] EmailService not available — skipping invoice email.");
                     return Ok(new { message = "Email service unavailable." });
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[PayOS] Failed to send invoice email: {ex.Message}");
+                _logger.Line($"[PayOS] Failed to send invoice email: {ex.Message}");
                 return Ok(new { message = $"Gui email that bai: {ex.Message}" });
             }
         }
 
-        public sealed record SendInvoiceRequest(int OrderId, string? Email);
+        public sealed record SendInvoiceRequest(
+            [Range(1, int.MaxValue, ErrorMessage = "Mã đơn hàng không hợp lệ.")]
+            int OrderId,
+            string? Email);
 
-        public sealed record CreateSpaPayOSRequest(int BookingId, IReadOnlyList<int>? BookingIds, string ReturnUrl, string CancelUrl);
+        public sealed record CreateSpaPayOSRequest(
+            [Range(1, int.MaxValue, ErrorMessage = "Mã đặt lịch không hợp lệ.")]
+            int BookingId,
+            IReadOnlyList<int>? BookingIds,
+            [Required(ErrorMessage = "URL trả về không được để trống.")]
+            string ReturnUrl,
+            [Required(ErrorMessage = "URL huỷ không được để trống.")]
+            string CancelUrl);
 
-        public sealed record CreateOrderPayOSRequest(int OrderId, string ReturnUrl, string CancelUrl);
+        public sealed record CreateOrderPayOSRequest(
+            [Range(1, int.MaxValue, ErrorMessage = "Mã đơn hàng không hợp lệ.")]
+            int OrderId,
+            [Required(ErrorMessage = "URL trả về không được để trống.")]
+            string ReturnUrl,
+            [Required(ErrorMessage = "URL huỷ không được để trống.")]
+            string CancelUrl);
 
         private static int GenerateOrderCode(int seed)
         {

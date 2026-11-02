@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -7,20 +8,23 @@ namespace PetShop.Services;
 public sealed class OrderClient : IOrderClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<OrderClient> _logger;
 
-    public OrderClient(HttpClient httpClient)
+    public OrderClient(HttpClient httpClient,
+        ILogger<OrderClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public Task<FrontendApiResult<IReadOnlyList<FrontendOrderSummary>>> GetHistoryAsync(int customerId, CancellationToken cancellationToken = default) =>
-        GetJsonAsync<IReadOnlyList<FrontendOrderSummary>>($"api/orders-temp/history?customerId={customerId}", Array.Empty<FrontendOrderSummary>(), cancellationToken);
+        GetJsonAsync<IReadOnlyList<FrontendOrderSummary>>($"api/orders/history?customerId={customerId}", Array.Empty<FrontendOrderSummary>(), cancellationToken);
 
     public Task<FrontendApiResult<FrontendOrderDetail>> GetDetailAsync(int orderId, int customerId, CancellationToken cancellationToken = default) =>
-        GetJsonAsync<FrontendOrderDetail>($"api/orders-temp/{orderId}?customerId={customerId}", null, cancellationToken)!;
+        GetJsonAsync<FrontendOrderDetail>($"api/orders/{orderId}?customerId={customerId}", null, cancellationToken)!;
 
     public Task<FrontendApiResult<FrontendOrderSummary>> MarkDeliveredAsync(int orderId, int customerId, CancellationToken cancellationToken = default) =>
-        SendJsonAsync<FrontendOrderSummary>(HttpMethod.Patch, $"api/orders-temp/{orderId}/delivered?customerId={customerId}", null, cancellationToken);
+        SendJsonAsync<FrontendOrderSummary>(HttpMethod.Patch, $"api/orders/{orderId}/delivered?customerId={customerId}", null, cancellationToken);
 
     private async Task<FrontendApiResult<T>> GetJsonAsync<T>(string uri, T? emptyValue, CancellationToken cancellationToken)
     {
@@ -41,6 +45,7 @@ public sealed class OrderClient : IOrderClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }
@@ -76,6 +81,7 @@ public sealed class OrderClient : IOrderClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<T>.Failure(ex.Message);
         }
     }

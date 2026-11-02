@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -7,10 +8,13 @@ namespace PetShop.Services;
 public sealed class PaymentClient : IPaymentClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<PaymentClient> _logger;
 
-    public PaymentClient(HttpClient httpClient)
+    public PaymentClient(HttpClient httpClient,
+        ILogger<PaymentClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public async Task<FrontendApiResult<PayOSPaymentStatusResult>> GetPayOSStatusAsync(int orderCode, CancellationToken cancellationToken = default)
@@ -34,6 +38,7 @@ public sealed class PaymentClient : IPaymentClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<PayOSPaymentStatusResult>.Failure(ex.Message);
         }
     }

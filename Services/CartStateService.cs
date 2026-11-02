@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using PetShop.Models;
 
@@ -16,10 +17,12 @@ public sealed class CartStateService
     public decimal Total => _items.Sum(item => item.Price * item.Quantity);
 
     private IJSRuntime? _js;
+    private readonly ILogger<CartStateService> _logger;
 
-    public CartStateService(IJSRuntime js)
+    public CartStateService(IJSRuntime js, ILogger<CartStateService> logger)
     {
         _js = js;
+        _logger = logger;
     }
 
     public void AttachRuntime(IJSRuntime js)
@@ -44,11 +47,11 @@ public sealed class CartStateService
         {
             // Circuit may not be ready, prerender phase, or localStorage payload malformed.
             // Re-load on reconnect or retry will be handled by the caller.
-            System.Diagnostics.Debug.WriteLine($"[CartStateService] LoadAsync skipped: {ex.GetType().Name} {ex.Message}");
+            _logger.Line($"[CartStateService] LoadAsync skipped: {ex.GetType().Name} {ex.Message}");
         }
     }
 
-    public async Task AddAsync(ProductDto_temp product, int quantity = 1)
+    public async Task AddAsync(ProductDto product, int quantity = 1)
     {
         if (product.StockQuantity <= 0)
             throw new InvalidOperationException("Sản phẩm đã hết hàng.");
@@ -112,7 +115,7 @@ public sealed class CartStateService
         catch (Exception ex) when (ex is JSDisconnectedException or InvalidOperationException)
         {
             // Circuit disconnected; persistence skipped. Data remains in memory.
-            System.Diagnostics.Debug.WriteLine($"[CartStateService] SaveAsync skipped: {ex.GetType().Name} {ex.Message}");
+            _logger.Line($"[CartStateService] SaveAsync skipped: {ex.GetType().Name} {ex.Message}");
         }
     }
 

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
 
@@ -7,17 +8,20 @@ namespace PetShop.Services;
 public sealed class CheckoutClient : ICheckoutClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<CheckoutClient> _logger;
 
-    public CheckoutClient(HttpClient httpClient)
+    public CheckoutClient(HttpClient httpClient,
+        ILogger<CheckoutClient> logger)
     {
         _httpClient = httpClient;
+        _logger = logger;
     }
 
     public async Task<FrontendApiResult<FrontendCheckoutResponse>> CheckoutAsync(FrontendCheckoutRequest request, CancellationToken cancellationToken = default)
     {
         try
         {
-            using var response = await _httpClient.PostAsJsonAsync("api/checkout-temp", request, cancellationToken);
+            using var response = await _httpClient.PostAsJsonAsync("api/checkout", request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return FrontendApiResult<FrontendCheckoutResponse>.Failure(await ReadErrorAsync(response, cancellationToken), (int)response.StatusCode);
@@ -34,6 +38,7 @@ public sealed class CheckoutClient : ICheckoutClient
         }
         catch (Exception ex)
         {
+            _logger.LineError(ex, ex.Message);
             return FrontendApiResult<FrontendCheckoutResponse>.Failure(ex.Message);
         }
     }
