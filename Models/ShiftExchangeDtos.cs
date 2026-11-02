@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace PetShop.Models
 {
     public sealed record VerifyNetworkDto(
@@ -17,20 +19,42 @@ namespace PetShop.Models
     public sealed record StaffOptionDto(int StaffId, string Name);
 
     public sealed record CreatePassShiftRequestDto(
+        [Range(1, int.MaxValue, ErrorMessage = "Mã nhân viên không hợp lệ.")]
         int StaffId,
+
+        [Required(ErrorMessage = "Ngày làm việc không được để trống.")]
         DateOnly FromDate,
+
+        [Range(1, int.MaxValue, ErrorMessage = "Mã ca không hợp lệ.")]
         int FromScheduleId,
+
+        [Range(1, int.MaxValue, ErrorMessage = "Mã nhân viên nhận ca không hợp lệ.")]
         int ToStaffId,
+
+        [StringLength(500, ErrorMessage = "Lý do không được vượt quá 500 ký tự.")]
         string? Reason
     );
 
     public sealed record CreateSwapShiftRequestDto(
+        [Range(1, int.MaxValue, ErrorMessage = "Mã nhân viên không hợp lệ.")]
         int StaffId,
+
+        [Required(ErrorMessage = "Ngày làm việc không được để trống.")]
         DateOnly FromDate,
+
+        [Required(ErrorMessage = "Ngày làm việc không được để trống.")]
         DateOnly ToDate,
+
+        [Range(1, int.MaxValue, ErrorMessage = "Mã ca không hợp lệ.")]
         int FromScheduleId,
+
+        [Range(1, int.MaxValue, ErrorMessage = "Mã ca không hợp lệ.")]
         int ToScheduleId,
+
+        [Range(1, int.MaxValue, ErrorMessage = "Mã nhân viên nhận ca không hợp lệ.")]
         int ToStaffId,
+
+        [StringLength(500, ErrorMessage = "Lý do không được vượt quá 500 ký tự.")]
         string? Reason
     );
 

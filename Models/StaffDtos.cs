@@ -1,4 +1,4 @@
-﻿namespace PetShop.Models
+namespace PetShop.Models
 {
     // ========================================================
     // DTO CHO STAFF SERVICE
@@ -67,14 +67,28 @@
         public string Note { get; set; } = string.Empty;
     }
 
-    public class RevenueDetailDto
+    /// <summary>
+    /// Hồ sơ hiển thị của người đang đăng nhập (nhân viên hoặc khách hàng).
+    /// Nguồn dữ liệu được xác định bằng email trước, sau đó mới tới id — tránh nhầm giữa
+    /// bảng Customer và bảng Staff (hai bảng có thể trùng id).
+    /// </summary>
+    public class StaffProfileDto
     {
-        public int OrderId { get; set; }
-        public DateTime OrderDate { get; set; }
-        public string CustomerName { get; set; } = string.Empty;
-        public decimal TotalAmount { get; set; }
-        public string PaymentMethod { get; set; } = string.Empty;
+        /// <summary>"customer" nếu lấy từ bảng Customer, "staff" nếu lấy từ bảng Staff.</summary>
+        public string Source { get; set; } = "customer";
 
-        public string Status { get; set; } = string.Empty;
+        public int Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public string Phone { get; set; } = string.Empty;
+
+        public string Email { get; set; } = string.Empty;
+
+        /// <summary>Vai trò hiển thị: staff / admin / user.</summary>
+        public string Role { get; set; } = string.Empty;
+
+        /// <summary>Chức vụ (chỉ có ở bảng Staff).</summary>
+        public string Position { get; set; } = string.Empty;
     }
 }

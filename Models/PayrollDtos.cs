@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace PetShop.Models
 {
     public sealed record PayrollSummaryDto(
@@ -15,14 +17,10 @@ namespace PetShop.Models
         DateTime? CreatedAt
     );
 
-    public sealed record GeneratePayrollDto(
-        int StaffId,
-        DateOnly PeriodStart,
-        DateOnly PeriodEnd
-    );
-
     public sealed record GenerateAllPayrollDto(
+        [Required(ErrorMessage = "Ngày bắt đầu kỳ không được để trống.")]
         DateOnly PeriodStart,
+        [Required(ErrorMessage = "Ngày kết thúc kỳ không được để trống.")]
         DateOnly PeriodEnd
     );
 
@@ -37,16 +35,17 @@ namespace PetShop.Models
     );
 
     public sealed record UpdateSalaryConfigDto(
+        [Range(1, int.MaxValue, ErrorMessage = "Mã nhân viên không hợp lệ.")]
         int StaffId,
-        decimal? MonthlyBaseSalary,
-        int? StandardShifts,
-        decimal? HourlyRate
-    );
 
-    public sealed record PayrollResultDto(
-        string Status,
-        string Message,
-        PayrollSummaryDto? Record
+        [Range(0, double.MaxValue, ErrorMessage = "Lương cơ bản không hợp lệ.")]
+        decimal? MonthlyBaseSalary,
+
+        [Range(0, 31, ErrorMessage = "Số ca chuẩn phải từ 0 đến 31.")]
+        int? StandardShifts,
+
+        [Range(0, double.MaxValue, ErrorMessage = "Mức lương theo giờ không hợp lệ.")]
+        decimal? HourlyRate
     );
 
     public sealed record PayrollListResultDto(

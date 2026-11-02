@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using PetShop.Interfaces;
 
@@ -153,26 +154,70 @@ namespace PetShop.Controllers
     }
 
     public sealed record TestSpaEmailRequest(
+        [Required(ErrorMessage = "Email nhận không được để trống.")]
+        [EmailAddress(ErrorMessage = "Email nhận không hợp lệ.")]
+        [StringLength(255, ErrorMessage = "Email nhận không được vượt quá 255 ký tự.")]
         string ToEmail,
+
+        [StringLength(120, ErrorMessage = "Tên khách hàng không được vượt quá 120 ký tự.")]
         string? CustomerName,
+
+        [StringLength(50, ErrorMessage = "Mã đặt lịch không được vượt quá 50 ký tự.")]
         string? BookingCode,
+
+        [StringLength(30, ErrorMessage = "Trạng thái thanh toán không được vượt quá 30 ký tự.")]
         string? PaymentStatus,
+
         List<TestEmailItem>? Items);
 
-    public sealed record TestEmailItem(string ItemName, int Quantity, decimal UnitPrice);
+    public sealed record TestEmailItem(
+        [Required(ErrorMessage = "Tên mục không được để trống.")]
+        [StringLength(120, ErrorMessage = "Tên mục không được vượt quá 120 ký tự.")]
+        string ItemName,
+
+        [Range(1, 100, ErrorMessage = "Số lượng phải từ 1 đến 100.")]
+        int Quantity,
+
+        [Range(0, double.MaxValue, ErrorMessage = "Đơn giá không hợp lệ.")]
+        decimal UnitPrice);
 
     public sealed record TestBoardingEmailRequest(
+        [Required(ErrorMessage = "Email nhận không được để trống.")]
+        [EmailAddress(ErrorMessage = "Email nhận không hợp lệ.")]
+        [StringLength(255, ErrorMessage = "Email nhận không được vượt quá 255 ký tự.")]
         string ToEmail,
+
+        [StringLength(120, ErrorMessage = "Tên khách hàng không được vượt quá 120 ký tự.")]
         string? CustomerName,
+
+        [StringLength(50, ErrorMessage = "Mã đặt phòng không được vượt quá 50 ký tự.")]
         string? BookingCode,
+
+        [StringLength(80, ErrorMessage = "Tên phòng không được vượt quá 80 ký tự.")]
         string? RoomName,
+
         DateOnly? CheckIn,
+
         DateOnly? CheckOut,
+
+        [Range(1, 365, ErrorMessage = "Số ngày phải từ 1 đến 365.")]
         int? Days,
+
+        [Range(1, 50, ErrorMessage = "Số thú cưng phải từ 1 đến 50.")]
         int? Pets,
+
+        [StringLength(1000, ErrorMessage = "Ghi chú không được vượt quá 1000 ký tự.")]
         string? Notes,
+
+        [Range(0, double.MaxValue, ErrorMessage = "Giá/ngày không hợp lệ.")]
         decimal? PricePerDay,
+
+        [Range(0, double.MaxValue, ErrorMessage = "Tổng tiền không hợp lệ.")]
         decimal? TotalPrice,
+
+        [StringLength(30, ErrorMessage = "Phương thức thanh toán không được vượt quá 30 ký tự.")]
         string? PaymentMethod,
+
+        [StringLength(30, ErrorMessage = "Trạng thái thanh toán không được vượt quá 30 ký tự.")]
         string? PaymentStatus);
 }

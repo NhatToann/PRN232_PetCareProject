@@ -97,11 +97,14 @@ namespace PetShop.Data
         public virtual DbSet<WorkSchedule> WorkSchedules { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
         {
+            // Ứng dụng luôn cấu hình connection string qua Program.cs (AddDbContext),
+            // nên nhánh này chỉ phục vụ công cụ EF (dotnet ef migrations) khi chạy độc lập.
+            // Dùng cú pháp "Name=" để đọc từ ConnectionStrings trong appsettings.json
+            // thay vì hardcode mật khẩu trong mã nguồn.
             if (!optionsBuilder.IsConfigured)
             {
-                optionsBuilder.UseSqlServer("Data Source=(local);Database=SHOP_PET_Database;User Id=sa;Password=123;TrustServerCertificate=true;Encrypt=false;");
+                optionsBuilder.UseSqlServer("Name=DefaultConnection");
             }
         }
 

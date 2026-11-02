@@ -1,10 +1,21 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace PetShop.Models
 {
     public sealed record CreatePayOSPaymentRequest(
+        [Range(1, int.MaxValue, ErrorMessage = "Mã đơn hàng không hợp lệ.")]
         int OrderCode,
+
+        [Range(1, double.MaxValue, ErrorMessage = "Số tiền thanh toán không hợp lệ.")]
         decimal Amount,
+
+        [StringLength(255, ErrorMessage = "Mô tả không được vượt quá 255 ký tự.")]
         string Description,
+
+        [Required(ErrorMessage = "URL trả về không được để trống.")]
         string ReturnUrl,
+
+        [Required(ErrorMessage = "URL huỷ không được để trống.")]
         string CancelUrl
     );
 

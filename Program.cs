@@ -1,8 +1,11 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.OData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using PetShop.Interfaces;
+using PetShop.Models;
 using PetShop.Repositories;
 using PetShop.Services;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -14,7 +17,24 @@ if (builder.Environment.IsDevelopment())
     builder.Configuration.AddUserSecrets<Program>(optional: true, reloadOnChange: true);
 }
 
-builder.Services.AddControllersWithViews()
+builder.Services.AddControllersWithViews(options =>
+    {
+        // Formatter CSV tùy chỉnh — client gửi "Accept: text/csv" sẽ nhận bảng CSV.
+        options.OutputFormatters.Add(new CsvOutputFormatter());
+    })
+    // Bật XML formatter để hỗ trợ content negotiation: JSON (mặc định) và XML.
+    .AddPetShopXmlFormatters()
+    // OData (slide PRN232 - Ch04): cho phép client truy vấn động bằng
+    // $filter / $select / $orderby / $top / $skip / $expand / $count trên /odata/*.
+    .AddOData(options => options
+        .AddRouteComponents("PetShop", PetShopEdmModel.Build())
+        .Select()
+        .Filter()
+        .OrderBy()
+        .Expand()
+        .Count()
+        .SkipToken()
+        .SetMaxTop(200))
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
@@ -24,63 +44,81 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents(options => options.DetailedErrors = true);
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddHttpClient<PetShop.Interfaces.IProductCatalogClient, PetShop.Services.ProductCatalogClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    var baseUri = context is null
-        ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/"
-        : $"{context.Request.Scheme}://{context.Request.Host}/";
 
-    client.BaseAddress = new Uri(baseUri, UriKind.Absolute);
-});
-builder.Services.AddHttpClient<PetShop.Interfaces.IAuthClient, PetShop.Services.AuthClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    client.BaseAddress = new Uri(context is null ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/" : $"{context.Request.Scheme}://{context.Request.Host}/");
-});
-builder.Services.AddHttpClient<PetShop.Interfaces.ICheckoutClient, PetShop.Services.CheckoutClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    client.BaseAddress = new Uri(context is null ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/" : $"{context.Request.Scheme}://{context.Request.Host}/");
-});
-builder.Services.AddHttpClient<PetShop.Interfaces.IOrderClient, PetShop.Services.OrderClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    client.BaseAddress = new Uri(context is null ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/" : $"{context.Request.Scheme}://{context.Request.Host}/");
-});
-builder.Services.AddHttpClient<PetShop.Interfaces.IReviewClient, PetShop.Services.ReviewClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    client.BaseAddress = new Uri(context is null ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/" : $"{context.Request.Scheme}://{context.Request.Host}/");
-});
-builder.Services.AddHttpClient<PetShop.Interfaces.IPaymentClient, PetShop.Services.PaymentClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    client.BaseAddress = new Uri(context is null ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/" : $"{context.Request.Scheme}://{context.Request.Host}/");
-});
+builder.Services.Configure<PetShop.Services.JwtSettings>(
+    builder.Configuration.GetSection(PetShop.Services.JwtSettings.SectionName));
+builder.Services.AddSingleton<PetShop.Services.IJwtTokenService, PetShop.Services.JwtTokenService>();
+
+// ---------------------------------------------------------------------------
+// Xác thực dual-mode (slide PRN232 - Ch06):
+//   - "Session" : header nội bộ do Blazor gắn (X-User-Id / X-User-Role) — dùng cho self-HTTP.
+//   - "Bearer"  : JWT Bearer token cho client API bên ngoài.
+// Endpoint có [Authorize] sẽ chấp nhận cả hai nguồn.
+// ---------------------------------------------------------------------------
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultScheme = PetShop.Services.AuthSchemes.Default;
+        options.DefaultAuthenticateScheme = PetShop.Services.AuthSchemes.Default;
+        // Khi client không hợp lệ, challenge bằng Bearer để trả 401 + header WWW-Authenticate.
+        options.DefaultChallengeScheme = PetShop.Services.AuthSchemes.Bearer;
+        options.DefaultForbidScheme = PetShop.Services.AuthSchemes.Bearer;
+    })
+    // Scheme tổng hợp: nếu request có "Authorization: Bearer ..." thì chuyển tiếp sang
+    // JwtBearer, ngược lại dùng scheme Session (header nội bộ do Blazor gắn).
+    .AddPolicyScheme(PetShop.Services.AuthSchemes.Default, "Session hoặc Bearer", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            var authorization = context.Request.Headers.Authorization.ToString();
+            return authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                ? PetShop.Services.AuthSchemes.Bearer
+                : PetShop.Services.AuthSchemes.Session;
+        };
+    })
+    .AddScheme<AuthenticationSchemeOptions, PetShop.Services.SessionHeaderAuthenticationHandler>(
+        PetShop.Services.AuthSchemes.Session, _ => { })
+    .AddJwtBearer(PetShop.Services.AuthSchemes.Bearer, options =>
+    {
+        var jwtSettings = builder.Configuration
+            .GetSection(PetShop.Services.JwtSettings.SectionName)
+            .Get<PetShop.Services.JwtSettings>() ?? new PetShop.Services.JwtSettings();
+
+        options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwtSettings.Audience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(jwtSettings.Key ?? string.Empty)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+// Typed HttpClient trỏ về chính API của ứng dụng (xem Services/SelfHttpClientExtensions.cs).
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.IProductCatalogClient, PetShop.Services.ProductCatalogClient>();
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.IAuthClient, PetShop.Services.AuthClient>();
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.ICheckoutClient, PetShop.Services.CheckoutClient>();
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.IOrderClient, PetShop.Services.OrderClient>();
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.IReviewClient, PetShop.Services.ReviewClient>();
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.IPaymentClient, PetShop.Services.PaymentClient>();
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.IPetServiceClient, PetShop.Services.PetServiceClient>();
+
+// Hai client dưới đây cần header phiên đăng nhập (X-User-Id / X-Customer-Id / X-User-Role).
 builder.Services.AddTransient<PetShop.Services.SpaAuthHeaderHandler>();
-builder.Services.AddHttpClient<PetShop.Interfaces.IPetServiceClient, PetShop.Services.PetServiceClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    client.BaseAddress = new Uri(context is null ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/" : $"{context.Request.Scheme}://{context.Request.Host}/");
-});
-builder.Services.AddHttpClient<PetShop.Interfaces.ISpaBookingClient, PetShop.Services.SpaBookingClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    client.BaseAddress = new Uri(context is null ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/" : $"{context.Request.Scheme}://{context.Request.Host}/");
-})
-    .AddHttpMessageHandler<PetShop.Services.SpaAuthHeaderHandler>();
-builder.Services.AddHttpClient<PetShop.Interfaces.IPetsClient, PetShop.Services.PetsClient>((sp, client) =>
-{
-    var context = sp.GetRequiredService<IHttpContextAccessor>().HttpContext;
-    client.BaseAddress = new Uri(context is null ? builder.Configuration["App:BaseUrl"] ?? "http://localhost:5286/" : $"{context.Request.Scheme}://{context.Request.Host}/");
-})
-    .AddHttpMessageHandler<PetShop.Services.SpaAuthHeaderHandler>();
+builder.Services.AddSelfHttpClientWithAuth<PetShop.Interfaces.ISpaBookingClient, PetShop.Services.SpaBookingClient>();
+builder.Services.AddSelfHttpClientWithAuth<PetShop.Interfaces.IPetsClient, PetShop.Services.PetsClient>();
 builder.Services.AddScoped<PetShop.Services.UserSessionService>();
 builder.Services.AddScoped<PetShop.Services.CartStateService>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IStaffDashboardService, StaffDashboardService>();
+builder.Services.AddScoped<IStaffProfileService, StaffProfileService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -120,8 +158,8 @@ builder.Services.AddSession(options =>
     options.IdleTimeout = TimeSpan.FromHours(8);
 });
 
-builder.Services.AddScoped<PetShop.Interfaces.IProductRepository_temp, PetShop.Repositories.ProductRepository_temp>();
-builder.Services.AddScoped<PetShop.Interfaces.IProductService_temp, PetShop.Services.ProductService_temp>();
+builder.Services.AddScoped<PetShop.Interfaces.IProductRepository, PetShop.Repositories.ProductRepository>();
+builder.Services.AddScoped<PetShop.Interfaces.IProductService, PetShop.Services.ProductService>();
 builder.Services.AddScoped<PetShop.Interfaces.IAuthRepository, PetShop.Repositories.AuthRepository>();
 builder.Services.AddScoped<PetShop.Interfaces.IAuthService, PetShop.Services.AuthService>();
 builder.Services.AddScoped<PetShop.Interfaces.IEmailService, PetShop.Services.EmailService>();
@@ -152,6 +190,10 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+
+    // Bảng route OData tĩnh: giúp tra cứu nhanh các URL hợp lệ của /PetShop/*
+    // (xem file PRN232_PLAN.md, Phase 3 — OData).
+    app.UseODataRouteDebug();
 }
 else
 {
@@ -163,8 +205,12 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseCors("FrontendDev");
 app.UseSession();
+app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+// Chuẩn hoá mọi lỗi phát sinh thành ProblemDetails (RFC 7807) cho cả API lẫn Blazor.
+app.UseMiddleware<ApiExceptionMiddleware>();
 
 app.Use(async (context, next) =>
 {

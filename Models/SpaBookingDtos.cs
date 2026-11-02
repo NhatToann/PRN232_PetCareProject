@@ -1,5 +1,4 @@
-using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 
 namespace PetShop.Models
@@ -24,12 +23,20 @@ namespace PetShop.Models
     );
 
     public sealed record SpaCartItemRequest(
+        [Range(1, int.MaxValue, ErrorMessage = "Mã dịch vụ không hợp lệ.")]
         int ServiceId,
+
+        [Range(1, 20, ErrorMessage = "Số lượng phải từ 1 đến 20.")]
         int Quantity
     );
 
     public sealed record SpaBookingEstimateRequest(
+        [Required(ErrorMessage = "Danh sách thú cưng không được để trống.")]
+        [MinLength(1, ErrorMessage = "Phải chọn ít nhất 1 thú cưng.")]
         IReadOnlyList<int> PetIds,
+
+        [Required(ErrorMessage = "Danh sách dịch vụ không được để trống.")]
+        [MinLength(1, ErrorMessage = "Giỏ dịch vụ không được để trống.")]
         IReadOnlyList<SpaCartItemRequest> Items
     );
 
@@ -52,10 +59,21 @@ namespace PetShop.Models
     );
 
     public sealed record CreateSpaBookingRequest(
+        [Required(ErrorMessage = "Danh sách thú cưng không được để trống.")]
+        [MinLength(1, ErrorMessage = "Phải chọn ít nhất 1 thú cưng.")]
         IReadOnlyList<int> PetIds,
+
+        [Required(ErrorMessage = "Thời gian hẹn không được để trống.")]
         DateTime AppointmentStart,
+
+        [StringLength(500, ErrorMessage = "Ghi chú không được vượt quá 500 ký tự.")]
         string? Note,
+
+        [Required(ErrorMessage = "Danh sách dịch vụ không được để trống.")]
+        [MinLength(1, ErrorMessage = "Phải chọn ít nhất 1 dịch vụ.")]
         IReadOnlyList<SpaCartItemRequest> Items,
+
+        [StringLength(30, ErrorMessage = "Phương thức thanh toán không hợp lệ.")]
         string? PaymentMethod
     );
 
@@ -115,7 +133,10 @@ namespace PetShop.Models
     /// Validate giờ đặt dịch vụ SPA có nằm trong ca làm việc của nhân viên hay không.
     /// </summary>
     public sealed record BookingSlotValidationRequest(
+        [Required(ErrorMessage = "Thời gian hẹn không được để trống.")]
         DateTime AppointmentStart,
+
+        [Range(5, 480, ErrorMessage = "Thời lượng phải từ 5 đến 480 phút.")]
         int DurationMinutes
     );
 
@@ -137,9 +158,16 @@ namespace PetShop.Models
     );
 
     public sealed record CreateSpaReviewRequest(
+        [Range(1, int.MaxValue, ErrorMessage = "Mã đặt lịch không hợp lệ.")]
         int BookingId,
+
+        [Range(1, int.MaxValue, ErrorMessage = "Mã dịch vụ không hợp lệ.")]
         int ServiceId,
+
+        [Range(1, 5, ErrorMessage = "Đánh giá phải từ 1 đến 5 sao.")]
         int Rating,
+
+        [StringLength(1000, ErrorMessage = "Nhận xét không được vượt quá 1000 ký tự.")]
         string? Comment
     );
 }
