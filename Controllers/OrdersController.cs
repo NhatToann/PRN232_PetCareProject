@@ -6,18 +6,18 @@ using PetShop.Models;
 namespace PetShop.Controllers
 {
     [ApiController]
-    [Route("api/orders-temp")]
-    public sealed class OrdersController_temp : ControllerBase
+    [Route("api/orders")]
+    public sealed class OrdersController : ControllerBase
     {
         private readonly ShopPetDatabaseContext _db;
 
-        public OrdersController_temp(ShopPetDatabaseContext db)
+        public OrdersController(ShopPetDatabaseContext db)
         {
             _db = db;
         }
 
-        private static IQueryable<OrderSummaryDto_temp> ProjectOrderSummary(IQueryable<Order> query) =>
-            query.Select(o => new OrderSummaryDto_temp(
+        private static IQueryable<OrderSummaryDto> ProjectOrderSummary(IQueryable<Order> query) =>
+            query.Select(o => new OrderSummaryDto(
                 o.OrderId,
                 o.OrderDate,
                 o.Status,
@@ -38,7 +38,7 @@ namespace PetShop.Controllers
                 o.OrderDetails.Count(od => od.ProductId != null)));
 
         [HttpGet("history")]
-        public async Task<ActionResult<IReadOnlyList<OrderSummaryDto_temp>>> History([FromQuery] int customerId, CancellationToken ct)
+        public async Task<ActionResult<IReadOnlyList<OrderSummaryDto>>> History([FromQuery] int customerId, CancellationToken ct)
         {
             var orders = await ProjectOrderSummary(
                     _db.Orders
@@ -51,7 +51,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("{orderId:int}")]
-        public async Task<ActionResult<OrderDetailDto_temp>> Detail(int orderId, [FromQuery] int customerId, CancellationToken ct)
+        public async Task<ActionResult<OrderDetailDto>> Detail(int orderId, [FromQuery] int customerId, CancellationToken ct)
         {
             var order = await _db.Orders
                 .AsNoTracking()
@@ -64,7 +64,7 @@ namespace PetShop.Controllers
                 return NotFound(new { message = "Không tìm thấy đơn hàng." });
             }
 
-            return Ok(new OrderDetailDto_temp(
+            return Ok(new OrderDetailDto(
                 order.OrderId,
                 order.OrderDate,
                 order.Status,
@@ -72,7 +72,7 @@ namespace PetShop.Controllers
                 order.PaymentMethod,
                 order.TotalAmount,
                 order.ShippingAddress,
-                order.OrderDetails.Select(od => new OrderDetailItemDto_temp(
+                order.OrderDetails.Select(od => new OrderDetailItemDto(
                     od.ProductId ?? 0,
                     od.Product?.Name ?? "Sản phẩm",
                     od.Quantity ?? 0,
@@ -83,7 +83,7 @@ namespace PetShop.Controllers
 
         // Danh sách đơn chờ nhân viên xác nhận (COD).
         [HttpGet("staff/pending")]
-        public async Task<ActionResult<IReadOnlyList<OrderSummaryDto_temp>>> StaffPending(CancellationToken ct)
+        public async Task<ActionResult<IReadOnlyList<OrderSummaryDto>>> StaffPending(CancellationToken ct)
         {
             var orders = await ProjectOrderSummary(
                     _db.Orders
@@ -98,7 +98,7 @@ namespace PetShop.Controllers
         // Staff xem đơn theo trạng thái (dùng cho UI tab).
         // status: "Chờ xác nhận" | "Chờ giao hàng" | "Hoàn thành"
         [HttpGet("staff")]
-        public async Task<ActionResult<IReadOnlyList<OrderSummaryDto_temp>>> StaffByStatus([FromQuery] string? status, CancellationToken ct)
+        public async Task<ActionResult<IReadOnlyList<OrderSummaryDto>>> StaffByStatus([FromQuery] string? status, CancellationToken ct)
         {
             var query = _db.Orders
                 .AsNoTracking();
@@ -116,7 +116,7 @@ namespace PetShop.Controllers
 
         // Nhân viên xác nhận đơn -> chuyển sang "Chờ giao hàng" và trừ stock sản phẩm.
         [HttpPatch("staff/{orderId:int}/confirm")]
-        public async Task<ActionResult<OrderSummaryDto_temp>> StaffConfirm(int orderId, CancellationToken ct)
+        public async Task<ActionResult<OrderSummaryDto>> StaffConfirm(int orderId, CancellationToken ct)
         {
             var order = await _db.Orders
                 .Include(o => o.OrderDetails)
@@ -154,7 +154,7 @@ namespace PetShop.Controllers
 
         // Khách hàng xác nhận đã nhận hàng -> "Hoàn thành".
         [HttpPatch("{orderId:int}/delivered")]
-        public async Task<ActionResult<OrderSummaryDto_temp>> CustomerDelivered(
+        public async Task<ActionResult<OrderSummaryDto>> CustomerDelivered(
             int orderId,
             [FromQuery] int customerId,
             CancellationToken ct)
@@ -181,7 +181,7 @@ namespace PetShop.Controllers
         }
     }
 
-    public sealed record OrderSummaryDto_temp(
+    public sealed record OrderSummaryDto(
         int OrderId,
         DateTime OrderDate,
         string? Status,
@@ -193,14 +193,14 @@ namespace PetShop.Controllers
         string? PrimaryProductImageUrl,
         int ProductLineCount);
 
-    public sealed record OrderDetailItemDto_temp(
+    public sealed record OrderDetailItemDto(
         int ProductId,
         string ProductName,
         int Quantity,
         decimal UnitPrice,
         string? ImageUrl);
 
-    public sealed record OrderDetailDto_temp(
+    public sealed record OrderDetailDto(
         int OrderId,
         DateTime OrderDate,
         string? Status,
@@ -208,6 +208,6 @@ namespace PetShop.Controllers
         string? PaymentMethod,
         decimal TotalAmount,
         string? ShippingAddress,
-        IReadOnlyList<OrderDetailItemDto_temp> Items);
+        IReadOnlyList<OrderDetailItemDto> Items);
 
 }

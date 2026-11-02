@@ -5,16 +5,16 @@ using PetShop.Models;
 
 namespace PetShop.Repositories
 {
-    public sealed class ProductRepository_temp : IProductRepository_temp
+    public sealed class ProductRepository : IProductRepository
     {
         private readonly ShopPetDatabaseContext _db;
 
-        public ProductRepository_temp(ShopPetDatabaseContext db)
+        public ProductRepository(ShopPetDatabaseContext db)
         {
             _db = db;
         }
 
-        public async Task<IReadOnlyList<ProductDto_temp>> GetAllAsync(string? keyword = null, int? categoryId = null, CancellationToken ct = default)
+        public async Task<IReadOnlyList<ProductDto>> GetAllAsync(string? keyword = null, int? categoryId = null, CancellationToken ct = default)
         {
             var query = BuildBaseQuery(keyword);
 
@@ -48,7 +48,7 @@ namespace PetShop.Repositories
                 .Select(p =>
                 {
                     var hasRating = ratingMap.TryGetValue(p.ProductId, out var rs);
-                    return new ProductDto_temp(
+                    return new ProductDto(
                         p.ProductId,
                         p.Name ?? string.Empty,
                         p.Price,
@@ -66,7 +66,7 @@ namespace PetShop.Repositories
                 .ToList();
         }
 
-        public async Task<IReadOnlyList<ProductCategoryFilterDto_temp>> GetCategoriesAsync(string? keyword = null, CancellationToken ct = default)
+        public async Task<IReadOnlyList<ProductCategoryFilterDto>> GetCategoriesAsync(string? keyword = null, CancellationToken ct = default)
         {
             var query = BuildBaseQuery(keyword);
 
@@ -82,7 +82,7 @@ namespace PetShop.Repositories
             return categoryRows
                 .Where(x => x.CategoryId.HasValue && !string.IsNullOrWhiteSpace(x.CategoryName))
                 .GroupBy(x => new { CategoryId = x.CategoryId!.Value, CategoryName = x.CategoryName! })
-                .Select(g => new ProductCategoryFilterDto_temp(
+                .Select(g => new ProductCategoryFilterDto(
                     g.Key.CategoryId,
                     g.Key.CategoryName,
                     g.Count()
@@ -125,12 +125,12 @@ namespace PetShop.Repositories
             return query;
         }
 
-        public async Task<ProductDto_temp?> GetByIdAsync(int productId, CancellationToken ct = default)
+        public async Task<ProductDto?> GetByIdAsync(int productId, CancellationToken ct = default)
         {
             var product = await _db.Products
                 .AsNoTracking()
                 .Where(p => p.ProductId == productId)
-                .Select(p => new ProductDto_temp(
+                .Select(p => new ProductDto(
                     p.ProductId,
                     p.Name,
                     p.Price,

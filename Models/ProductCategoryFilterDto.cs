@@ -1,6 +1,6 @@
 namespace PetShop.Models
 {
-    public sealed record ProductCategoryFilterDto_temp(
+    public sealed record ProductCategoryFilterDto(
         int CategoryId,
         string CategoryName,
         int ProductCount

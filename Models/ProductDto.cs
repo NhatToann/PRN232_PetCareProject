@@ -1,6 +1,6 @@
 namespace PetShop.Models
 {
-    public sealed record ProductDto_temp(
+    public sealed record ProductDto(
         int ProductId,
         string Name,
         decimal Price,

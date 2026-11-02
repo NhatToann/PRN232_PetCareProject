@@ -1,30 +1,36 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using PetShop.Data;
+using Microsoft.Extensions.Logging;
 using PetShop.Interfaces;
 using PetShop.Models;
+using PetShop.Services;
 
 namespace PetShop.Controllers
 {
     [ApiController]
-    [Route("api/checkout-temp")]
-    public sealed class CheckoutController_temp : ControllerBase
+    [Route("api/checkout")]
+    public sealed class CheckoutController : ControllerBase
     {
         private readonly ShopPetDatabaseContext _db;
+        private readonly ILogger<CheckoutController> _logger;
         private readonly IPayOSService _payOsService;
 
-        public CheckoutController_temp(ShopPetDatabaseContext db, IPayOSService payOsService)
+        public CheckoutController(ShopPetDatabaseContext db, IPayOSService payOsService,
+            ILogger<CheckoutController> logger)
         {
             _db = db;
+            _logger = logger;
             _payOsService = payOsService;
         }
 
         [HttpPost]
-        public async Task<ActionResult<CheckoutResponse_temp>> CreateAsync(
-            [FromBody] CheckoutRequest_temp request,
+        public async Task<ActionResult<CheckoutResponse>> CreateAsync(
+            [FromBody] CheckoutRequest request,
             CancellationToken ct)
         {
-            Console.WriteLine($"[Checkout] Received request: Address='{request.Address}', PaymentMethod='{request.PaymentMethod}', Items count={request.Items?.Count ?? 0}");
-            Console.WriteLine($"[Checkout] CustomerId={request.CustomerId}, Email={request.Email}");
+            _logger.Line($"[Checkout] Received request: Address='{request.Address}', PaymentMethod='{request.PaymentMethod}', Items count={request.Items?.Count ?? 0}");
+            _logger.Line($"[Checkout] CustomerId={request.CustomerId}, Email={request.Email}");
 
             if (string.IsNullOrWhiteSpace(request.Address))
             {
@@ -38,7 +44,7 @@ namespace PetShop.Controllers
 
             foreach (var item in request.Items)
             {
-                Console.WriteLine($"[Checkout] Item: ProductId={item.ProductId}, Name={item.ItemName}, Qty={item.Quantity}, Price={item.UnitPrice}");
+                _logger.Line($"[Checkout] Item: ProductId={item.ProductId}, Name={item.ItemName}, Qty={item.Quantity}, Price={item.UnitPrice}");
             }
 
             var total = request.Items.Sum(i => (i.Quantity <= 0 ? 1 : i.Quantity) * i.UnitPrice);
@@ -100,13 +106,13 @@ namespace PetShop.Controllers
                     request.ReturnUrl ?? $"{Request.Scheme}://{Request.Host}/checkout/result",
                     request.CancelUrl ?? $"{Request.Scheme}://{Request.Host}/checkout/result");
 
-                Console.WriteLine($"[Checkout] Creating PayOS payment. Amount={total}, OrderCode={orderCodeInt}");
+                _logger.Line($"[Checkout] Creating PayOS payment. Amount={total}, OrderCode={orderCodeInt}");
                 var checkout = await _payOsService.CreatePaymentLinkAsync(payRequest, ct);
                 if (checkout is null)
                 {
                     var error = _payOsService.GetLastError();
                     var response = _payOsService.GetLastResponse();
-                    Console.WriteLine($"[Checkout] PayOS failed. Error={error}, Response={response}");
+                    _logger.Line($"[Checkout] PayOS failed. Error={error}, Response={response}");
                     return BadRequest(new
                     {
                         message = "Không tạo được link PayOS.",
@@ -115,27 +121,47 @@ namespace PetShop.Controllers
                     });
                 }
 
-                Console.WriteLine($"[Checkout] PayOS success. CheckoutUrl={checkout.CheckoutUrl}");
-                return Ok(new CheckoutResponse_temp("PayOS", checkout.CheckoutUrl, orderCode, order.OrderId));
+                _logger.Line($"[Checkout] PayOS success. CheckoutUrl={checkout.CheckoutUrl}");
+                return Ok(new CheckoutResponse("PayOS", checkout.CheckoutUrl, orderCode, order.OrderId));
             }
 
-            Console.WriteLine($"[Checkout] COD order created. OrderId={order.OrderId}, Total={total}");
-            return Ok(new CheckoutResponse_temp("COD", null, orderCode, order.OrderId));
+            _logger.Line($"[Checkout] COD order created. OrderId={order.OrderId}, Total={total}");
+            return Ok(new CheckoutResponse("COD", null, orderCode, order.OrderId));
         }
     }
 
-    public sealed record CheckoutItem_temp(int ProductId, string ItemName, int Quantity, decimal UnitPrice);
+    public sealed record CheckoutItem(
+        [Range(1, int.MaxValue, ErrorMessage = "Mã sản phẩm không hợp lệ.")]
+        int ProductId,
 
-    public sealed record CheckoutRequest_temp(
+        [StringLength(200, ErrorMessage = "Tên sản phẩm không được vượt quá 200 ký tự.")]
+        string ItemName,
+
+        [Range(1, 100, ErrorMessage = "Số lượng phải từ 1 đến 100.")]
+        int Quantity,
+
+        [Range(0, double.MaxValue, ErrorMessage = "Đơn giá không hợp lệ.")]
+        decimal UnitPrice);
+
+    public sealed record CheckoutRequest(
         int? CustomerId,
         string? Email,
         string? CustomerName,
+
+        [Required(ErrorMessage = "Địa chỉ giao hàng không được để trống.")]
+        [StringLength(255, ErrorMessage = "Địa chỉ không được vượt quá 255 ký tự.")]
         string Address,
+
+        [Required(ErrorMessage = "Phương thức thanh toán không được để trống.")]
+        [StringLength(30, ErrorMessage = "Phương thức thanh toán không hợp lệ.")]
         string PaymentMethod,
-        List<CheckoutItem_temp> Items,
+
+        [Required(ErrorMessage = "Giỏ hàng không được để trống.")]
+        [MinLength(1, ErrorMessage = "Giỏ hàng không được để trống.")]
+        List<CheckoutItem> Items,
         string? ReturnUrl,
         string? CancelUrl);
 
-    public sealed record CheckoutResponse_temp(string PaymentMethod, string? RedirectUrl, string OrderCode, int OrderId);
+    public sealed record CheckoutResponse(string PaymentMethod, string? RedirectUrl, string OrderCode, int OrderId);
 
 }
