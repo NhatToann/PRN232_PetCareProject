@@ -8,17 +8,23 @@ using PetShop.Models;
 
 namespace PetShop.Services
 {
-    public sealed class AuthService : IAuthService
+    public sealed partial class AuthService : IAuthService
     {
         private readonly IAuthRepository _authRepository;
         private readonly IConfiguration _configuration;
         private readonly IEmailService _emailService;
+        private readonly IHttpClientFactory _httpClientFactory;
 
-        public AuthService(IAuthRepository authRepository, IConfiguration configuration, IEmailService emailService)
+        public AuthService(
+            IAuthRepository authRepository,
+            IConfiguration configuration,
+            IEmailService emailService,
+            IHttpClientFactory httpClientFactory)
         {
             _authRepository = authRepository;
             _configuration = configuration;
             _emailService = emailService;
+            _httpClientFactory = httpClientFactory;
         }
 
         public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, CancellationToken ct = default)
@@ -76,7 +82,7 @@ namespace PetShop.Services
             }
 
             var staff = await _authRepository.GetStaffByEmailAsync(normalizedEmail, ct);
-            if (staff is not null && IsPasswordValid(password, staff.Password))
+            if (staff is not null && await VerifyAndUpgradeAsync(password, staff.Password, normalizedEmail, ct))
             {
                 var role = string.Equals(staff.Position, "admin", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(staff.Position, "quản lý", StringComparison.OrdinalIgnoreCase)
@@ -93,7 +99,7 @@ namespace PetShop.Services
             }
 
             var doctor = await _authRepository.GetDoctorByEmailAsync(normalizedEmail, ct);
-            if (doctor is not null && IsPasswordValid(password, doctor.Password))
+            if (doctor is not null && await VerifyAndUpgradeAsync(password, doctor.Password, normalizedEmail, ct))
             {
                 return new AuthResponseDto(
                     doctor.DoctorId,
@@ -105,7 +111,7 @@ namespace PetShop.Services
             }
 
             var admin = await _authRepository.GetAdminByEmailOrUsernameAsync(identity, ct);
-            if (admin is not null && IsPasswordValid(password, admin.Password))
+            if (admin is not null && await VerifyAndUpgradeAsync(password, admin.Password, normalizedEmail, ct))
             {
                 return new AuthResponseDto(
                     admin.AdminId,
@@ -122,7 +128,7 @@ namespace PetShop.Services
                 throw new UnauthorizedAccessException("Email hoặc mật khẩu không đúng.");
             }
 
-            if (!IsPasswordValid(password, customer.Password))
+            if (!await VerifyAndUpgradeAsync(password, customer.Password, normalizedEmail, ct))
             {
                 throw new UnauthorizedAccessException("Email hoặc mật khẩu không đúng.");
             }
@@ -133,133 +139,6 @@ namespace PetShop.Services
             }
 
             return MapToAuthResponse(customer);
-        }
-
-        public async Task<AuthResponseDto> LoginWithGoogleAsync(GoogleLoginRequestDto request, CancellationToken ct = default)
-        {
-            var hasIdToken = !string.IsNullOrWhiteSpace(request.IdToken);
-            var hasAccessToken = !string.IsNullOrWhiteSpace(request.AccessToken);
-
-            if (!hasIdToken && !hasAccessToken)
-            {
-                throw new ArgumentException("Cần cung cấp IdToken hoặc AccessToken.");
-            }
-
-            string? email = null;
-            string? googleSubject = null;
-            string? name = null;
-            bool? emailVerified = null;
-
-            if (hasIdToken)
-            {
-                var payload = await ValidateGoogleIdTokenAsync(request.IdToken!);
-                email = payload.Email;
-                googleSubject = payload.Subject;
-                name = payload.Name;
-                emailVerified = payload.EmailVerified;
-            }
-            else
-            {
-                (email, googleSubject, name, emailVerified) = await GetGoogleProfileFromAccessTokenAsync(request.AccessToken!, ct);
-            }
-
-            if (string.IsNullOrWhiteSpace(email))
-            {
-                throw new UnauthorizedAccessException("Không lấy được email từ Google.");
-            }
-
-            if (emailVerified.HasValue && emailVerified.Value == false)
-            {
-                throw new UnauthorizedAccessException("Email Google chưa được xác minh.");
-            }
-
-            email = NormalizeEmail(email);
-
-            var customer = await _authRepository.GetCustomerByEmailAsync(email, ct);
-
-            var isFirstGoogleLogin = customer is null;
-
-            if (customer is null)
-            {
-                customer = new Customer
-                {
-                    Name = name,
-                    Email = email,
-                    GoogleId = googleSubject,
-                    Password = null,
-                    Role = "user",
-                    Status = "active"
-                };
-
-                customer = await _authRepository.CreateCustomerAsync(customer, ct);
-            }
-            else
-            {
-                customer.GoogleId ??= googleSubject;
-                customer.Name = string.IsNullOrWhiteSpace(customer.Name) ? name : customer.Name;
-                customer.Status = "active";
-                await _authRepository.UpdateCustomerAsync(customer, ct);
-            }
-
-            if (isFirstGoogleLogin)
-            {
-                await _emailService.SendGoogleFirstLoginEmailAsync(customer.Email!, customer.Name, ct);
-            }
-
-            return MapToAuthResponse(customer);
-        }
-
-        private async Task<GoogleJsonWebSignature.Payload> ValidateGoogleIdTokenAsync(string idToken)
-        {
-            try
-            {
-                var audiences = GetGoogleAudiences();
-
-                if (audiences.Count == 0)
-                {
-                    throw new InvalidOperationException("Google Login chưa cấu hình đúng. Hãy set GoogleAuth:ClientId hoặc GoogleAuth:ClientIds bằng Client ID thật từ Google Cloud Console.");
-                }
-
-                return await GoogleJsonWebSignature.ValidateAsync(idToken,
-                    new GoogleJsonWebSignature.ValidationSettings
-                    {
-                        Audience = audiences
-                    });
-            }
-            catch (InvalidJwtException ex)
-            {
-                throw new UnauthorizedAccessException($"Google IdToken không hợp lệ: {ex.Message}");
-            }
-        }
-
-        private static async Task<(string? Email, string? Subject, string? Name, bool? EmailVerified)> GetGoogleProfileFromAccessTokenAsync(string accessToken, CancellationToken ct)
-        {
-            using var httpClient = new HttpClient
-            {
-                BaseAddress = new Uri("https://www.googleapis.com/")
-            };
-
-            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-            using var response = await httpClient.GetAsync("oauth2/v3/userinfo", ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new UnauthorizedAccessException("Google AccessToken không hợp lệ hoặc đã hết hạn.");
-            }
-
-            var json = await response.Content.ReadAsStringAsync(ct);
-
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            string? email = root.TryGetProperty("email", out var emailElement) ? emailElement.GetString() : null;
-            string? subject = root.TryGetProperty("sub", out var subElement) ? subElement.GetString() : null;
-            string? name = root.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
-            bool? emailVerified = root.TryGetProperty("email_verified", out var emailVerifiedElement)
-                ? emailVerifiedElement.GetBoolean()
-                : null;
-
-            return (email, subject, name, emailVerified);
         }
 
         public async Task SendEmailOtpAsync(SendEmailOtpRequestDto request, CancellationToken ct = default)
@@ -409,31 +288,6 @@ namespace PetShop.Services
         }
 
 
-        private List<string> GetGoogleAudiences()
-        {
-            var audiences = new List<string>();
-
-            var singleClientId = _configuration["GoogleAuth:ClientId"]?.Trim();
-            if (!string.IsNullOrWhiteSpace(singleClientId) && !IsPlaceholder(singleClientId))
-            {
-                audiences.Add(singleClientId);
-            }
-
-            var clientIdsCsv = _configuration["GoogleAuth:ClientIds"]?.Trim();
-            if (!string.IsNullOrWhiteSpace(clientIdsCsv))
-            {
-                foreach (var id in clientIdsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                {
-                    if (!string.IsNullOrWhiteSpace(id) && !IsPlaceholder(id) && !audiences.Contains(id, StringComparer.OrdinalIgnoreCase))
-                    {
-                        audiences.Add(id);
-                    }
-                }
-            }
-
-            return audiences;
-        }
-
         private static string GenerateOtp()
         {
             var random = new Random();
@@ -458,7 +312,18 @@ namespace PetShop.Services
                    || value.Contains("placeholder", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsPasswordValid(string password, string? storedPassword)
+        /// <summary>
+        /// Kiểm tra mật khẩu và tự nâng cấp hash nếu tài khoản đang lưu mật khẩu dạng chữ đơn giản.
+        ///
+        /// Migrate-on-login: dữ liệu seed của dự án học có mật khẩu plaintext (vd "staff123").
+        /// Thay vì giữ nhánh so sánh plaintext vĩnh viễn, ta cho đăng nhập một lần rồi
+        /// ghi lại bằng hash BCrypt — sau đó mọi lần đăng nhập sau đều qua BCrypt.
+        /// </summary>
+        private async Task<bool> VerifyAndUpgradeAsync(
+            string password,
+            string? storedPassword,
+            string normalizedEmail,
+            CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(storedPassword))
             {
@@ -467,12 +332,32 @@ namespace PetShop.Services
 
             var normalizedStored = storedPassword.Trim();
 
+            // Đã là hash BCrypt → kiểm tra thẳng.
             if (normalizedStored.StartsWith("$2", StringComparison.Ordinal))
             {
-                return BCrypt.Net.BCrypt.Verify(password, normalizedStored);
+                try
+                {
+                    return BCrypt.Net.BCrypt.Verify(password, normalizedStored);
+                }
+                catch (BCrypt.Net.SaltParseException)
+                {
+                    // Hash lưu trong DB không đúng định dạng BCrypt → không khớp.
+                    return false;
+                }
             }
 
-            return string.Equals(password, normalizedStored, StringComparison.Ordinal);
+            // Chưa hash: chỉ chấp nhận nếu mật khẩu khớp, rồi nâng cấp ngay.
+            if (!string.Equals(password, normalizedStored, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var upgraded = await _authRepository.UpgradePasswordHashAsync(
+                normalizedEmail,
+                BCrypt.Net.BCrypt.HashPassword(password),
+                ct);
+
+            return upgraded > 0;
         }
 
         private static AuthResponseDto MapToAuthResponse(Customer customer)
