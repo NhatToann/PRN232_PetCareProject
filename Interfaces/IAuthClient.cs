@@ -27,4 +27,14 @@ public interface IAuthClient
     /// Cập nhật ảnh đại diện của khách hàng. <paramref name="avatarUrl"/> = null ⇒ xoá avatar.
     /// </summary>
     Task<FrontendApiResult<SimpleMessageDto>> UpdateAvatarAsync(string? avatarUrl, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Đọc ngày sinh của khách hàng từ server (cột <c>Customer.birth_date</c>).
+    /// </summary>
+    Task<FrontendApiResult<DateTime?>> GetBirthDateAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cập nhật ngày sinh của khách hàng. <paramref name="birthDate"/> = null ⇒ xoá ngày sinh.
+    /// </summary>
+    Task<FrontendApiResult<SimpleMessageDto>> UpdateBirthDateAsync(DateTime? birthDate, CancellationToken cancellationToken = default);
 }

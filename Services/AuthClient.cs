@@ -67,6 +67,38 @@ public sealed class AuthClient : IAuthClient
         return PostJsonAsync<SimpleMessageDto>("api/auth/avatar", payload, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<FrontendApiResult<DateTime?>> GetBirthDateAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await _httpClient.GetAsync("api/auth/me", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return FrontendApiResult<DateTime?>.Failure(await ReadErrorAsync(response, cancellationToken), (int)response.StatusCode);
+            }
+
+            var data = await response.Content.ReadFromJsonAsync<CurrentUserDto>(cancellationToken);
+            return FrontendApiResult<DateTime?>.Success(data?.BirthDate);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LineError(ex, ex.Message);
+            return FrontendApiResult<DateTime?>.Failure(ex.Message);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<FrontendApiResult<SimpleMessageDto>> UpdateBirthDateAsync(DateTime? birthDate, CancellationToken cancellationToken = default)
+    {
+        var payload = new UpdateBirthDateRequestDto(birthDate);
+        return PostJsonAsync<SimpleMessageDto>("api/auth/birth-date", payload, cancellationToken);
+    }
+
     public async Task<FrontendApiResult<SimpleMessageDto>> GetGoogleClientIdAsync(CancellationToken cancellationToken = default)
     {
         try

@@ -22,5 +22,17 @@ namespace PetShop.Interfaces
         /// Đọc ảnh đại diện của khách hàng từ DB (null nếu chưa đặt).
         /// </summary>
         Task<string?> GetAvatarAsync(int customerId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Cập nhật ngày sinh của khách hàng (cột <c>Customer.birth_date</c>).
+        /// <paramref name="birthDate"/> = null ⇒ xoá ngày sinh.
+        /// Trả về <c>false</c> nếu khách hàng không tồn tại.
+        /// </summary>
+        Task<bool> UpdateBirthDateAsync(int customerId, DateTime? birthDate, CancellationToken ct = default);
+
+        /// <summary>
+        /// Đọc ngày sinh của khách hàng từ DB (null nếu chưa đặt).
+        /// </summary>
+        Task<DateTime?> GetBirthDateAsync(int customerId, CancellationToken ct = default);
     }
 }

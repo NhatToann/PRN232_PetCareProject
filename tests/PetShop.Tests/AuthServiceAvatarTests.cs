@@ -22,6 +22,8 @@ public class AuthServiceAvatarTests
         public int LastUpdatedCustomerId { get; private set; }
         public string? LastAvatarUrl { get; private set; }
         public int UpdateAvatarCallCount { get; private set; }
+        public int UpdateBirthDateCallCount { get; private set; }
+        public DateTime? LastBirthDate { get; private set; }
 
         public Task<Customer?> GetCustomerByEmailAsync(string email, CancellationToken ct = default)
             => Task.FromResult<Customer?>(null);
@@ -54,6 +56,17 @@ public class AuthServiceAvatarTests
 
         public Task<string?> GetCustomerAvatarAsync(int customerId, CancellationToken ct = default)
             => Task.FromResult(LastAvatarUrl);
+
+        public Task<bool> UpdateCustomerBirthDateAsync(int customerId, DateTime? birthDate, CancellationToken ct = default)
+        {
+            UpdateBirthDateCallCount++;
+            LastUpdatedCustomerId = customerId;
+            LastBirthDate = birthDate;
+            return Task.FromResult(true);
+        }
+
+        public Task<DateTime?> GetCustomerBirthDateAsync(int customerId, CancellationToken ct = default)
+            => Task.FromResult(LastBirthDate);
 
         public Task<int> UpgradePasswordHashAsync(string email, string newPasswordHash, CancellationToken ct = default)
             => Task.FromResult(0);

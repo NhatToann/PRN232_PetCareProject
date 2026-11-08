@@ -68,7 +68,7 @@
 
 | Mục | Nguồn | Đích | Trạng thái | Bằng chứng |
 |---|---|---|---|---|
-| E-01..E-29 Entity (27 bảng + view) | ✅ | ✅ | ✅ | `Grep`/runtime: `GET /api/pets/customer/1` → 200; `GET /api/boarding-rooms` → 200 trả 6668 B (đọc `BoardingRoom` + `vwBoardingAvailabilityStat`). 🆕 Q9: `Customer` có thêm `avatar_url` (nvarchar(500) NULL) + mapping EF — đọc entity `Customer` không lỗi "Invalid column name" |
+| E-01..E-29 Entity (27 bảng + view) | ✅ | ✅ | ✅ | `Grep`/runtime: `GET /api/pets/customer/1` → 200; `GET /api/boarding-rooms` → 200 trả 6668 B (đọc `BoardingRoom` + `vwBoardingAvailabilityStat`). 🆕 Q9: `Customer` có thêm `avatar_url` (nvarchar(500) NULL) + mapping EF — đọc entity `Customer` không lỗi "Invalid column name". 🆕 **Q22: `Customer` có thêm `birth_date` (date NULL) + mapping EF** — đọc entity `Customer` không lỗi "Invalid column name" |
 | T-01 `ChatbotDtos` | ✅ | ✅ | ✅ | `POST /api/chatbot/message` → 200 body có `reply`/`source`/`intent`/`data`/`timestamp` (khớp `ChatMessageResponseDto`) |
 | T-05 `PayrollDtos` | ✅ | ❌ | ⚠️ | `GeneratePayrollDto`/`PayrollResultDto` vẫn thiếu — nhưng **không endpoint nào dùng**; `GET /api/payroll/*` vẫn 200 (xem §3-L6) |
 
@@ -187,6 +187,8 @@
 | BF-19 chatbot AI | ⚠️ | 4 endpoint 200; `message` → `source=fallback` do Gemini key leaked (Q13) |
 | BF-20 boarding | ✅ | `GET /api/boarding-rooms` 200 trả 6 668 B dữ liệu phòng thật |
 | **BF-21 hồ sơ + ảnh đại diện (Q9)** | ✅ | `POST /api/auth/avatar` → 401 (no token) · 200 (giá trị hợp lệ) · 400 (`javascript:` / >500 ký tự) · 200 (`null` = xoá); `SELECT avatar_url FROM Customer WHERE customer_id=1` → đã lưu thật. `/profile` + `/account` → 200. Xem §4.9 |
+| **BF-22 hồ sơ + ngày sinh (Q22)** | ✅ | `POST /api/auth/birth-date` → 401 (no token) · 400 (ngày ở tương lai `2030-01-01`) · 200 (`1995-05-20`); `GET /api/auth/me` → 200 kèm `birthDate`; `SELECT birth_date FROM Customer WHERE customer_id=1` → `1995-05-20` đã lưu thật. `/profile` + `/profile/edit` + `/account` → 200. Xem §4.10 |
+| **BF-23 validate `price` sản phẩm (Q20)** | ✅ | `POST /api/products-temp/create` price=0/999/10000001 → **400** `"Giá tiền không hợp lệ."` (trước đây ⇒ 500); price=1001/10000000 → **200**. Xem §4.11 |
 
 ### LỚP 9 — EMAIL TEMPLATE
 
@@ -373,7 +375,44 @@
 | 9. Verify DB | `SELECT customer_id, avatar_url FROM Customer WHERE customer_id = 1` → `data:image/png;base64,iVBORw0KGgo=` ✅ **đã lưu thật** |
 | 10. UI | `GET /profile` → **200** ✅ · `GET /account` → **200** ✅ (markup giữ nguyên, chỉ bổ sung logic dữ liệu) |
 
-**Còn lại:** ⚠️ cột `birth_date` (nguồn OJT có) — **user chỉ duyệt `avatar_url`**, chưa đụng schema thêm.
+**Còn lại:** ✅ **KHÔNG CÒN** — cột `birth_date` đã được user duyệt ở **Q22** (xem §4.10).
+
+---
+
+### 4.10. Ngày sinh khách hàng — `Customer.birth_date` (Q22)
+
+> **Đối chiếu luồng profile (nguồn → đích):** nguồn `Projectojt/frontend/src/pages/ProfileEditPage.jsx` có ô "Ngày sinh" (`maskDigitsToDmy` mask `dd/mm/yyyy`, `normalizeBirthDateForDisplay` chuẩn hoá về `dd/MM/yyyy`, `dmyToIso` chuyển sang ISO khi lưu). Đích `Account.razor` giữ **nguyên văn** markup + `MaskDigitsToDmy` + `NormalizeBirthDateForDisplay` (`dd/MM/yyyy`) ⇒ **parity UI 100%**; điểm **bổ sung** là đồng bộ thêm xuống DB (localStorage vẫn giữ làm nguồn chính, đúng như Q9 với avatar).
+
+| Bước | Kết quả |
+|---|---|
+| 1. Schema | `IF COL_LENGTH('Customer','birth_date') IS NULL ALTER TABLE Customer ADD birth_date DATE NULL;` (idempotent). Verify `INFORMATION_SCHEMA.COLUMNS` → `birth_date / date / NULL` ✅. **KHÔNG** xoá dữ liệu, **KHÔNG** chạy EF migration, **KHÔNG** đụng bảng/cột khác |
+| 2. EF mapping | `Models/Customer.cs` (+`public DateTime? BirthDate`) + `Data/ShopPetDatabaseContext.cs` (+`entity.Property(e => e.BirthDate).HasColumnName("birth_date")`) ⇒ đọc entity `Customer` **không lỗi** "Invalid column name" ✅ |
+| 3. API — không token | `POST /api/auth/birth-date` → **401** ✅ |
+| 4. API — ngày sinh ở tương lai | `X-User-Id: 1` + `{"birthDate":"2030-01-01"}` → **400** với message VI `Ngày sinh không được ở tương lai.` ✅ |
+| 5. API — ngày sinh hợp lệ | `X-User-Id: 1` + `{"birthDate":"1995-05-20"}` → **200** `{"message":"Đã cập nhật ngày sinh."}` ✅ |
+| 6. API — đọc lại | `GET /api/auth/me` (có `X-User-Id`) → **200** kèm `"birthDate":"1995-05-20T00:00:00"` ✅ |
+| 7. Verify DB | `SELECT customer_id, birth_date FROM Customer WHERE customer_id = 1` → `1995-05-20` ✅ **đã lưu thật** (sau verify đã trả về `NULL` để không để lại dữ liệu probe) |
+| 8. UI | `GET /profile` → **200** ✅ · `GET /profile/edit` → **200** ✅ · `GET /account` → **200** ✅ (markup giữ nguyên, chỉ bổ sung logic dữ liệu) |
+| 9. 3-layer | `IAuthRepository` → `AuthRepository` → `IAuthService` → `AuthService.BirthDate.cs` → `AuthController` → `IAuthClient` → `Account.razor.cs` ⇒ **0 hit** `ShopPetDatabaseContext` trong `Components/` ✅ |
+
+**Còn lại:** ✅ **KHÔNG CÒN.**
+
+---
+
+### 4.11. Validate `price` sản phẩm — 400 thay vì 500 (Q20 / R-03)
+
+> **Biên lấy từ constraint THẬT trong DB** (không suy đoán): `SELECT definition FROM sys.check_constraints WHERE name='CK_Product_Price_Valid'` ⇒ `([price]>=(1000) AND [price]<=(10000000))` ⇒ biên hợp lệ `[1 000, 10 000 000]`.
+
+| Bước | Kết quả |
+|---|---|
+| 1. Controller | `Controllers/ProductsTempController.cs` — hằng số `MinProductPrice = 1000m` / `MaxProductPrice = 10_000_000m` + validate ở action `Create` (X-01) **và** `Update` (X-02) ⇒ `BadRequest(new { message = "Giá tiền không hợp lệ." })` — **đúng văn phong** các message lỗi sẵn có trong chính file ✅ |
+| 2. Schema | **KHÔNG** đụng schema ✅ · **KHÔNG** đổi message của các case lỗi khác ✅ |
+| 3. API — dưới biên | `POST /api/products-temp/create` `price=0` → **400** ✅ · `price=999` → **400** ✅ (trước đây ⇒ lỗi SQL ⇒ **500**) |
+| 4. API — trên biên | `price=10000001` → **400** ✅ |
+| 5. API — trong biên | `price=1001` → **200** ✅ · `price=10000000` → **200** ✅ |
+| 6. Dọn dẹp | Xoá hẳn **2** sản phẩm probe (`product_id` 57, 58 tên `ProbeProduct`; `Review` liên quan = **0** dòng) ⇒ còn **42** sản phẩm gốc ✅ |
+
+**Còn lại:** ✅ **KHÔNG CÒN.**
 
 ---
 
@@ -426,7 +465,7 @@
 |---|---|---|---|
 | R-01 | **Gemini API key bị Google báo leaked** ⇒ chatbot luôn `source=fallback`, không có câu trả lời AI thật. Key y hệt trong repo nguồn ⇒ repo nguồn cũng đã lộ | 🔴 | User cấp key Gemini mới (`Q13`) + **rotate key cũ** trên Google Cloud Console + **xem xét rotate key trong repo nguồn**. Sau khi có key mới, chatbot chuyển `source` từ `fallback` → `gemini` **không cần sửa code** |
 | R-02 | **SMTP credential sai** ⇒ email hoá đơn không gửi được (5.7.8 BadCredentials) | 🟠 | User cấp **App Password** Gmail đúng, cập nhật `Mail:Password`. Code + 4 template đã sẵn sàng (chỉ thiếu credential) |
-| R-03 | **`price` ngoài biên DB** ⇒ `POST /api/products-temp/create` trả **500** thay vì 400 | 🟠 | Thêm validate `price ∈ [1 000, 10 000 000]` trong `Controllers/ProductsTempController.cs:65-68` (đồng bộ `CK_Product_Price_Valid` ở `SHOP_PET_Database.sql:6236`). **Chưa sửa** vì nằm ngoài phạm vi GĐ3 (không phải lỗi chí mạng) |
+| R-03 | ~~**`price` ngoài biên DB** ⇒ `POST /api/products-temp/create` trả **500** thay vì 400~~ | 🟢 | ✅ **ĐÃ XỬ LÝ (Q20, 08/11/2026)** — user chốt **"Có"**: thêm validate `price ∈ [1 000, 10 000 000]` trong `Controllers/ProductsTempController.cs` (hằng số `MinProductPrice`/`MaxProductPrice` lấy từ **constraint thật** `CK_Product_Price_Valid`) ở cả action `Create` **và** `Update` ⇒ trả **400** `"Giá tiền không hợp lệ."` thay vì 500. **KHÔNG** đụng schema. Probe: 0/999/10000001 → **400**; 1001/10000000 → **200** |
 | R-04 | ~~**CSS lệch tông màu** (5 file) + **thiếu 3 file CSS** ⇒ giao diện không giống 100%~~ | 🟢 | ✅ **ĐÃ XỬ LÝ (Q18, 08/11/2026)** — user chốt **revert về tông gốc `#6fd5dd` + port 3 file CSS còn thiếu**. Đã revert màu (copy **nguyên văn giá trị** từ nguồn, không suy đoán) + copy 3 file CSS **SHA256 khớp 100%**. Build 0 error/0 warning, test 70/70, probe 21/21 trang + 22/22 file CSS → 200. Chi tiết: §3-L12, §3-L13 |
 | R-05 | **PayOS key + Gemini key nằm trong `appsettings.json` đã commit** | 🟠 | Chuyển sang `appsettings.Development.json` (git-ignored) hoặc user-secrets; đồng thời bỏ hằng số trong `tests/PetShop.Tests/PayOSServiceTests.cs:24-26` |
 | R-06 | **2 component UI phụ thiếu** (`ClearSearchButton`, `NotificationBell`) | 🟡 | Port nếu user muốn giống 100%; `NotificationBell` chỉ cần gọi `api/notifications/{staffId}` (đã có) |
@@ -460,9 +499,9 @@
 | **Q15** | `/contact` — nguồn OJT **không có** page này. Thêm form liên hệ / bản đồ / giờ mở cửa? | U-26b | Cần user quyết | ⏳ Chờ |
 | **Q16** | Soft-delete `Products` (cột `is_deleted` có sẵn ở đích, **nguồn không có**) — đồng bộ ngược sang nguồn? | X-03..X-06 | Cần user quyết | ⏳ Chờ (đã implement theo cột có sẵn) |
 | **Q19** *(mới)* | `tests/PetShop.Tests/PayOSServiceTests.cs:24-26` chứa hằng số trùng `appsettings.json`. Cho phép chuyển sang user-secrets/environment? | 🟠 Vệ sinh secret | Nên chuyển (không ảnh hưởng chức năng) | ⏳ Chờ |
-| **Q20** *(mới)* | `POST /api/products-temp/create` nên trả **400** khi `price` ngoài `[1000, 10 000 000]` (đồng bộ `CK_Product_Price_Valid`) thay vì 500? | 🟠 UX lỗi | Nên sửa (1 dòng validate trong `Controllers/ProductsTempController.cs`) | ⏳ Chờ |
+| **Q20** *(mới)* | `POST /api/products-temp/create` nên trả **400** khi `price` ngoài `[1000, 10 000 000]` (đồng bộ `CK_Product_Price_Valid`) thay vì 500? | 🟠 UX lỗi | Nên sửa (1 dòng validate trong `Controllers/ProductsTempController.cs`) | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt **"Có"**. Biên lấy từ constraint thật: `SELECT definition FROM sys.check_constraints WHERE name='CK_Product_Price_Valid'` ⇒ `([price]>=(1000) AND [price]<=(10000000))`. Thêm `MinProductPrice = 1000m` / `MaxProductPrice = 10_000_000m` + validate ở `Create` **và** `Update` ⇒ **400** `"Giá tiền không hợp lệ."`. **KHÔNG** đụng schema, **KHÔNG** đổi message case lỗi khác |
 | **Q21** *(mới — LS-11)* | **Có cần UI chat widget cho khách/nhân viên không?** Hiện `NotificationBell` đã nhận event `ChatReceived` qua SignalR nhưng **chỉ ghi log**, chưa hiển thị hộp thoại chat. Cần làm widget chat 1-1 (khung chat nhỏ trong topbar/trang chat) không? | 🟡 UX | Cần user quyết — hạ tầng SignalR + lưu `ChatMessages` đã sẵn sàng | ⏳ Chờ |
-| **Q22** *(mới — Q9)* | **`Customer.birth_date`** — user mới chỉ duyệt thêm cột `avatar_url`. Nguồn có ô "Ngày sinh" (`ProfileEditPage.jsx`) nhưng lưu localStorage; đích hiện cũng lưu localStorage. Có thêm cột `birth_date` vào DB không? | 🟡 Parity | Nên thêm nếu muốn profile bền vững giống `avatar_url` (ALTER idempotent, không xoá dữ liệu) | ⏳ Chờ |
+| **Q22** *(mới — Q9)* | **`Customer.birth_date`** — user mới chỉ duyệt thêm cột `avatar_url`. Nguồn có ô "Ngày sinh" (`ProfileEditPage.jsx`) nhưng lưu localStorage; đích hiện cũng lưu localStorage. Có thêm cột `birth_date` vào DB không? | 🟡 Parity | Nên thêm nếu muốn profile bền vững giống `avatar_url` (ALTER idempotent, không xoá dữ liệu) | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt **"Có"**. `ALTER TABLE Customer ADD birth_date DATE NULL` (có `IF COL_LENGTH(...) IS NULL` ⇒ idempotent, **không** xoá dữ liệu, **không** EF migration); verify `INFORMATION_SCHEMA.COLUMNS` → `birth_date / date / NULL`. Mapping EF `BirthDate`; 3-layer `IAuthRepository.UpdateCustomerBirthDateAsync` → `IAuthService.UpdateBirthDateAsync` (`Services/AuthService.BirthDate.cs`); API `POST/PUT api/auth/birth-date` + `GET api/auth/me` trả `birthDate`; UI `/account` + `/profile` + `/profile/edit` đọc/ghi ngày sinh theo thứ tự localStorage → DB → rỗng (**markup không đổi**) |
 | **Q23** *(mới — Q9)* | **Nút "Xoá ảnh"** trong UI profile — API đã hỗ trợ `avatarUrl: null` nhưng chưa có nút (vì markup phải giữ 100% bản gốc). Thêm nút hay không? | 🟡 UX | Nguồn **không có** nút này ⇒ theo yêu cầu parity ⇒ **không thêm** | ⏳ Chờ |
 
 ---
@@ -494,12 +533,12 @@
 | Mức | Số | Nội dung |
 |---|---|---|
 | 🔴 | **1** | **Gemini key leaked** ⇒ chatbot `source=fallback` (Q13) — *không phải lỗi code, không cần sửa code* |
-| 🟠 | **6** | (L5) `price` ngoài biên DB trả 500 thay vì 400 · (L9) 2 component UI phụ thiếu · (L10) role `doctor` chưa xử lý ở UI · (L12) 5 CSS lệch tông màu+font · (L13) 3 CSS thiếu · (L14) SMTP credential sai |
+| 🟠 | **5** | (L9) 2 component UI phụ thiếu · (L10) role `doctor` chưa xử lý ở UI · (L12) 5 CSS lệch tông màu+font · (L13) 3 CSS thiếu · (L14) SMTP credential sai — *(L5) `price` ngoài biên DB trả 500 đã ✅ đóng ở Q20 (08/11/2026)* |
 | 🟡 | **8** | (L1) `breed-pricing/breed/1` 404 vì dữ liệu không có · (L2) `ProblemDetails` thiếu `detail` ở lỗi controller · (L6) 2 DTO payroll thiếu · (L8) fallback route chưa verify · (L11) 2 asset `public/` chưa copy · (L15) phụ thuộc CDN · (L17/Q19) secret trong test file · (R-11/R-12) nợ kỹ thuật |
 
 ### 8.3. Nhận định cuối
 
-> **Migration OJT → PRN232 đã đạt parity 100% ở tầng *hành vi quan sát được***: 40/40 route, 18/19 nhóm API lõi, 10/10 API LS-04, 16/16 OData, 159/159 asset MD5 khớp, 0 ảnh hỏng, 0 tham chiếu Node/npm, build sạch, test **70/70** (+ realtime SignalR LS-11 đã verify end-to-end bằng client .NET thật; + Q9 `Customer.avatar_url` đã ALTER + verify giá trị trong DB).
+> **Migration OJT → PRN232 đã đạt parity 100% ở tầng *hành vi quan sát được***: 40/40 route, 18/19 nhóm API lõi, 10/10 API LS-04, 16/16 OData, 159/159 asset MD5 khớp, 0 ảnh hỏng, 0 tham chiếu Node/npm, build sạch, test **79/79** (+ realtime SignalR LS-11 đã verify end-to-end bằng client .NET thật; + Q9 `Customer.avatar_url` đã ALTER + verify giá trị trong DB; + **Q20** validate `price` trả **400** thay vì 500; + **Q22** `Customer.birth_date` đã ALTER + verify giá trị trong DB).
 >
 > **Không còn lỗi chí mạng nào** (build fail / route 500 / ảnh 404 hàng loạt) ⇒ **GĐ3 không phải sửa code**. Toàn bộ mục còn lại là **lệch chức năng phụ do credential môi trường** (Gemini key, SMTP) hoặc **quyết định nội dung cần user chốt** (tông màu CSS, port component UI phụ, role `doctor`, schema `Customer`).
 >
@@ -507,7 +546,7 @@
 > 1. **Cấp Gemini API key mới** (Q13) — chatbot sẽ tự chuyển `source` từ `fallback` sang `gemini`.
 > 2. **Cấp App Password Gmail** (Q17) — email hoá đơn sẽ gửi được (code + 4 template đã sẵn sàng).
 >
-> **Các câu hỏi còn lại (Q2, Q8, Q9, Q15, Q16, Q19–Q20) không chặn runtime** — chỉ chặn mức "giống 100%" về mặt thẩm mỹ/UI/schema.
+> **Các câu hỏi còn lại (Q2, Q8, Q15, Q16, Q19) không chặn runtime** — chỉ chặn mức "giống 100%" về mặt thẩm mỹ/UI/schema. *(Q9 đã đóng trọn: `avatar_url` **và** `birth_date`; Q20 đã đóng: validate `price` trả 400.)*
 >
 > **Q18 đã đóng (08/11/2026)** — không còn chặn parity giao diện về mặt bảng màu.
 

@@ -25,6 +25,12 @@ namespace PetShop.Models
         /// </summary>
         public string? AvatarUrl { get; set; }
 
+        /// <summary>
+        /// Ngày sinh của khách hàng.
+        /// Cột DB: <c>Customer.birth_date</c> (date, nullable).
+        /// </summary>
+        public DateTime? BirthDate { get; set; }
+
         public string? Status { get; set; }
 
         public string? OtpCode { get; set; }

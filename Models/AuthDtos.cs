@@ -86,6 +86,7 @@ namespace PetShop.Models
     /// Kết quả đăng nhập. Không có attribute validate vì đây là response DTO.
     /// <see cref="AvatarUrl"/> là ảnh đại diện khách hàng (data-URI hoặc http/https),
     /// đồng bộ với cột <c>Customer.avatar_url</c>.
+    /// <see cref="BirthDate"/> là ngày sinh, đồng bộ với cột <c>Customer.birth_date</c>.
     /// </summary>
     public sealed record AuthResponseDto(
         int UserId,
@@ -93,7 +94,8 @@ namespace PetShop.Models
         string Email,
         string Role,
         string Status,
-        string? AvatarUrl = null);
+        string? AvatarUrl = null,
+        DateTime? BirthDate = null);
 
     public sealed record SimpleMessageDto(string Message);
 
@@ -114,7 +116,8 @@ namespace PetShop.Models
         string Name,
         string Email,
         string Role,
-        string? AvatarUrl = null);
+        string? AvatarUrl = null,
+        DateTime? BirthDate = null);
 
     /// <summary>
     /// Body cho endpoint cập nhật ảnh đại diện.
@@ -122,4 +125,11 @@ namespace PetShop.Models
     /// </summary>
     public sealed record UpdateAvatarRequestDto(
         string? AvatarUrl);
+
+    /// <summary>
+    /// Body cho endpoint cập nhật ngày sinh (cột <c>Customer.birth_date</c>).
+    /// <see cref="BirthDate"/> = null ⇒ xoá ngày sinh.
+    /// </summary>
+    public sealed record UpdateBirthDateRequestDto(
+        DateTime? BirthDate);
 }

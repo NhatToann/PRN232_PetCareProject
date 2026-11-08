@@ -13,6 +13,16 @@ namespace PetShop.Controllers
     [Route("api/products-temp")]
     public sealed class ProductsTempController : ControllerBase
     {
+        /// <summary>
+        /// Biên hợp lệ của cột <c>Products.price</c> — đồng bộ với CHECK constraint
+        /// <c>CK_Product_Price_Valid</c> (<c>[price] &gt;= 1000 AND [price] &lt;= 10000000</c>) trong DB.
+        /// Dùng hằng số để validate trả 400 trước khi lệnh SQL chạm DB và sinh lỗi 500.
+        /// </summary>
+        public const decimal MinProductPrice = 1000m;
+
+        /// <summary>Biên trên của <c>Products.price</c> — xem <see cref="MinProductPrice"/>.</summary>
+        public const decimal MaxProductPrice = 10_000_000m;
+
         private readonly IProductService _service;
         private readonly IWebHostEnvironment _environment;
         private readonly ILogger<ProductsTempController> _logger;
@@ -67,6 +77,11 @@ namespace PetShop.Controllers
                 return BadRequest(new { message = "Giá tiền không hợp lệ." });
             }
 
+            if (request.Price < MinProductPrice || request.Price > MaxProductPrice)
+            {
+                return BadRequest(new { message = "Giá tiền không hợp lệ." });
+            }
+
             if (request.StockQuantity < 0)
             {
                 return BadRequest(new { message = "Số lượng không hợp lệ." });
@@ -111,6 +126,11 @@ namespace PetShop.Controllers
             }
 
             if (request.Price < 0)
+            {
+                return BadRequest(new { message = "Giá tiền không hợp lệ." });
+            }
+
+            if (request.Price < MinProductPrice || request.Price > MaxProductPrice)
             {
                 return BadRequest(new { message = "Giá tiền không hợp lệ." });
             }

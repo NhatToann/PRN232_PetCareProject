@@ -14,6 +14,11 @@ namespace PetShop_PRN222.Components.Pages
     /// (<c>userProfile:{userId}</c>). Đích giữ nguyên hành vi đó (parity UI 100%)
     /// và đồng thời đồng bộ sang cột <c>Customer.avatar_url</c> để avatar không mất
     /// khi xoá localStorage hoặc đăng nhập trên thiết bị khác.
+    ///
+    /// Lưu ý về ngày sinh (Q22): nguồn OJT (<c>ProfileEditPage.jsx</c>) có ô "Ngày sinh"
+    /// nhưng chỉ lưu trong localStorage. Đích giữ nguyên hành vi đó và đồng thời đồng bộ
+    /// sang cột <c>Customer.birth_date</c> để ngày sinh không mất khi xoá localStorage
+    /// hoặc đăng nhập trên thiết bị khác.
     /// </summary>
     public partial class Account
     {
@@ -69,7 +74,13 @@ namespace PetShop_PRN222.Components.Pages
             email = FirstNonEmpty(draft?.Email, user.Email);
             phone = draft?.Phone ?? "";
             address = draft?.Address ?? "";
-            birthDate = NormalizeBirthDateForDisplay(draft?.BirthDate ?? "");
+
+            // Thứ tự ưu tiên ngày sinh: localStorage draft → Customer.birth_date trong DB → rỗng.
+            // Đọc DB giúp ngày sinh sống sót khi user xoá localStorage hoặc đăng nhập trên máy/tab khác.
+            var draftBirthDate = draft?.BirthDate ?? "";
+            birthDate = string.IsNullOrWhiteSpace(draftBirthDate)
+                ? await ReadBirthDateFromServerAsync()
+                : NormalizeBirthDateForDisplay(draftBirthDate);
 
             // Thứ tự ưu tiên avatar: localStorage draft → Customer.avatar_url trong DB → rỗng
             // (UI fallback về chữ cái đầu). Đọc DB giúp avatar sống sót khi user xoá
@@ -80,6 +91,28 @@ namespace PetShop_PRN222.Components.Pages
                 : await ReadAvatarFromServerAsync();
 
             loaded = true;
+        }
+
+        /// <summary>
+        /// Đọc ngày sinh từ server (cột <c>Customer.birth_date</c>).
+        /// Lỗi mạng/API không được làm hỏng trang — trả về chuỗi rỗng để UI fallback.
+        /// </summary>
+        private async Task<string> ReadBirthDateFromServerAsync()
+        {
+            try
+            {
+                var result = await AuthClient.GetBirthDateAsync();
+                if (result.IsSuccess && result.Data is DateTime value)
+                {
+                    return value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+                }
+            }
+            catch (Exception)
+            {
+                // Bỏ qua — ngày sinh trên DB là dữ liệu phụ, không chặn hiển thị trang.
+            }
+
+            return "";
         }
 
         /// <summary>
@@ -143,6 +176,9 @@ namespace PetShop_PRN222.Components.Pages
                 // Đồng bộ avatar xuống DB để không mất khi xoá localStorage / đăng nhập máy khác.
                 await SyncAvatarToServerAsync(avatarUrl);
 
+                // Đồng bộ ngày sinh xuống DB (cột Customer.birth_date) — giống cách làm với avatar.
+                await SyncBirthDateToServerAsync(trimmedBirthDate);
+
                 success = "Đã lưu thông tin cá nhân.";
             }
             catch (Exception ex)
@@ -201,6 +237,29 @@ namespace PetShop_PRN222.Components.Pages
             catch (Exception)
             {
                 // Bỏ qua — localStorage vẫn giữ avatar, người dùng vẫn dùng được.
+            }
+        }
+
+        /// <summary>
+        /// Đẩy ngày sinh xuống server (cột <c>Customer.birth_date</c>).
+        /// Chuỗi rỗng ⇒ gửi null để xoá ngày sinh trên DB.
+        /// Bọc try/catch — lỗi API không được làm hỏng UI hoặc chặn lưu profile.
+        /// </summary>
+        private async Task SyncBirthDateToServerAsync(string? value)
+        {
+            try
+            {
+                DateTime? parsed = null;
+                if (!string.IsNullOrWhiteSpace(value) && IsValidDmy(value.Trim()))
+                {
+                    parsed = DateTime.ParseExact(value.Trim(), "dd/MM/yyyy", CultureInfo.InvariantCulture);
+                }
+
+                await AuthClient.UpdateBirthDateAsync(parsed);
+            }
+            catch (Exception)
+            {
+                // Bỏ qua — localStorage vẫn giữ ngày sinh, người dùng vẫn dùng được.
             }
         }
 

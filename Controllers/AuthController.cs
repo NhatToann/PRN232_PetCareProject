@@ -205,9 +205,13 @@ namespace PetShop.Controllers
 
             var parsedUserId = string.IsNullOrWhiteSpace(userId) ? 0 : int.Parse(userId);
 
-            // Avatar nằm trên bảng Customer — chỉ đọc được khi người dùng là khách hàng.
+            // Avatar và ngày sinh nằm trên bảng Customer — chỉ đọc được khi người dùng là khách hàng.
             var avatarUrl = parsedUserId > 0
                 ? await _authService.GetAvatarAsync(parsedUserId, ct)
+                : null;
+
+            var birthDate = parsedUserId > 0
+                ? await _authService.GetBirthDateAsync(parsedUserId, ct)
                 : null;
 
             return Ok(new CurrentUserDto(
@@ -215,7 +219,8 @@ namespace PetShop.Controllers
                 user ?? string.Empty,
                 email ?? string.Empty,
                 role ?? string.Empty,
-                avatarUrl));
+                avatarUrl,
+                birthDate));
         }
 
         /// <summary>
@@ -250,6 +255,45 @@ namespace PetShop.Controllers
                 }
 
                 return Ok(new { message = "Đã cập nhật ảnh đại diện." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Cập nhật ngày sinh của khách hàng (cột <c>Customer.birth_date</c>).
+        ///
+        /// customerId lấy từ claim của request đang xác thực, KHÔNG tin body —
+        /// nhờ vậy mỗi khách hàng chỉ sửa được ngày sinh của chính mình.
+        ///
+        /// Giá trị <c>birthDate</c> hợp lệ: <c>null</c> (xoá ngày sinh),
+        /// ngày trong quá khứ (không sau <c>1900-01-01</c>).
+        /// </summary>
+        [HttpPut("birth-date")]
+        [HttpPost("birth-date")]
+        [Authorize]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult> UpdateBirthDate([FromBody] UpdateBirthDateRequestDto request, CancellationToken ct)
+        {
+            var customerId = ResolveCustomerId();
+            if (customerId <= 0)
+            {
+                return Unauthorized(new { message = "Không xác định được khách hàng đang đăng nhập." });
+            }
+
+            try
+            {
+                var updated = await _authService.UpdateBirthDateAsync(customerId, request?.BirthDate, ct);
+                if (!updated)
+                {
+                    return NotFound(new { message = "Không tìm thấy tài khoản khách hàng." });
+                }
+
+                return Ok(new { message = "Đã cập nhật ngày sinh." });
             }
             catch (ArgumentException ex)
             {

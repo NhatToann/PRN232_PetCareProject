@@ -96,6 +96,42 @@ namespace PetShop.Repositories
             return avatar;
         }
 
+        /// <inheritdoc />
+        public async Task<bool> UpdateCustomerBirthDateAsync(int customerId, DateTime? birthDate, CancellationToken ct = default)
+        {
+            if (customerId <= 0)
+            {
+                return false;
+            }
+
+            var customer = await _db.Customers
+                .FirstOrDefaultAsync(x => x.CustomerId == customerId, ct);
+            if (customer is null)
+            {
+                return false;
+            }
+
+            customer.BirthDate = birthDate;
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<DateTime?> GetCustomerBirthDateAsync(int customerId, CancellationToken ct = default)
+        {
+            if (customerId <= 0)
+            {
+                return null;
+            }
+
+            var birthDate = await _db.Customers
+                .Where(x => x.CustomerId == customerId)
+                .Select(x => x.BirthDate)
+                .FirstOrDefaultAsync(ct);
+
+            return birthDate;
+        }
+
         public async Task<bool> EmailExistsInAnyRoleAsync(string email, CancellationToken ct = default)
         {
             var normalizedEmail = NormalizeEmail(email);

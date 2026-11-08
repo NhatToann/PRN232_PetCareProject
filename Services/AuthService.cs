@@ -368,7 +368,8 @@ namespace PetShop.Services
                 customer.Email ?? string.Empty,
                 customer.Role,
                 customer.Status ?? string.Empty,
-                customer.AvatarUrl
+                customer.AvatarUrl,
+                customer.BirthDate
             );
         }
     }
