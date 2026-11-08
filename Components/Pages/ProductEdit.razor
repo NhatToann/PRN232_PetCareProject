@@ -1,11 +1,9 @@
 @page "/products/edit/{Id:int}"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
-@using PetShop.Data
 @using PetShop.Models
-@using Microsoft.EntityFrameworkCore
-@using Microsoft.Extensions.DependencyInjection
-@inject IServiceProvider ServiceProvider
+@using PetShop.Services
+@inject IProductManagementService ProductService
 @inject NavigationManager Navigation
 
 <PageTitle>Sửa Sản Phẩm</PageTitle>
@@ -71,11 +69,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        // Tạo luồng kết nối độc lập
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
-
-        product = await db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.ProductId == Id);
+        product = await ProductService.GetForEditAsync(Id);
         if (product != null)
         {
             InputPrice = product.Price / 1000;
@@ -86,28 +80,11 @@ else
     {
         try
         {
-            using var scope = ServiceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
-
             product!.Price = InputPrice * 1000;
 
-            // Chống lỗi DateTime SQL: SQL Server không chấp nhận DateTime trước năm 1753.
-            // Lưu ý: DateTime? khi box sẽ thành DateTime (hoặc null), nên dùng DateTime cho cả hai nhánh.
-            foreach (var prop in product.GetType().GetProperties())
-            {
-                if (prop.PropertyType != typeof(DateTime) && prop.PropertyType != typeof(DateTime?))
-                {
-                    continue;
-                }
-
-                if (prop.GetValue(product) is DateTime val && val < new DateTime(1753, 1, 1))
-                {
-                    prop.SetValue(product, DateTime.Now);
-                }
-            }
-
-            db.Products.Update(product);
-            await db.SaveChangesAsync();
+            // Chống lỗi DateTime SQL (SQL Server không chấp nhận DateTime trước năm 1753)
+            // được ProductManagementService xử lý trước khi ghi.
+            await ProductService.UpdateAsync(product);
 
             successMessage = "Thành công! Đang tự động quay lại...";
             StateHasChanged();

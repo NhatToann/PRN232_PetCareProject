@@ -1,0 +1,83 @@
+@using PetShop_PRN222.Components.Checkout
+
+@* ------------------------------------------------------------------
+   AddressModal — port nguyên văn từ
+   Projectojt/frontend/src/components/checkout/AddressModal.jsx (OJT).
+
+   Hành vi giữ nguyên:
+     - 2 view: "list" (danh sách địa chỉ đã lưu) và "form" (thêm/cập nhật).
+     - Bấm overlay ⇒ onClose. Bấm nút ✕ ⇒ onClose.
+     - Validate từng field (fullName / phone / email / district / ward / address).
+     - Dropdown gợi ý quận (tối đa 8) và phường (tối đa 15) lọc theo
+       `normalizeText` — dữ liệu lấy từ `wwwroot/js/daNangData.js` qua JS interop.
+     - Chọn quận ⇒ reset phường về rỗng và đóng cả 2 dropdown.
+   ------------------------------------------------------------------ *@
+
+@if (IsOpen)
+{
+    <div class="address-modal-overlay" role="presentation" @onmousedown="HandleOverlayClick">
+        <div class="address-modal" role="dialog" aria-modal="true" aria-labelledby="address-modal-title">
+            <div class="address-modal-header">
+                <h3 id="address-modal-title" class="address-modal-title">
+                    @if (AddressModalView == "form")
+                    {
+                        @if (EditingAddressId is not null)
+                        {
+                            <text>Cập nhật địa chỉ</text>
+                        }
+                        else
+                        {
+                            <text>Thêm địa chỉ mới</text>
+                        }
+                    }
+                    else
+                    {
+                        <text>Địa chỉ của tôi</text>
+                    }
+                </h3>
+                <button type="button" class="address-modal-close" @onclick="@(() => OnClose.InvokeAsync())" aria-label="Đóng">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            @if (AddressModalView == "list")
+            {
+                <AddressModalList SavedAddresses="SavedAddresses"
+                                  SelectedSavedId="SelectedSavedId"
+                                  OnSelect="OnSelectAddress"
+                                  OnAdd="OnStartAdd"
+                                  OnEdit="OnStartEdit" />
+            }
+            else
+            {
+                <AddressModalForm FullName="FullName"
+                                  Phone="Phone"
+                                  Email="Email"
+                                  Province="Province"
+                                  District="District"
+                                  Ward="Ward"
+                                  Address="Address"
+                                  Errors="Errors"
+                                  Touched="Touched"
+                                  ShowWardDropdown="ShowWardDropdown"
+                                  ShowDistrictDropdown="ShowDistrictDropdown"
+                                  WardSuggestions="WardSuggestions"
+                                  DistrictSuggestions="DistrictSuggestions"
+                                  EditingAddressId="EditingAddressId"
+                                  GetFieldError="GetFieldError"
+                                  OnFullName="OnFullName"
+                                  OnPhone="OnPhone"
+                                  OnEmail="OnEmail"
+                                  OnDistrict="HandleDistrictSelect"
+                                  OnWard="HandleWardSelect"
+                                  OnAddress="OnAddress"
+                                  OnShowWardDropdown="SetShowWardDropdown"
+                                  OnShowDistrictDropdown="SetShowDistrictDropdown"
+                                  OnBlur="HandleBlur"
+                                  OnBack="OnBack"
+                                  OnSave="HandleSave"
+                                  OnDelete="HandleDelete" />
+            }
+        </div>
+    </div>
+}

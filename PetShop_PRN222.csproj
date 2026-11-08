@@ -20,6 +20,12 @@
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="Google.Apis.Auth" Version="1.73.0" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.71.0" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.71.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.71.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Handlebars.Net" Version="2.1.6" />
     <PackageReference Include="MailKit" Version="4.16.0" />
     <PackageReference Include="Microsoft.AspNetCore.OData" Version="9.5.0" />
@@ -48,6 +54,15 @@
     <Content Update="appsettings.example.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <!--
+    LS-09 — gRPC (slide PRN232 Ch09):
+    Grpc.Tools sinh code C# server + client từ file .proto.
+    GrpcServices="Both" ⇒ sinh cả lớp service base (server) lẫn client stub.
+  -->
+  <ItemGroup>
+    <Protobuf Include="Protos\**\*.proto" GrpcServices="Both" ProtoRoot="Protos" />
   </ItemGroup>
 
 </Project>

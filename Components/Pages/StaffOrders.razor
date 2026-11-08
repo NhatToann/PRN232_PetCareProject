@@ -1,10 +1,9 @@
 ﻿@page "/system/orders"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
-@using PetShop.Data
-@using Microsoft.EntityFrameworkCore
-@using Microsoft.Extensions.DependencyInjection
-@inject IServiceProvider ServiceProvider
+@using PetShop.Models
+@using PetShop.Services
+@inject IStaffReportsService ReportsService
 
 <PageTitle>Quản Lý Đơn Hàng</PageTitle>
 
@@ -186,25 +185,18 @@
 
     private async Task Load()
     {
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
+        var rows = await ReportsService.GetOrderListAsync(100);
 
-        var rawOrders = await db.Orders.AsNoTracking().Take(100).ToListAsync(); // Lấy data tĩnh
-        var custIds = rawOrders.Where(x => x.CustomerId.HasValue).Select(x => x.CustomerId!.Value).ToList();
-        var cDict = await db.Customers.Where(c => custIds.Contains(c.CustomerId)).ToDictionaryAsync(c => c.CustomerId, c => c.Name);
-
-        // THUẬT TOÁN SẮP XẾP: Việc cần làm nổi lên trên, Việc xong chìm xuống dưới
-        orders = rawOrders.Select(o => new OrderDto
-        {
-            OrderId = o.OrderId,
-            OrderDate = o.OrderDate,
-            TotalAmount = o.TotalAmount,
-            Status = o.Status ?? "Chờ xác nhận",
-            CustomerName = (o.CustomerId.HasValue && cDict.ContainsKey(o.CustomerId.Value)) ? cDict[o.CustomerId.Value] ?? "Khách lẻ" : "Khách lẻ"
-        })
-        .OrderBy(o => GetSortWeight(o.Status))
-        .ThenByDescending(o => o.OrderDate)
-        .ToList();
+        orders = rows
+            .Select(o => new OrderDto
+            {
+                OrderId = o.OrderId,
+                OrderDate = o.OrderDate,
+                TotalAmount = o.TotalAmount,
+                Status = o.Status,
+                CustomerName = o.CustomerName
+            })
+            .ToList();
 
         pendingCount = orders.Count(o => o.Status == "Chờ xác nhận" || o.Status == "Đang đóng gói" || o.Status == "Đang xử lý");
         shippingCount = orders.Count(o => o.Status == "Đang giao hàng");
@@ -225,9 +217,7 @@
     {
         if (selectedOrder != null)
         {
-            using var scope = ServiceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
-            await db.Database.ExecuteSqlRawAsync("UPDATE [Order] SET status = {0} WHERE order_id = {1}", st, selectedOrder.OrderId);
+            await ReportsService.UpdateOrderStatusAsync(selectedOrder.OrderId, st);
             selectedOrder = null;
             await Load();
             StateHasChanged();

@@ -18,10 +18,16 @@ if (builder.Environment.IsDevelopment())
 }
 
 builder.Services.AddControllersWithViews(options =>
-    {
-        // Formatter CSV tùy chỉnh — client gửi "Accept: text/csv" sẽ nhận bảng CSV.
-        options.OutputFormatters.Add(new CsvOutputFormatter());
-    })
+{
+    // Formatter CSV tùy chỉnh — client gửi "Accept: text/csv" sẽ nhận bảng CSV.
+    options.OutputFormatters.Add(new CsvOutputFormatter());
+
+    // LS-10 / SL-04 — Custom Input Formatter (slide PRN232 Ch03 S17):
+    // chuẩn hoá chữ thường trong body JSON thành HOA trước khi model binding.
+    // Insert(0) để formatter này được thử TRƯỚC SystemTextJsonInputFormatter mặc định
+    // (nếu Add() thì formatter JSON built-in đã đọc body trước và formatter custom không bao giờ chạy).
+    options.InputFormatters.Insert(0, new UpperCaseTextInputFormatter());
+})
     // Bật XML formatter để hỗ trợ content negotiation: JSON (mặc định) và XML.
     .AddPetShopXmlFormatters()
     // OData (slide PRN232 - Ch04): cho phép client truy vấn động bằng
@@ -108,6 +114,7 @@ builder.Services.AddSelfHttpClient<PetShop.Interfaces.IOrderClient, PetShop.Serv
 builder.Services.AddSelfHttpClient<PetShop.Interfaces.IReviewClient, PetShop.Services.ReviewClient>();
 builder.Services.AddSelfHttpClient<PetShop.Interfaces.IPaymentClient, PetShop.Services.PaymentClient>();
 builder.Services.AddSelfHttpClient<PetShop.Interfaces.IPetServiceClient, PetShop.Services.PetServiceClient>();
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.INotificationClient, PetShop.Services.NotificationClient>();
 
 // Hai client dưới đây cần header phiên đăng nhập (X-User-Id / X-Customer-Id / X-User-Role).
 builder.Services.AddTransient<PetShop.Services.SpaAuthHeaderHandler>();
@@ -119,6 +126,11 @@ builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IStaffDashboardService, StaffDashboardService>();
 builder.Services.AddScoped<IStaffProfileService, StaffProfileService>();
+// LS-13: 3-layer cho màn hình quản lý sản phẩm + báo cáo/dashboard nhân viên.
+builder.Services.AddScoped<IProductManagementRepository, ProductManagementRepository>();
+builder.Services.AddScoped<IProductManagementService, ProductManagementService>();
+builder.Services.AddScoped<IStaffReportsRepository, StaffReportsRepository>();
+builder.Services.AddScoped<IStaffReportsService, StaffReportsService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -174,6 +186,16 @@ builder.Services.AddScoped<PetShop.Interfaces.IBoardingRepository, PetShop.Repos
 builder.Services.AddScoped<PetShop.Interfaces.IBoardingService, PetShop.Services.BoardingService>();
 
 // ---------------------------------------------------------------------------
+// LS-09 — gRPC (slide PRN232 Ch09):
+//   - AddGrpc() đăng ký server gRPC + DI cho các service kế thừa PetCatalogBase.
+//   - GrpcPetCatalogService là 3-layer: chỉ gọi IProductService, không inject DbContext.
+//   - GrpcPetCatalogClient là client demo (Grpc.Net.Client) cho 4 loại RPC.
+// ---------------------------------------------------------------------------
+builder.Services.AddGrpc();
+builder.Services.AddScoped<PetShop.Services.GrpcPetCatalogService>();
+builder.Services.AddScoped<PetShop.Services.GrpcPetCatalogClient>();
+
+// ---------------------------------------------------------------------------
 // Chatbot AI (slide LS-08 — port từ OJT):
 //   - ChatbotOptions: đọc khối "Chatbot" trong appsettings.json.
 //   - IAiProviderService: chỉ Gemini (quyết định của chủ dự án, không port Ollama).
@@ -197,6 +219,31 @@ builder.Services.AddHttpClient<PetShop.Interfaces.IPayOSService, PetShop.Service
         client.DefaultRequestHeaders.Add("x-api-key", payosOptions.ApiKey);
         client.Timeout = TimeSpan.FromSeconds(30);
     });
+
+// ---------------------------------------------------------------------------
+// LS-09 — Kestrel: bật HTTP/2 (h2c) để phục vụ gRPC.
+//
+// gRPC bắt buộc HTTP/2. Với cổng không TLS (h2c), Kestrel chỉ chấp nhận HTTP/2
+// prior-knowledge khi endpoint được khai báo Protocols = Http2 — nếu để
+// Http1AndHttp2 thì Kestrel trả lỗi "HTTP_1_1_REQUIRED" cho client gRPC.
+//
+// Vì vậy tách 2 cổng:
+//   - 5286 : HTTP/1.1            — phục vụ web (Blazor) và REST API.
+//   - 5287 : HTTP/2 thuần (h2c)  — phục vụ gRPC (client demo dùng cổng này).
+// Endpoint HTTPS mặc định đã dùng HTTP/2 qua ALPN nên không cần cấu hình thêm.
+// ---------------------------------------------------------------------------
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5286, listen =>
+    {
+        listen.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http1;
+    });
+
+    options.ListenAnyIP(5287, listen =>
+    {
+        listen.Protocols = Microsoft.AspNetCore.Server.Kestrel.Core.HttpProtocols.Http2;
+    });
+});
 
 var app = builder.Build();
 
@@ -238,6 +285,10 @@ app.Use(async (context, next) =>
 });
 
 app.MapControllers();
+
+// LS-09 — đăng ký endpoint gRPC (PetCatalog): /PetCatalog/GetProducts, /PetCatalog/StreamProducts,
+// /PetCatalog/UploadProducts, /PetCatalog/SyncProducts.
+app.MapGrpcService<PetShop.Services.GrpcPetCatalogService>();
 
 app.MapRazorComponents<PetShop_PRN222.Components.App>()
     .AddInteractiveServerRenderMode();

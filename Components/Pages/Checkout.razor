@@ -1,4 +1,5 @@
 @page "/cart/checkout"
+@using PetShop_PRN222.Components.Checkout
 @inject PetShop.Services.CartStateService CartState
 @inject PetShop.Services.UserSessionService UserSession
 @inject PetShop.Interfaces.ICheckoutClient CheckoutClient
@@ -43,80 +44,29 @@
                         Địa chỉ nhận hàng
                         <span class="checkout-delivery-notice"> (Giao hàng tại Đà Nẵng)</span>
                     </h2>
-                    <div class="checkout-address-form-grid">
-                        <label class="checkout-field">
-                            <span class="checkout-field-label">Họ và tên<span class="checkout-req">*</span></span>
-                            <input class="checkout-input" id="checkout-fullName" maxlength="100" @bind="form.FullName" @bind:event="oninput" @onblur="@(() => ValidateField(nameof(form.FullName)))" placeholder="Nguyễn Văn A" />
-                            @if (errors.ContainsKey(nameof(form.FullName)))
+                    <div class="checkout-address-summary-row">
+                        <div class="checkout-address-summary-main">
+                            @if (HasAddress)
                             {
-                                <span class="checkout-field-error">@errors[nameof(form.FullName)]</span>
+                                <p class="checkout-address-line-name">
+                                    <strong>@form.FullName</strong>
+                                    <span class="checkout-address-sep"> | </span>
+                                    @FormatPhoneDisplay(form.Phone)
+                                </p>
+                                <p class="checkout-address-line">@form.AddressDetail</p>
+                                <p class="checkout-address-line checkout-address-line-muted">
+                                    @form.Ward, @form.District, @form.Province
+                                </p>
                             }
-                        </label>
-                        <label class="checkout-field">
-                            <span class="checkout-field-label">Số điện thoại<span class="checkout-req">*</span></span>
-                            <input class="checkout-input" id="checkout-phone" inputmode="tel" maxlength="20" @bind="form.Phone" @bind:event="oninput" @onblur="@(() => ValidateField(nameof(form.Phone)))" placeholder="0xxxxxxxxx" />
-                            @if (errors.ContainsKey(nameof(form.Phone)))
+                            else
                             {
-                                <span class="checkout-field-error">@errors[nameof(form.Phone)]</span>
+                                <p class="checkout-address-empty">Chưa có địa chỉ giao hàng</p>
                             }
-                        </label>
-                        <label class="checkout-field">
-                            <span class="checkout-field-label">Email</span>
-                            <input class="checkout-input" id="checkout-email" type="email" maxlength="120" @bind="form.Email" @bind:event="oninput" @onblur="@(() => ValidateField(nameof(form.Email)))" placeholder="email@example.com" />
-                            @if (errors.ContainsKey(nameof(form.Email)))
-                            {
-                                <span class="checkout-field-error">@errors[nameof(form.Email)]</span>
-                            }
-                        </label>
-                        <label class="checkout-field">
-                            <span class="checkout-field-label">Tỉnh/Thành phố<span class="checkout-req">*</span></span>
-                            <input class="checkout-input" id="checkout-province" maxlength="60" @bind="form.Province" @bind:event="oninput" @onblur="@(() => ValidateField(nameof(form.Province)))" />
-                            @if (errors.ContainsKey(nameof(form.Province)))
-                            {
-                                <span class="checkout-field-error">@errors[nameof(form.Province)]</span>
-                            }
-                        </label>
-                        <label class="checkout-field">
-                            <span class="checkout-field-label">Quận/Huyện<span class="checkout-req">*</span></span>
-                            <input class="checkout-input" id="checkout-district" list="checkout-district-list" maxlength="60" @bind="form.District" @bind:event="oninput" @onblur="@(() => ValidateField(nameof(form.District)))" placeholder="Quận Hải Châu" />
-                            <datalist id="checkout-district-list">
-                                @foreach (var d in DaNangDistricts)
-                                {
-                                    <option value="@d"></option>
-                                }
-                            </datalist>
-                            @if (errors.ContainsKey(nameof(form.District)))
-                            {
-                                <span class="checkout-field-error">@errors[nameof(form.District)]</span>
-                            }
-                        </label>
-                        <label class="checkout-field">
-                            <span class="checkout-field-label">Phường/Xã<span class="checkout-req">*</span></span>
-                            <input class="checkout-input" id="checkout-ward" list="checkout-ward-list" maxlength="60" @bind="form.Ward" @bind:event="oninput" @onblur="@(() => ValidateField(nameof(form.Ward)))" placeholder="Phường Thạch Thang" />
-                            <datalist id="checkout-ward-list">
-                                @foreach (var w in WardsForSelectedDistrict)
-                                {
-                                    <option value="@w"></option>
-                                }
-                            </datalist>
-                            @if (errors.ContainsKey(nameof(form.Ward)))
-                            {
-                                <span class="checkout-field-error">@errors[nameof(form.Ward)]</span>
-                            }
-                        </label>
-                        <label class="checkout-field checkout-field-wide">
-                            <span class="checkout-field-label">Địa chỉ chi tiết<span class="checkout-req">*</span></span>
-                            <input class="checkout-input" id="checkout-address" maxlength="200" @bind="form.AddressDetail" @bind:event="oninput" @onblur="@(() => ValidateField(nameof(form.AddressDetail)))" placeholder="Số nhà, tên đường" />
-                            @if (errors.ContainsKey(nameof(form.AddressDetail)))
-                            {
-                                <span class="checkout-field-error">@errors[nameof(form.AddressDetail)]</span>
-                            }
-                        </label>
+                        </div>
+                        <button type="button" class="checkout-address-change-btn" @onclick="HandleOpenAddressModal">
+                            @(HasAddress ? "Thay đổi" : "Thêm địa chỉ")
+                        </button>
                     </div>
-                    <p class="checkout-address-summary">
-                        Địa chỉ giao hàng đầy đủ:
-                        <strong>@(BuildFullAddress().Length > 0 ? BuildFullAddress() : "(chưa đủ thông tin)")</strong>
-                    </p>
                 </section>
 
                 <section class="checkout-section checkout-products-section">
@@ -207,6 +157,37 @@
 
     <Footer />
 </div>
+
+@* Modal quản lý địa chỉ giao hàng — port từ nguồn OJT (AddressModal.jsx). *@
+<AddressModal IsOpen="ShowAddressModal"
+              AddressModalView="AddressModalView"
+              EditingAddressId="EditingAddressId"
+              SavedAddresses="SavedAddresses"
+              SelectedSavedId="SelectedSavedId"
+              FullName="form.FullName"
+              Phone="form.Phone"
+              Email="form.Email"
+              Province="form.Province"
+              District="form.District"
+              Ward="form.Ward"
+              Address="form.AddressDetail"
+              Errors="Errors"
+              Touched="Touched"
+              OnClose="CloseAddressModal"
+              OnSelectAddress="SelectSavedAddress"
+              OnStartAdd="StartAddAddress"
+              OnStartEdit="StartEditAddress"
+              OnDeleteAddress="DeleteAddress"
+              OnSave="SaveAddress"
+              OnBack="BackFromAddressForm"
+              OnFullName="@(v => form.FullName = v)"
+              OnPhone="@(v => form.Phone = v)"
+              OnEmail="@(v => form.Email = v)"
+              OnDistrict="@(v => form.District = v)"
+              OnWard="@(v => form.Ward = v)"
+              OnAddress="@(v => form.AddressDetail = v)"
+              OnSetErrors="SetErrors"
+              OnSetTouched="SetTouched" />
 
 @code {
 }

@@ -31,6 +31,7 @@ namespace PetShop.Controllers
         /// X-08 — GET api/products-temp/search?keyword=&amp;categoryId=
         /// </summary>
         [HttpGet("search")]
+        [ProducesResponseType(typeof(IReadOnlyList<ProductDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<ProductDto>>> Search(
             [FromQuery] string? keyword,
             [FromQuery] int? categoryId,
@@ -44,6 +45,9 @@ namespace PetShop.Controllers
         /// X-01 — POST api/products-temp/create
         /// </summary>
         [HttpPost("create")]
+        [ProducesResponseType(typeof(ProductActionResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ProductActionResponse>> Create(
             [FromBody] ProductCreateRequest request,
             CancellationToken ct)
@@ -84,6 +88,9 @@ namespace PetShop.Controllers
         /// X-02 — POST api/products-temp/update
         /// </summary>
         [HttpPost("update")]
+        [ProducesResponseType(typeof(ProductActionResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<ProductActionResponse>> Update(
             [FromBody] ProductUpdateRequest request,
             CancellationToken ct)
@@ -129,6 +136,9 @@ namespace PetShop.Controllers
         /// X-03 — POST api/products-temp/delete (soft delete: Products.is_deleted = 1)
         /// </summary>
         [HttpPost("delete")]
+        [ProducesResponseType(typeof(ProductActionResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<ProductActionResponse>> Delete(
             [FromBody] ProductIdRequest request,
             CancellationToken ct)
@@ -153,6 +163,7 @@ namespace PetShop.Controllers
         /// X-04 — GET api/products-temp/deleted
         /// </summary>
         [HttpGet("deleted")]
+        [ProducesResponseType(typeof(IReadOnlyList<ProductDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<ProductDto>>> GetDeleted(CancellationToken ct)
         {
             var items = await _service.GetDeletedAsync(ct);
@@ -163,6 +174,9 @@ namespace PetShop.Controllers
         /// X-05 — POST api/products-temp/restore
         /// </summary>
         [HttpPost("restore")]
+        [ProducesResponseType(typeof(ProductActionResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<ProductActionResponse>> Restore(
             [FromBody] ProductIdRequest request,
             CancellationToken ct)
@@ -187,6 +201,9 @@ namespace PetShop.Controllers
         /// X-06 — POST api/products-temp/permanent-delete
         /// </summary>
         [HttpPost("permanent-delete")]
+        [ProducesResponseType(typeof(ProductActionResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<ProductActionResponse>> PermanentDelete(
             [FromBody] ProductIdRequest request,
             CancellationToken ct)
@@ -212,6 +229,8 @@ namespace PetShop.Controllers
         /// </summary>
         [HttpPost("upload-image")]
         [ApiExplorerSettings(IgnoreApi = true)]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<object>> UploadImage(
             [FromForm] IFormFile image,
             CancellationToken ct)

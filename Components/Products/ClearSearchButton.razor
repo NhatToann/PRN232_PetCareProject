@@ -1,0 +1,19 @@
+@code {
+    /// <summary>
+    /// Từ khóa đang tìm kiếm. Component không render gì khi từ khóa rỗng
+    /// (giữ nguyên hành vi của <c>ClearSearchButton.jsx</c> ở nguồn OJT).
+    /// </summary>
+    [Parameter] public string? Keyword { get; set; }
+
+    /// <summary>Sự kiện khi người dùng bấm nút "Xóa từ khóa".</summary>
+    [Parameter] public EventCallback OnClear { get; set; }
+}
+
+@if (!string.IsNullOrEmpty(Keyword))
+{
+    <button type="button"
+            style="margin-top: 0.5rem; background: none; border: none; color: #dc2626; cursor: pointer; font-size: 0.9rem; font-weight: 500; padding: 0; text-decoration: underline;"
+            @onclick="@(() => OnClear.InvokeAsync())">
+        Xóa từ khóa
+    </button>
+}

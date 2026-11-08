@@ -45,6 +45,62 @@ namespace PetShop_PRN222.Components.Pages
     private string? error;
     private IReadOnlyList<PetShop.Models.FrontendCartItem> ItemsToCheckout { get; set; } = Array.Empty<PetShop.Models.FrontendCartItem>();
 
+    // --- State của AddressModal (port từ CheckoutPage.jsx của nguồn OJT) ---
+
+    /// <summary>Modal địa chỉ có đang mở hay không.</summary>
+    public bool ShowAddressModal
+    {
+        get => showAddressModal;
+        set => showAddressModal = value;
+    }
+
+    /// <summary>View hiện tại của modal: "list" hoặc "form".</summary>
+    public string AddressModalView
+    {
+        get => addressModalView;
+        set => addressModalView = value;
+    }
+
+    /// <summary>Id địa chỉ đang sửa; <c>null</c> khi thêm mới.</summary>
+    public long? EditingAddressId
+    {
+        get => editingAddressId;
+        set => editingAddressId = value;
+    }
+
+    /// <summary>Id địa chỉ đang được chọn trong danh sách.</summary>
+    public long? SelectedSavedId
+    {
+        get => selectedSavedId;
+        set => selectedSavedId = value;
+    }
+
+    /// <summary>Danh sách địa chỉ đã lưu.</summary>
+    public IReadOnlyList<PetShop_PRN222.Components.Checkout.SavedAddress> SavedAddresses => savedAddresses;
+
+    /// <summary>Bộ lỗi hiện tại (dùng cho cả form thanh toán lẫn modal địa chỉ).</summary>
+    public IReadOnlyDictionary<string, string> Errors => errors;
+
+    /// <summary>Các field đã được chạm (blur).</summary>
+    public IReadOnlySet<string> Touched => touched;
+
+    private bool showAddressModal;
+    private string addressModalView = "list";
+    private long? editingAddressId;
+    private long? selectedSavedId;
+    private List<PetShop_PRN222.Components.Checkout.SavedAddress> savedAddresses = new();
+    private readonly HashSet<string> touched = new();
+
+    /// <summary>
+    /// Đã có đủ thông tin địa chỉ giao hàng hay chưa (port <c>hasAddress</c> của nguồn).
+    /// </summary>
+    private bool HasAddress =>
+        !string.IsNullOrWhiteSpace(form.FullName) &&
+        !string.IsNullOrWhiteSpace(form.Phone) &&
+        !string.IsNullOrWhiteSpace(form.District) &&
+        !string.IsNullOrWhiteSpace(form.Ward) &&
+        !string.IsNullOrWhiteSpace(form.AddressDetail);
+
     private IReadOnlyList<string> WardsForSelectedDistrict =>
         DaNangWardsByDistrict.TryGetValue(form.District, out var list) ? list : Array.Empty<string>();
 
@@ -321,6 +377,206 @@ namespace PetShop_PRN222.Components.Pages
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
     private void HandleSessionChanged() => InvokeAsync(StateHasChanged);
+
+    // =======================================================================
+    // AddressModal — port nguyên văn logic từ CheckoutPage.jsx (nguồn OJT)
+    // =======================================================================
+
+    /// <summary>Mở modal địa chỉ. Nếu chưa có địa chỉ nào thì mở thẳng form (port <c>handleOpenAddressModal</c>).</summary>
+    private void HandleOpenAddressModal()
+    {
+        if (savedAddresses.Count == 0)
+        {
+            StartAddAddress();
+            showAddressModal = true;
+        }
+        else
+        {
+            editingAddressId = null;
+            addressModalView = "list";
+            showAddressModal = true;
+        }
+    }
+
+    /// <summary>Đóng modal và reset về view danh sách (port <c>closeAddressModal</c>).</summary>
+    private void CloseAddressModal()
+    {
+        showAddressModal = false;
+        addressModalView = "list";
+        editingAddressId = null;
+    }
+
+    /// <summary>Bắt đầu thêm địa chỉ mới (port <c>startAddAddress</c>).</summary>
+    private void StartAddAddress()
+    {
+        editingAddressId = null;
+        form.Province = "Đà Nẵng";
+        form.District = string.Empty;
+        form.Ward = string.Empty;
+        form.AddressDetail = string.Empty;
+        errors.Clear();
+        touched.Clear();
+
+        // Nguồn: lấy email/họ tên từ authUser trong localStorage nếu có.
+        if (string.IsNullOrWhiteSpace(form.Email))
+        {
+            form.Email = UserSession.CurrentUser?.Email ?? form.Email;
+        }
+
+        if (string.IsNullOrWhiteSpace(form.FullName))
+        {
+            form.FullName = UserSession.CurrentUser?.Name ?? form.FullName;
+        }
+
+        addressModalView = "form";
+    }
+
+    /// <summary>Bắt đầu sửa một địa chỉ đã lưu (port <c>startEditAddress</c>).</summary>
+    private void StartEditAddress(PetShop_PRN222.Components.Checkout.SavedAddress addr)
+    {
+        editingAddressId = addr.Id;
+        ApplyAddressToForm(addr);
+        errors.Clear();
+        touched.Clear();
+        addressModalView = "form";
+    }
+
+    /// <summary>Chọn một địa chỉ đã lưu và đổ vào form (port <c>selectSavedAddress</c>).</summary>
+    private void SelectSavedAddress(PetShop_PRN222.Components.Checkout.SavedAddress addr)
+    {
+        selectedSavedId = addr.Id;
+        ApplyAddressToForm(addr);
+        errors.Clear();
+        touched.Clear();
+    }
+
+    /// <summary>Quay lại từ form về danh sách (port <c>handleBackFromForm</c>).</summary>
+    private void BackFromAddressForm()
+    {
+        if (savedAddresses.Count == 0)
+        {
+            CloseAddressModal();
+        }
+        else
+        {
+            addressModalView = "list";
+            editingAddressId = null;
+        }
+    }
+
+    /// <summary>Lưu địa chỉ từ modal (port <c>handleAddressModalSave</c>).</summary>
+    private void SaveAddress(PetShop_PRN222.Components.Checkout.SavedAddress data)
+    {
+        if (editingAddressId is not null)
+        {
+            var index = savedAddresses.FindIndex(a => a.Id == editingAddressId.Value);
+            if (index >= 0)
+            {
+                savedAddresses[index] = data with { Id = editingAddressId.Value, IsDefault = savedAddresses[index].IsDefault };
+            }
+
+            selectedSavedId = editingAddressId;
+        }
+        else
+        {
+            var created = data with
+            {
+                Id = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                IsDefault = savedAddresses.Count == 0,
+            };
+            savedAddresses.Add(created);
+            selectedSavedId = created.Id;
+        }
+
+        ApplyAddressToForm(data);
+        addressModalView = "list";
+    }
+
+    /// <summary>Xoá một địa chỉ đã lưu (port <c>deleteAddress</c>).</summary>
+    private void DeleteAddress(long id)
+    {
+        var removed = savedAddresses.FirstOrDefault(a => a.Id == id);
+        var updated = savedAddresses.Where(a => a.Id != id).ToList();
+
+        // Nguồn: nếu địa chỉ vừa xoá là mặc định thì địa chỉ đầu tiên còn lại thành mặc định.
+        if (updated.Count > 0 && removed is not null && removed.IsDefault)
+        {
+            updated[0] = updated[0] with { IsDefault = true };
+        }
+
+        savedAddresses = updated;
+
+        if (selectedSavedId == id)
+        {
+            selectedSavedId = updated.Count > 0 ? updated[0].Id : null;
+            if (updated.Count > 0)
+            {
+                ApplyAddressToForm(updated[0]);
+            }
+            else
+            {
+                form.FullName = string.Empty;
+                form.Phone = string.Empty;
+                form.District = string.Empty;
+                form.Ward = string.Empty;
+                form.AddressDetail = string.Empty;
+            }
+        }
+
+        if (savedAddresses.Count == 0)
+        {
+            StartAddAddress();
+        }
+        else
+        {
+            addressModalView = "list";
+            editingAddressId = null;
+        }
+    }
+
+    /// <summary>Đổ địa chỉ đã chọn vào form thanh toán (port <c>applyAddressToForm</c>).</summary>
+    private void ApplyAddressToForm(PetShop_PRN222.Components.Checkout.SavedAddress addr)
+    {
+        form.FullName = addr.FullName ?? string.Empty;
+        form.Phone = addr.Phone ?? string.Empty;
+        form.Email = addr.Email ?? string.Empty;
+        form.Province = string.IsNullOrWhiteSpace(addr.Province) ? "Đà Nẵng" : addr.Province;
+        form.District = addr.District ?? string.Empty;
+        form.Ward = addr.Ward ?? string.Empty;
+        form.AddressDetail = addr.Address ?? string.Empty;
+    }
+
+    /// <summary>Nhận bộ lỗi mới từ AddressModal (port <c>onSetErrors</c>).</summary>
+    private void SetErrors(IReadOnlyDictionary<string, string> newErrors)
+    {
+        errors.Clear();
+        foreach (var pair in newErrors)
+        {
+            errors[pair.Key] = pair.Value;
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>Nhận bộ field đã chạm mới từ AddressModal (port <c>onSetTouched</c>).</summary>
+    private void SetTouched(IReadOnlySet<string> newTouched)
+    {
+        touched.Clear();
+        foreach (var field in newTouched)
+        {
+            touched.Add(field);
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>Định dạng số điện thoại — cùng logic với <c>formatPhoneDisplay</c> của nguồn.</summary>
+    private static string FormatPhoneDisplay(string phone)
+    {
+        var d = (phone ?? string.Empty).Replace(" ", string.Empty);
+        if (d.Length < 10) return phone ?? string.Empty;
+        return $"{d[..4]} {d.Substring(4, 3)} {d[7..]}";
+    }
 
     private static string FormatPrice(decimal value) =>
         string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:C0}");

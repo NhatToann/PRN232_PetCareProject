@@ -23,6 +23,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet]
+        [ProducesResponseType(typeof(IReadOnlyList<PetServiceDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<PetServiceDto>>> GetAll(CancellationToken ct)
         {
             var items = await _service.GetAllAsync(ct);
@@ -30,6 +31,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("grouped")]
+        [ProducesResponseType(typeof(PetServiceGroupedDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<PetServiceGroupedDto>> GetGrouped(CancellationToken ct)
         {
             var items = await _service.GetAllAsync(ct);
@@ -52,6 +54,8 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("{serviceId:int}")]
+        [ProducesResponseType(typeof(PetServiceDetailDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<PetServiceDetailDto>> GetDetail(int serviceId, CancellationToken ct)
         {
             var detail = await _service.GetDetailAsync(serviceId, ct);
@@ -68,6 +72,9 @@ namespace PetShop.Controllers
         /// Khớp `frontend/src/api/petServicesApi.js::createPetService` (JSON body).
         /// </summary>
         [HttpPost]
+        [ProducesResponseType(typeof(PetServiceDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<PetServiceDto>> Create(
             [FromBody] PetServiceCreateRequest request,
             CancellationToken ct)
@@ -107,6 +114,8 @@ namespace PetShop.Controllers
         /// </summary>
         [HttpPost("upload-image")]
         [ApiExplorerSettings(IgnoreApi = true)]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<object>> UploadImage(
             [FromForm] IFormFile image,
             CancellationToken ct)

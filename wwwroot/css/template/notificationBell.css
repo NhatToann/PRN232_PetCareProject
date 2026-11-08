@@ -1,0 +1,301 @@
+/* notificationBell.css — CSS gốc cho chuông thông báo.
+ *
+ * NGUỒN: Projectojt/frontend/src/styles/systemPage.css (OJT), khối
+ * "/* ========== Notification Bell ========== *\/" — port NGUYÊN VĂN.
+ *
+ * Đích đã có sẵn phần override cho top-bar trong `css/template/home.css`
+ * (`.top-bar .notif-bell-wrap--topbar`, `.top-bar .notif-bell-btn--topbar`, ...).
+ * File này chỉ chứa phần CSS gốc còn thiếu.
+ */
+
+.notif-bell-wrap,
+.notif-panel {
+  font-family: "Be Vietnam Pro", "Segoe UI", "Tahoma", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.notif-bell-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.notif-bell-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+
+.notif-bell-btn:hover {
+  background: #f1f5f9;
+  color: #7c3aed;
+}
+
+.notif-bell-btn.active {
+  background: #7c3aed;
+  color: #fff;
+  border-color: #7c3aed;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+}
+
+.notif-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #dc2626;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #fff;
+  pointer-events: none;
+}
+
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 380px;
+  max-width: calc(100vw - 2rem);
+  background: #fff;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.18);
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.notif-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  background: #f8fafc;
+}
+
+.notif-panel-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.notif-mark-all {
+  border: none;
+  background: transparent;
+  color: #7c3aed;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.notif-mark-all:hover {
+  text-decoration: underline;
+}
+
+.notif-panel-body {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.notif-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.88rem;
+}
+
+.notif-empty--error {
+  color: #dc2626;
+}
+
+.notif-section {
+  padding: 0.5rem 0;
+}
+
+.notif-section-title {
+  padding: 0.35rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.notif-request-card {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  transition: background 0.15s;
+}
+
+.notif-request-card:hover {
+  background: #f8fafc;
+}
+
+.notif-request-card--pending {
+  background: #fffbeb;
+  border-left: 3px solid #eab308;
+}
+
+.notif-request-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.notif-request-type {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.notif-request-time {
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+.notif-request-status-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.notif-request-status--pending {
+  background: #fef9c3;
+  color: #854d0e;
+  border: 1px solid rgba(234, 179, 8, 0.45);
+}
+
+.notif-request-status--approved {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.notif-request-status--rejected {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+}
+
+.notif-request-from {
+  font-size: 0.83rem;
+  color: #475569;
+  margin-bottom: 0.3rem;
+}
+
+.notif-shift-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+
+.notif-shift-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.notif-shift-tag--give {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.notif-shift-tag--take {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.notif-shift-arrow {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.notif-request-reason {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-bottom: 0.4rem;
+  font-style: italic;
+}
+
+.notif-request-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.notif-btn {
+  flex: 1;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.2s;
+}
+
+.notif-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.notif-btn--accept {
+  background: #16a34a;
+  color: #fff;
+}
+
+.notif-btn--accept:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.notif-btn--decline {
+  background: #fff;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.notif-btn--decline:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+.notif-edit-btn {
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  transition: border-color 0.2s;
+}
+
+.notif-edit-btn:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+}

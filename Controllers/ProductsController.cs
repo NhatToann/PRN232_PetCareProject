@@ -16,6 +16,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet]
+        [ProducesResponseType(typeof(IReadOnlyList<ProductDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<ProductDto>>> GetAll([FromQuery] string? keyword, [FromQuery] int? categoryId, CancellationToken ct)
         {
             var items = await _service.GetAllAsync(keyword, categoryId, ct);
@@ -23,6 +24,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("categories")]
+        [ProducesResponseType(typeof(IReadOnlyList<ProductCategoryFilterDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<ProductCategoryFilterDto>>> GetCategories([FromQuery] string? keyword, CancellationToken ct)
         {
             var items = await _service.GetCategoriesAsync(keyword, ct);
@@ -30,6 +32,8 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("{id:int}")]
+        [ProducesResponseType(typeof(ProductDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<ProductDto>> GetById(int id, CancellationToken ct)
         {
             var item = await _service.GetByIdAsync(id, ct);

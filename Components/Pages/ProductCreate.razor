@@ -1,12 +1,10 @@
 ﻿@page "/products/create"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
-@using PetShop.Data
 @using PetShop.Models
+@using PetShop.Services
 @using System.IO
-@using Microsoft.EntityFrameworkCore
-@using Microsoft.Extensions.DependencyInjection
-@inject IServiceProvider ServiceProvider
+@inject IProductManagementService ProductService
 @inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment Environment
 
 <PageTitle>Thêm Sản Phẩm Mới</PageTitle>
@@ -94,15 +92,8 @@
 
     private async Task SaveProduct()
     {
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
-
-        if (string.IsNullOrEmpty(newProduct.ImageUrl))
-            newProduct.ImageUrl = "https://ui-avatars.com/api/?name=Product&background=3b82f6&color=fff&size=250";
-
-        // SQL THUẦN LÀ CHÂN ÁI: Đẩy thẳng vào DB, EF Core không có cơ hội bắt lỗi Ngày Tháng
-        string sql = "INSERT INTO Products (name, price, stock_quantity, description, image_url, is_deleted) VALUES (@p0, @p1, @p2, @p3, @p4, 0)";
-        await db.Database.ExecuteSqlRawAsync(sql, newProduct.Name, newProduct.Price, newProduct.StockQuantity, newProduct.Description ?? "", newProduct.ImageUrl);
+        // Ảnh mặc định được ProductManagementService áp dụng (trước đây Razor tự gán).
+        await ProductService.CreateAsync(newProduct);
 
         successMessage = $"Thêm sản phẩm '{newProduct.Name}' thành công!";
         newProduct = new Product { IsDeleted = false, StockQuantity = 10, Price = 50000 };

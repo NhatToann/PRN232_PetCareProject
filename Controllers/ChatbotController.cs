@@ -20,6 +20,11 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("message")]
+        [ProducesResponseType(typeof(ChatMessageResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorDto), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiErrorDto), StatusCodes.Status500InternalServerError)]
+        [ProducesResponseType(typeof(ApiErrorDto), StatusCodes.Status502BadGateway)]
+        [ProducesResponseType(typeof(ApiErrorDto), StatusCodes.Status503ServiceUnavailable)]
         public async Task<ActionResult<ChatMessageResponseDto>> SendMessage(
             [FromBody] ChatMessageRequestDto request,
             CancellationToken ct)
@@ -78,6 +83,9 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("intent")]
+        [ProducesResponseType(typeof(AiIntentResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorDto), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiErrorDto), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<AiIntentResult>> DetectIntent(
             [FromBody] DetectIntentRequestDto request,
             CancellationToken ct)
@@ -100,6 +108,8 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("context/{customerId:int}")]
+        [ProducesResponseType(typeof(ConversationContextDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiErrorDto), StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ConversationContextDto>> GetContext(
             int customerId,
             CancellationToken ct)
@@ -117,6 +127,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("health")]
+        [ProducesResponseType(typeof(ChatbotHealthDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<ChatbotHealthDto>> GetHealth(CancellationToken ct)
         {
             try

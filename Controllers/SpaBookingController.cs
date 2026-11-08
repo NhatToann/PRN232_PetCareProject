@@ -25,6 +25,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("pets")]
+        [ProducesResponseType(typeof(IReadOnlyList<PetSummaryDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<PetSummaryDto>>> GetPets([FromQuery] int customerId, CancellationToken ct)
         {
             var pets = await _service.GetPetsAsync(customerId, ct);
@@ -32,6 +33,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("services")]
+        [ProducesResponseType(typeof(IReadOnlyList<SpaServiceDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<SpaServiceDto>>> GetServices(CancellationToken ct)
         {
             var services = await _service.GetSpaServicesAsync(ct);
@@ -39,6 +41,8 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("availability")]
+        [ProducesResponseType(typeof(SpaAvailabilityResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SpaAvailabilityResponse>> CheckAvailability([FromBody] SpaAvailabilityRequest request, CancellationToken ct)
         {
             var result = await _service.CheckAvailabilityAsync(request.Start, request.DurationMin, request.Quantity, ct);
@@ -46,6 +50,8 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("validate-slot")]
+        [ProducesResponseType(typeof(BookingSlotValidationResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(BookingSlotValidationResult), StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<BookingSlotValidationResult>> ValidateSlot([FromBody] BookingSlotValidationRequest request, CancellationToken ct)
         {
             var result = await _service.ValidateBookingSlotAsync(request, ct);
@@ -55,6 +61,8 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("estimate")]
+        [ProducesResponseType(typeof(SpaBookingEstimateDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SpaBookingEstimateDto>> Estimate([FromQuery] int customerId, [FromBody] SpaBookingEstimateRequest request, CancellationToken ct)
         {
             var result = await _service.EstimateAsync(customerId, request, ct);
@@ -62,6 +70,8 @@ namespace PetShop.Controllers
         }
 
         [HttpPost]
+        [ProducesResponseType(typeof(SpaBookingDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<SpaBookingDto>> Create([FromQuery] int customerId, [FromBody] CreateSpaBookingRequest request, CancellationToken ct)
         {
             try
@@ -86,6 +96,7 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("history")]
+        [ProducesResponseType(typeof(IReadOnlyList<SpaBookingDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<SpaBookingDto>>> History([FromQuery] int customerId, CancellationToken ct)
         {
             var history = await _service.GetHistoryAsync(customerId, ct);
@@ -94,6 +105,7 @@ namespace PetShop.Controllers
 
         [HttpGet("history/all")]
         [HttpGet("all-bookings")]
+        [ProducesResponseType(typeof(IReadOnlyList<SpaBookingDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IReadOnlyList<SpaBookingDto>>> HistoryAll(CancellationToken ct)
         {
             var history = await _service.GetAllHistoryAsync(ct);
@@ -101,6 +113,8 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("{bookingId:int}/invoice")]
+        [ProducesResponseType(typeof(SpaBookingInvoiceDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<SpaBookingInvoiceDto>> Invoice(int bookingId, CancellationToken ct)
         {
             var invoice = await _service.GetInvoiceAsync(bookingId, ct);
@@ -113,6 +127,9 @@ namespace PetShop.Controllers
         }
 
         [HttpPatch("{bookingId:int}/status")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<object>> UpdateStatus(int bookingId, [FromBody] UpdateBookingStatusRequest request, CancellationToken ct)
         {
             _logger.Line($"[SpaBooking] UpdateStatus {bookingId} -> {request.Status}");
@@ -133,6 +150,8 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("review")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<object>> Review([FromQuery] int customerId, [FromBody] CreateSpaReviewRequest request, CancellationToken ct)
         {
             try

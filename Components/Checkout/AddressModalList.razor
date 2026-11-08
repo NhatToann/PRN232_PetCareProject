@@ -1,0 +1,74 @@
+@using PetShop_PRN222.Components.Checkout
+
+@* ------------------------------------------------------------------
+   AddressModalList — port nguyên văn từ
+   Projectojt/frontend/src/components/checkout/AddressModal.jsx (OJT),
+   hàm `AddressModalList`.
+   ------------------------------------------------------------------ *@
+
+<div class="address-modal-body">
+    @foreach (var addr in SavedAddresses)
+    {
+        var current = addr;
+        <div class="address-modal-item">
+            <div class="address-modal-item-top">
+                <label class="address-modal-radio-label">
+                    <input type="radio"
+                           name="checkoutSavedAddress"
+                           class="address-modal-radio"
+                           checked="@(SelectedSavedId == current.Id)"
+                           @onchange="@(() => OnSelect.InvokeAsync(current))" />
+                    <span class="address-modal-name-phone">
+                        <strong>@current.FullName</strong>
+                        <span class="checkout-address-sep"> | </span>
+                        @FormatPhoneDisplay(current.Phone)
+                    </span>
+                </label>
+                <button type="button" class="address-modal-update-link" @onclick="@(() => OnEdit.InvokeAsync(current))">
+                    Cập nhật
+                </button>
+            </div>
+            <div class="address-modal-item-lines">
+                <p class="address-modal-street">@current.Address</p>
+                <p class="address-modal-admin">
+                    @current.Ward, @current.District, @current.Province
+                </p>
+                @if (current.IsDefault)
+                {
+                    <span class="address-modal-default-tag">Mặc định</span>
+                }
+            </div>
+        </div>
+    }
+</div>
+<div class="address-modal-footer">
+    <button type="button" class="address-modal-add-btn" @onclick="@(() => OnAdd.InvokeAsync())">
+        <i class="fas fa-plus address-modal-add-icon" aria-hidden="true"></i>
+        Thêm địa chỉ mới
+    </button>
+</div>
+
+@code {
+    /// <summary>Danh sách địa chỉ đã lưu.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<SavedAddress> SavedAddresses { get; set; } = Array.Empty<SavedAddress>();
+
+    /// <summary>Id địa chỉ đang được chọn.</summary>
+    [Parameter] public long? SelectedSavedId { get; set; }
+
+    /// <summary>Chọn một địa chỉ trong danh sách.</summary>
+    [Parameter] public EventCallback<SavedAddress> OnSelect { get; set; }
+
+    /// <summary>Bấm nút "Thêm địa chỉ mới".</summary>
+    [Parameter] public EventCallback OnAdd { get; set; }
+
+    /// <summary>Bấm nút "Cập nhật" trên một địa chỉ.</summary>
+    [Parameter] public EventCallback<SavedAddress> OnEdit { get; set; }
+
+    /// <summary>Định dạng số điện thoại — cùng logic với <c>formatPhoneDisplay</c> của nguồn.</summary>
+    private static string FormatPhoneDisplay(string phone)
+    {
+        var d = (phone ?? string.Empty).Replace(" ", string.Empty);
+        if (d.Length < 10) return phone ?? string.Empty;
+        return $"{d[..4]} {d.Substring(4, 3)} {d[7..]}";
+    }
+}

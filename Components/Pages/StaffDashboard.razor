@@ -1,11 +1,9 @@
 ﻿@page "/system"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
-@using PetShop.Data
-@using Microsoft.EntityFrameworkCore
 @using PetShop.Models
-@using Microsoft.Extensions.DependencyInjection
-@inject IServiceProvider ServiceProvider
+@using PetShop.Services
+@inject IStaffReportsService ReportsService
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
 
@@ -280,41 +278,20 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
+        // Chỉ số bảng điều khiển được tổng hợp ở tầng service (đơn hàng + spa).
+        var metrics = await ReportsService.GetDashboardMetricsAsync();
 
-        var now = DateTime.Now; var today = now.Date; var startOfWeek = today.AddDays(-(int)now.DayOfWeek);
-
-        var orders = await db.Orders.AsNoTracking().Where(o => o.Status == "Hoàn thành" || o.PaymentStatus == "Đã thanh toán").ToListAsync();
-        var completedSpas = await db.Bookings.AsNoTracking().Where(b => b.Status == "Hoàn thành").ToListAsync(); // LẤY CÁC ĐƠN SPA ĐÃ XONG
-
-        // TÍNH TOÁN DOANH THU = ĐƠN HÀNG + DỊCH VỤ SPA (Mỗi đơn spa tính mốc 250.000đ)
-        decimal spaRevToday = completedSpas.Count(b => b.AppointmentStart.Date == today) * 250000m;
-        decimal spaRevWeek = completedSpas.Count(b => b.AppointmentStart.Date >= startOfWeek) * 250000m;
-
-        revToday = orders.Where(o => o.OrderDate.Date == today).Sum(o => o.TotalAmount) + spaRevToday;
-        revWeek = orders.Where(o => o.OrderDate.Date >= startOfWeek).Sum(o => o.TotalAmount) + spaRevWeek;
-
-        var allOrders = await db.Orders.AsNoTracking().ToListAsync();
-        pendingOrders = allOrders.Count(o => o.Status == "Chờ xác nhận" || o.Status == "Chờ giao hàng" || o.Status == "Đang đóng gói" || o.Status == "Đang xử lý");
-        completedOrders = allOrders.Count(o => o.Status == "Hoàn thành" || o.Status == "Đã hoàn tất");
-        cancelledOrders = allOrders.Count(o => o.Status == "Đã hủy" || o.Status == "Đã huỷ");
-
-        todaySpaCount = await db.Bookings.AsNoTracking().CountAsync(b => b.AppointmentStart.Date == today);
-        lowStockCount = await db.Products.AsNoTracking().CountAsync(p => p.StockQuantity <= 5 && !p.IsDeleted);
-        totalCustomers = await db.Customers.AsNoTracking().CountAsync();
-
-        // Line Chart: Tính chính xác từng ngày (Bao gồm Order + Spa)
-        for (int i = 6; i >= 0; i--)
-        {
-            var targetDate = today.AddDays(-i);
-            lineLabels.Add(targetDate.ToString("dd/MM"));
-            decimal orderSum = orders.Where(o => o.OrderDate.Date == targetDate).Sum(o => o.TotalAmount);
-            decimal spaSum = completedSpas.Count(b => b.AppointmentStart.Date == targetDate) * 250000m;
-            lineData.Add(orderSum + spaSum);
-        }
+        revToday = metrics.RevenueToday; revWeek = metrics.RevenueWeek;
+        pendingOrders = metrics.PendingOrders;
+        completedOrders = metrics.CompletedOrders; cancelledOrders = metrics.CancelledOrders;
+        todaySpaCount = metrics.TodaySpaCount;
+        lowStockCount = metrics.LowStockCount;
+        totalCustomers = metrics.TotalCustomers;
+        lineLabels = metrics.LineLabels;
+        lineData = metrics.LineData;
 
         // TẠO 3 NHIỆM VỤ TIẾP THEO (TÊN KHÁCH THẬT, GIỜ TƯƠNG LAI)
+        var now = DateTime.Now;
         nextTasks = new List<LocalTaskDto>
         {
             new LocalTaskDto { Time = now.AddMinutes(30).ToString("HH:mm"), CustomerName = "Trần Bích Ngọc", PetName = "Lu Cưng", PetBreed = "Poodle", ServiceName = "Tắm sấy Spa - 250.000đ", Status = "Đang xử lý" },

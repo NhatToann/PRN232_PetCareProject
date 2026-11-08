@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------
+# LS-12-Docker — docker-compose.yml cho PetShop (slide PRN232 Ch10).
+#
+# Chạy:  docker compose up -d --build
+# Xem log: docker compose logs -f app
+# Dừng:   docker compose down
+#
+# LƯU Ý: không sửa appsettings.json. Mọi cấu hình riêng cho container được
+# override bằng biến môi trường (tên biến ASP.NET Core dùng dấu __ thay cho
+# dấu ":" trong appsettings.json).
+# ---------------------------------------------------------------------------
+
+services:
+  # SQL Server chạy trong container — app kết nối vào service này.
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: petshop-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "PetShop@2026"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - petshop-sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - petshop-net
+
+  # Ứng dụng PetShop — build từ Dockerfile multi-stage trong thư mục gốc.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: petshop-app
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+      ASPNETCORE_URLS: "http://+:5286"
+      # Override connection string trỏ về SQL Server trong compose network.
+      # LƯU Ý: Program.cs đọc "DBDefault" TRƯỚC "DefaultConnection" (GetConnectionString
+      # theo thứ tự ưu tiên), nên phải override ĐÚNG key "DBDefault" — nếu chỉ override
+      # "DefaultConnection" thì appsettings.Development.json vẫn thắng và app sẽ kết
+      # nối tới "(local)" (không tồn tại trong container) ⇒ SqlException.
+      ConnectionStrings__DBDefault: "Data Source=sqlserver,1433;Database=SHOP_PET_Database;User Id=sa;Password=PetShop@2026;TrustServerCertificate=true;Encrypt=false"
+    ports:
+      - "5286:5286"
+      - "5287:5287"
+    networks:
+      - petshop-net
+
+volumes:
+  petshop-sqldata:
+    driver: local
+
+networks:
+  petshop-net:
+    driver: bridge

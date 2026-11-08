@@ -27,6 +27,13 @@
             @if (UserSession.CurrentUser is not null)
             {
                 <div class="top-bar-dropdown">
+                    @if (IsStaffOrAdmin && UserSession.CurrentUser.UserId > 0)
+                    {
+                        <div class="top-bar-notif-slot">
+                            <NotificationBell Variant="topbar" />
+                        </div>
+                    }
+
                     <button type="button" class="top-bar-link system-greeting-btn" @onclick="ToggleMenu">
                         <i class="fas fa-user icon" aria-hidden="true"></i>
                         @Greeting
@@ -72,6 +79,12 @@
     private bool openMenu;
 
     private string Role => (UserSession.CurrentUser?.Role ?? string.Empty).ToLowerInvariant();
+
+    /// <summary>
+    /// Vai trò nhân viên hoặc quản trị viên — nguồn chỉ hiện chuông thông báo cho 2 role này
+    /// (điều kiện <c>authUser.role === 'staff' || authUser.role === 'admin'</c> trong TopBar.jsx).
+    /// </summary>
+    private bool IsStaffOrAdmin => Role is "staff" or "admin";
 
     private string Greeting
     {

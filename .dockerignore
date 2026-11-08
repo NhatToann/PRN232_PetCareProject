@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------------
+# LS-12-Docker — .dockerignore: loại các file không cần đưa vào build context.
+# Giúp `docker build` nhanh hơn và tránh copy nhầm file sinh tự động.
+# ---------------------------------------------------------------------------
+
+# Kết quả build
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+publish/
+
+# Kiểm soát phiên bản
+.git/
+.gitignore
+.github/
+.cursor/
+
+# Tài liệu
+docs/
+*.md
+README.md
+AGENTS.md
+PRN232_PLAN.md
+
+# Log runtime
+*.log
+run_*.log
+
+# File người dùng / IDE
+*.user
+*.suo
+.vs/
+.vscode/
+.idea/
+
+# Database dump — không đưa vào image
+*.sql
+database_script.txt
+
+# File hệ điều hành
+.DS_Store
+Thumbs.db

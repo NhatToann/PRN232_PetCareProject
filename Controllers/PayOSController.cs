@@ -27,6 +27,10 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("spa/create")]
+        [ProducesResponseType(typeof(PayOSCheckoutResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<PayOSCheckoutResult>> CreateSpaPayment([FromBody] CreateSpaPayOSRequest request, CancellationToken ct)
         {
             var rawBookingIds = new List<int>();
@@ -121,6 +125,10 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("order/create")]
+        [ProducesResponseType(typeof(PayOSCheckoutResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<PayOSCheckoutResult>> CreateOrderPayment([FromBody] CreateOrderPayOSRequest request, CancellationToken ct)
         {
             var order = await _db.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.OrderId == request.OrderId, ct);
@@ -175,6 +183,9 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("webhook")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> Webhook([FromBody] JsonElement payload, [FromHeader(Name = "x-payos-signature")] string? signature, CancellationToken ct)
         {
             var raw = payload.GetRawText();
@@ -198,6 +209,8 @@ namespace PetShop.Controllers
         }
 
         [HttpGet("status/{orderCode}")]
+        [ProducesResponseType(typeof(PayOSPaymentStatusResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<PayOSPaymentStatusResult>> GetPaymentStatus(int orderCode, CancellationToken ct)
         {
             var payment = await _db.Payments
@@ -270,6 +283,10 @@ namespace PetShop.Controllers
         }
 
         [HttpPost("send-invoice")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> SendInvoice([FromBody] SendInvoiceRequest request, CancellationToken ct)
         {
             if (request.OrderId <= 0)

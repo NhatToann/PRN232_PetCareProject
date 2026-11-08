@@ -109,6 +109,12 @@ namespace PetShop.Services
             {
                 throw new UnauthorizedAccessException($"Google IdToken không hợp lệ: {ex.Message}");
             }
+            catch (Newtonsoft.Json.JsonReaderException ex)
+            {
+                // Token không phải JWT (sai định dạng) ⇒ thư viện Google ném JsonReaderException
+                // thay vì InvalidJwtException. Không bắt thì API trả 500 thay vì 401.
+                throw new UnauthorizedAccessException($"Google IdToken không hợp lệ: {ex.Message}");
+            }
         }
 
         private async Task<(string? Email, string? Subject, string? Name, bool? EmailVerified)> GetGoogleProfileFromAccessTokenAsync(string accessToken, CancellationToken ct)

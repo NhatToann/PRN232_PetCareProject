@@ -1,0 +1,424 @@
+@page "/js-client-demo"
+@rendermode InteractiveServer
+@inject IJSRuntime JS
+@inject ILogger<JsClientDemo> Logger
+
+<PageTitle>JavaScript Client Demo — PetShop</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="mb-4">
+        <h2 class="fw-bold mb-1"><i class="fab fa-js me-2"></i> JavaScript Client Demo</h2>
+        <p class="text-muted mb-0">
+            Slide PRN232 Ch07 — demo đủ 4 kiểu gọi HTTP từ JavaScript:
+            <code>$.ajax()</code>, <code>$.get()</code>, <code>$.post()</code> và <code>XMLHttpRequest</code>.
+            CRUD đầy đủ trên <code>api/products-temp/*</code>.
+        </p>
+    </div>
+
+    <div class="alert alert-info d-none" id="jsDemoStatus" role="status"></div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-light">
+            <span class="fw-bold"><i class="fas fa-list me-2"></i>Danh sách sản phẩm (Read)</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-12 col-md-4">
+                    <label class="form-label small fw-semibold" for="jsKeyword">Từ khoá</label>
+                    <input id="jsKeyword" class="form-control" @bind="keyword" placeholder="Nhập tên sản phẩm…" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label small fw-semibold" for="jsCategory">Phân loại</label>
+                    <select id="jsCategory" class="form-select" @bind="categoryId">
+                        <option value="0">Tất cả phân loại</option>
+                        @foreach (var cat in categories)
+                        {
+                            <option value="@cat.Id">@cat.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-5">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-primary" type="button" disabled="@isBusy" @onclick="LoadListAsync">
+                            <i class="fas fa-sync me-1"></i>Tải danh sách
+                        </button>
+                        <button class="btn btn-outline-secondary" type="button" disabled="@isBusy" @onclick="GetCategoriesAsync">
+                            <i class="fas fa-tags me-1"></i>Tải phân loại ($.get)
+                        </button>
+                        <button class="btn btn-outline-info" type="button" disabled="@isBusy" @onclick="GetByIdAsync">
+                            <i class="fas fa-magnifying-glass me-1"></i>Lấy theo ID (XMLHttpRequest)
+                        </button>
+                        <button class="btn btn-outline-warning" type="button" disabled="@isBusy" @onclick="RestoreProductAsync">
+                            <i class="fas fa-rotate-left me-1"></i>Khôi phục ID gần nhất ($.post)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Ảnh</th>
+                            <th>Tên</th>
+                            <th>Giá</th>
+                            <th>Tồn kho</th>
+                            <th>Mô tả</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jsProductRows">
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-3">
+                                Bấm "Tải danh sách" để nạp dữ liệu qua jQuery.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <span class="fw-bold">
+                        <i class="fas fa-@(editingProductId.HasValue ? "pen" : "plus") me-2"></i>
+                        @(editingProductId.HasValue ? "Cập nhật sản phẩm (Update)" : "Thêm sản phẩm (Create)")
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" for="jsProductName">Tên sản phẩm *</label>
+                        <input id="jsProductName" class="form-control" @bind="form.Name" />
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold" for="jsProductCategory">Phân loại *</label>
+                            <select id="jsProductCategory" class="form-select" @bind="form.CategoryId">
+                                <option value="0">— Chọn phân loại —</option>
+                                @foreach (var cat in categories)
+                                {
+                                    <option value="@cat.Id">@cat.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold" for="jsProductPrice">Giá (VNĐ) *</label>
+                            <input id="jsProductPrice" class="form-control" type="number" min="0" step="1000" @bind="form.Price" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold" for="jsProductStock">Tồn kho *</label>
+                            <input id="jsProductStock" class="form-control" type="number" min="0" @bind="form.StockQuantity" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold" for="jsProductImage">URL ảnh</label>
+                            <input id="jsProductImage" class="form-control" @bind="form.ImageUrl" placeholder="/images/toy_1.jpg" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" for="jsProductDescription">Mô tả</label>
+                        <textarea id="jsProductDescription" class="form-control" rows="2" @bind="form.Description"></textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success" type="button" disabled="@isBusy" @onclick="SaveProductAsync">
+                            <i class="fas fa-save me-1"></i>
+                            @(editingProductId.HasValue ? "Lưu thay đổi" : "Tạo sản phẩm")
+                        </button>
+                        <button class="btn btn-outline-secondary" type="button" disabled="@isBusy" @onclick="ResetForm">
+                            <i class="fas fa-eraser me-1"></i>Xoá form
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light">
+                    <span class="fw-bold"><i class="fas fa-trash me-2"></i>Xoá sản phẩm (Delete)</span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        Nhập mã sản phẩm cần xoá. Server thực hiện <strong>xoá mềm</strong>
+                        (<code>Products.is_deleted = 1</code>) nên vẫn khôi phục được.
+                    </p>
+                    <div class="input-group mb-3">
+                        <input id="jsDeleteId" class="form-control" type="number" min="1" @bind="deleteProductId" placeholder="Mã sản phẩm" />
+                        <button class="btn btn-danger" type="button" disabled="@isBusy" @onclick="DeleteProductAsync">
+                            <i class="fas fa-trash me-1"></i>Xoá
+                        </button>
+                    </div>
+                    @if (lastDeletedId.HasValue)
+                    {
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Đã xoá mềm sản phẩm ID <strong>@lastDeletedId.Value</strong>.
+                            <button class="btn btn-sm btn-outline-dark ms-2" type="button" disabled="@isBusy" @onclick="RestoreProductAsync">
+                                Khôi phục
+                            </button>
+                        </div>
+                    }
+                    <hr />
+                    <p class="small text-muted mb-2">
+                        <strong>Log các lệnh đã gọi</strong> (mỗi dòng là 1 request tới API):
+                    </p>
+                    <pre class="bg-light border rounded p-2 small mb-0" style="max-height:220px;overflow:auto;">@string.Join('\n', callLog)</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isBusy;
+    private string? keyword;
+    private int categoryId;
+    private int deleteProductId;
+    private int? editingProductId;
+    private int? lastDeletedId;
+    private List<CategoryOption> categories = new();
+    private List<string> callLog = new();
+
+    private ProductForm form = new();
+
+    /// <summary>
+    /// Nạp danh sách phân loại ngay khi vào trang để form Create/Update có lựa chọn.
+    /// </summary>
+    /// <remarks>
+    /// Gọi JS interop trong <c>OnAfterRenderAsync</c> vì trang đang bị prerender:
+    /// JS interop không được phát trong <c>OnInitializedAsync</c> (sẽ ném 409).
+    /// </remarks>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await GetCategoriesAsync();
+    }
+
+    /// <summary>Read — tải danh sách sản phẩm bằng jQuery <c>$.get()</c>.</summary>
+    private async Task LoadListAsync()
+    {
+        await RunJsAsync(
+            "get",
+            ["", categoryId],
+            "jsProductRows",
+            $"$.get() — GET /api/products-temp/search?keyword=&categoryId={categoryId}");
+    }
+
+    /// <summary>Tải danh sách phân loại bằng <c>$.get()</c> (API <c>api/products/categories</c>).</summary>
+    private async Task GetCategoriesAsync()
+    {
+        await RunJsAsync(
+            "getCategories",
+            [],
+            null,
+            "$.get() — GET /api/products/categories");
+
+        // Đọc lại danh sách phân loại trực tiếp từ C# để đổ vào <select>.
+        try
+        {
+            var payload = await JS.InvokeAsync<List<CategoryDto>>("petShopJsClient.getCategories");
+            categories = payload
+                .Select(c => new CategoryOption(c.CategoryId, c.CategoryName))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Không tải được danh sách phân loại cho trang /js-client-demo.");
+            await SetStatusAsync("Không tải được danh sách phân loại: " + ex.Message, "danger");
+        }
+    }
+
+    /// <summary>Đọc chi tiết sản phẩm bằng <c>XMLHttpRequest</c> (GET <c>api/products/{id}</c>).</summary>
+    private async Task GetByIdAsync()
+    {
+        if (deleteProductId <= 0)
+        {
+            await SetStatusAsync("Vui lòng nhập mã sản phẩm cần xem ở ô 'Mã sản phẩm'.", "warning");
+            return;
+        }
+
+        await RunJsAsync(
+            "getProductById",
+            [deleteProductId],
+            null,
+            $"XMLHttpRequest — GET /api/products/{deleteProductId}");
+    }
+
+    /// <summary>Create / Update — dùng jQuery <c>$.ajax()</c> với body JSON.</summary>
+    private async Task SaveProductAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name))
+        {
+            await SetStatusAsync("Tên sản phẩm không được để trống.", "danger");
+            return;
+        }
+
+        if (form.CategoryId <= 0)
+        {
+            await SetStatusAsync("Vui lòng chọn phân loại sản phẩm.", "danger");
+            return;
+        }
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["name"] = form.Name.Trim(),
+            ["categoryId"] = form.CategoryId,
+            ["price"] = form.Price,
+            ["stockQuantity"] = form.StockQuantity,
+            ["supplierName"] = form.SupplierName,
+            ["description"] = string.IsNullOrWhiteSpace(form.Description) ? null : form.Description.Trim(),
+            ["imageUrl"] = string.IsNullOrWhiteSpace(form.ImageUrl) ? null : form.ImageUrl.Trim()
+        };
+
+        if (editingProductId.HasValue)
+        {
+            payload["productId"] = editingProductId.Value;
+            await RunJsAsync(
+                "updateProduct",
+                [payload],
+                null,
+                "$.ajax() — POST /api/products-temp/update");
+        }
+        else
+        {
+            await RunJsAsync(
+                "createProduct",
+                [payload],
+                null,
+                "$.ajax() — POST /api/products-temp/create");
+        }
+
+        ResetForm();
+        await LoadListAsync();
+    }
+
+    /// <summary>Delete — dùng jQuery <c>$.ajax()</c> (xoá mềm).</summary>
+    private async Task DeleteProductAsync()
+    {
+        if (deleteProductId <= 0)
+        {
+            await SetStatusAsync("Vui lòng nhập mã sản phẩm cần xoá.", "danger");
+            return;
+        }
+
+        await RunJsAsync(
+            "deleteProduct",
+            [deleteProductId],
+            null,
+            "$.ajax() — POST /api/products-temp/delete");
+
+        lastDeletedId = deleteProductId;
+        await LoadListAsync();
+    }
+
+    /// <summary>Khôi phục sản phẩm vừa xoá bằng jQuery <c>$.post()</c>.</summary>
+    private async Task RestoreProductAsync()
+    {
+        if (!lastDeletedId.HasValue)
+        {
+            await SetStatusAsync("Chưa có sản phẩm nào vừa bị xoá để khôi phục.", "warning");
+            return;
+        }
+
+        await RunJsAsync(
+            "restoreProduct",
+            [lastDeletedId.Value],
+            null,
+            "$.post() — POST /api/products-temp/restore");
+
+        lastDeletedId = null;
+        await LoadListAsync();
+    }
+
+    /// <summary>Xoá form sau khi lưu.</summary>
+    private void ResetForm()
+    {
+        form = new ProductForm();
+        editingProductId = null;
+    }
+
+    /// <summary>
+    /// Gọi một hàm trong <c>window.petShopJsClient</c> và ghi log lệnh đã gọi.
+    /// </summary>
+    /// <param name="method">Tên hàm JS.</param>
+    /// <param name="args">Tham số truyền vào.</param>
+    /// <param name="rowTargetId">Id tbody cần render lại (null = không render).</param>
+    /// <param name="logEntry">Mô tả lệnh để hiển thị trong khung log.</param>
+    private async Task RunJsAsync(string method, object[] args, string? rowTargetId, string logEntry)
+    {
+        isBusy = true;
+
+        try
+        {
+            await JS.InvokeVoidAsync("invoke", method, args, rowTargetId);
+
+            AddLog("✔ " + logEntry);
+            await SetStatusAsync(logEntry + " — thành công.", "success");
+        }
+        catch (JSException ex)
+        {
+            // Không nuốt lỗi: log đầy đủ rồi báo cho người dùng.
+            Logger.LogError(ex, "Gọi JS '{Method}' thất bại tại trang /js-client-demo.", method);
+            AddLog("✘ " + logEntry + " — " + ex.Message);
+            await SetStatusAsync(ex.Message, "danger");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Lỗi khi chạy thao tác '{Method}' tại trang /js-client-demo.", method);
+            AddLog("✘ " + logEntry + " — " + ex.Message);
+            await SetStatusAsync(ex.Message, "danger");
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    /// <summary>Thêm 1 dòng vào khung log lệnh.</summary>
+    private void AddLog(string entry)
+    {
+        callLog.Insert(0, $"[{DateTime.Now:HH:mm:ss}] {entry}");
+
+        if (callLog.Count > 50)
+        {
+            callLog.RemoveAt(callLog.Count - 1);
+        }
+    }
+
+    /// <summary>Hiển thị thông báo trạng thái qua jQuery.</summary>
+    private async Task SetStatusAsync(string message, string level)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("setStatus", "jsDemoStatus", message, level);
+        }
+        catch (JSException ex)
+        {
+            Logger.LogError(ex, "Không cập nhật được thông báo trạng thái tại trang /js-client-demo.");
+        }
+    }
+
+    /// <summary>DTO phân loại dùng cho select box.</summary>
+    private sealed record CategoryDto(int CategoryId, string CategoryName);
+
+    /// <summary>Lựa chọn phân loại trong select box.</summary>
+    private sealed record CategoryOption(int Id, string Name);
+
+    /// <summary>Dữ liệu form Create/Update.</summary>
+    private sealed class ProductForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public int CategoryId { get; set; }
+        public decimal Price { get; set; }
+        public int StockQuantity { get; set; }
+        public string? SupplierName { get; set; }
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
+    }
+}

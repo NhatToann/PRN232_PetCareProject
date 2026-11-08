@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+option csharp_namespace = "PetShop.Protos";
+
+package petcatalog;
+
+// Dịch vụ catalog sản phẩm — định nghĩa đủ 4 loại RPC theo slide PRN232 Ch09:
+// unary, server-streaming, client-streaming và bidirectional-streaming.
+service PetCatalog {
+  // 1) Unary — client gửi 1 request, server trả về 1 response.
+  rpc GetProducts (GetProductsRequest) returns (GetProductsReply);
+
+  // 2) Server streaming — client gửi 1 request, server trả về chuỗi response.
+  rpc StreamProducts (GetProductsRequest) returns (stream ProductReply);
+
+  // 3) Client streaming — client gửi chuỗi request, server trả về 1 response tổng hợp.
+  rpc UploadProducts (stream ProductUploadRequest) returns (UploadSummaryReply);
+
+  // 4) Bidirectional streaming — hai chiều đều là chuỗi message.
+  rpc SyncProducts (stream ProductSyncRequest) returns (stream ProductSyncReply);
+}
+
+// Tham số lọc danh sách sản phẩm.
+message GetProductsRequest {
+  // Từ khoá tìm kiếm (khớp tên hoặc mô tả).
+  string keyword = 1;
+
+  // Lọc theo phân loại; 0 = không lọc.
+  int32 category_id = 2;
+
+  // Giới hạn số bản ghi trả về (0 = không giới hạn).
+  int32 take = 3;
+
+  // Bỏ qua N bản ghi đầu (phân trang).
+  int32 skip = 4;
+}
+
+// Kết quả unary — danh sách sản phẩm + tổng số bản ghi.
+message GetProductsReply {
+  repeated ProductReply products = 1;
+  int32 total_count = 2;
+}
+
+// Một sản phẩm — map 1-1 với entity Products.
+// Các trường có thể null dùng `optional` để giữ được nullability khi sinh code C#.
+message ProductReply {
+  int32 product_id = 1;
+  string name = 2;
+  double price = 3;
+  int32 stock_quantity = 4;
+  optional string description = 5;
+  optional string image_url = 6;
+  optional int32 category_id = 7;
+  optional string category_name = 8;
+  optional int32 supplier_id = 9;
+  optional string supplier_name = 10;
+  double avg_rating = 11;
+  int32 review_count = 12;
+}
+
+// Một sản phẩm gửi lên từ client (client streaming).
+message ProductUploadRequest {
+  int32 product_id = 1;
+  string name = 2;
+  double price = 3;
+  int32 stock_quantity = 4;
+  optional string description = 5;
+  optional string image_url = 6;
+  int32 category_id = 7;
+}
+
+// Tổng hợp sau khi đọc hết stream client gửi lên.
+message UploadSummaryReply {
+  int32 received_count = 1;
+  int32 accepted_count = 2;
+  int32 rejected_count = 3;
+  repeated string messages = 4;
+}
+
+// Một bản ghi đồng bộ hai chiều (bidirectional).
+message ProductSyncRequest {
+  // "upsert" hoặc "delete".
+  string operation = 1;
+  ProductUploadRequest product = 2;
+}
+
+// Kết quả đồng bộ cho từng bản ghi.
+message ProductSyncReply {
+  bool success = 1;
+  int32 product_id = 2;
+  string message = 3;
+}

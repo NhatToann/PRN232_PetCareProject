@@ -1,10 +1,9 @@
 ﻿@page "/system/bookings"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
-@using PetShop.Data
-@using Microsoft.EntityFrameworkCore
-@using Microsoft.Extensions.DependencyInjection
-@inject IServiceProvider ServiceProvider
+@using PetShop.Models
+@using PetShop.Services
+@inject IStaffReportsService ReportsService
 
 <PageTitle>Quản Lý Lịch Hẹn Spa</PageTitle>
 
@@ -133,24 +132,20 @@
 
     private async Task LoadAndSeed()
     {
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
+        var bookings = await ReportsService.GetBookingListAsync();
 
-        var rawBookings = await db.Bookings.AsNoTracking().Include(b => b.Customer).Include(b => b.Pet).ThenInclude(p => p.Breed).OrderBy(b => b.AppointmentStart).ToListAsync();
-
-        var randomNames = new string[] { "Trần Bích Ngọc", "Lê Minh Khang", "Nguyễn Hoàng Yến", "Phạm Tuấn Anh", "Vũ Mai Phương" };
-        var randomPets = new string[] { "Lu (Corgi)", "Mập (Mèo Anh)", "Milo (Poodle)", "Bull (Pug)", "Bông (Husky)" };
-
-        allBookings = rawBookings.Select((b, index) => new BookingDto
-        {
-            BookingId = b.BookingId,
-            CustomerName = randomNames[index % randomNames.Length],
-            PetName = randomPets[index % randomPets.Length].Split(' ')[0],
-            PetBreed = randomPets[index % randomPets.Length].Split('(')[1].Trim(')'),
-            AppointmentStart = b.AppointmentStart,
-            Status = b.Status ?? "Chờ xác nhận",
-            ServiceName = "Tắm sấy trọn gói - 250.000đ" // Hiển thị rõ giá tiền
-        }).ToList();
+        allBookings = bookings
+            .Select(b => new BookingDto
+            {
+                BookingId = b.BookingId,
+                CustomerName = b.CustomerName,
+                PetName = b.PetName,
+                PetBreed = b.PetBreed,
+                AppointmentStart = b.AppointmentStart,
+                Status = b.Status,
+                ServiceName = b.ServiceName
+            })
+            .ToList();
 
         SetTab(currentTab);
     }
@@ -172,9 +167,7 @@
 
     private async Task UpdateStatus(int id, string newStatus)
     {
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
-        await db.Database.ExecuteSqlRawAsync("UPDATE Booking SET status = {0} WHERE booking_id = {1}", newStatus, id);
+        await ReportsService.UpdateBookingStatusAsync(id, newStatus);
 
         toastMsg = newStatus == "Đang tiến hành" ? "✓ Đã nhận lịch! Chờ làm dịch vụ." : "✓ Hoàn thành! Đã cộng 250.000đ vào doanh thu.";
         await LoadAndSeed();

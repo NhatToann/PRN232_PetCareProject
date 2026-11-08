@@ -1,10 +1,8 @@
 @page "/revenue"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
-@using PetShop.Data
-@using Microsoft.EntityFrameworkCore
-@using Microsoft.Extensions.DependencyInjection
-@inject IServiceProvider ServiceProvider
+@using PetShop.Services
+@inject IStaffReportsService ReportsService
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Báo Cáo Doanh Thu</PageTitle>
@@ -161,59 +159,22 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
+        // Toàn bộ phép tính doanh thu (đơn hàng + spa) và top sản phẩm đã tính ở tầng service.
+        var summary = await ReportsService.GetRevenueSummaryAsync();
 
-        var now = DateTime.Now; var today = now.Date; var startOfWeek = today.AddDays(-(int)now.DayOfWeek); var startOfMonth = new DateTime(now.Year, now.Month, 1);
+        revToday = summary.RevenueToday;
+        revWeek = summary.RevenueWeek;
+        revMonth = summary.RevenueMonth;
+        topSpaCount = summary.TopSpaCount;
+        lineLabels = summary.LineLabels;
+        lineData = summary.LineData;
+        completedOrders = summary.CompletedOrders;
+        pendingOrders = summary.PendingOrders;
+        cancelledOrders = summary.CancelledOrders;
+        topProducts = summary.TopProducts
+            .Select(p => new TopProd { Name = p.Name, ImageUrl = p.ImageUrl, Sold = p.Sold })
+            .ToList();
 
-        var allOrders = await db.Orders.AsNoTracking().ToListAsync();
-        var completedSpas = await db.Bookings.AsNoTracking().Where(b => b.Status == "Hoàn thành").ToListAsync();
-
-        var validOrders = allOrders.Where(o => o.Status == "Hoàn thành" || o.PaymentStatus == "Đã thanh toán").ToList();
-
-        // TÍNH TOÁN DOANH THU = ĐƠN HÀNG + SPA
-        decimal spaToday = completedSpas.Count(b => b.AppointmentStart.Date == today) * 250000m;
-        decimal spaWeek = completedSpas.Count(b => b.AppointmentStart.Date >= startOfWeek) * 250000m;
-        decimal spaMonth = completedSpas.Count(b => b.AppointmentStart.Date >= startOfMonth) * 250000m;
-
-        revToday = validOrders.Where(o => o.OrderDate.Date == today).Sum(o => o.TotalAmount) + spaToday;
-        revWeek = validOrders.Where(o => o.OrderDate.Date >= startOfWeek).Sum(o => o.TotalAmount) + spaWeek;
-        revMonth = validOrders.Where(o => o.OrderDate.Date >= startOfMonth).Sum(o => o.TotalAmount) + spaMonth;
-
-        for (int i = 6; i >= 0; i--)
-        {
-            var targetDate = today.AddDays(-i);
-            lineLabels.Add(targetDate.ToString("dd/MM"));
-            decimal orderSum = validOrders.Where(o => o.OrderDate.Date == targetDate).Sum(o => o.TotalAmount);
-            decimal spaSum = completedSpas.Count(b => b.AppointmentStart.Date == targetDate) * 250000m;
-            lineData.Add(orderSum + spaSum);
-        }
-
-        var monthOrders = allOrders.Where(o => o.OrderDate.Date >= startOfMonth).ToList();
-        completedOrders = monthOrders.Count(o => o.Status == "Hoàn thành" || o.Status == "Đã hoàn tất");
-        pendingOrders = monthOrders.Count(o => o.Status == "Chờ xác nhận" || o.Status == "Đang xử lý" || o.Status == "Đang đóng gói" || o.Status == "Chờ giao hàng");
-        cancelledOrders = monthOrders.Count(o => o.Status == "Đã hủy" || o.Status == "Đã huỷ");
-
-        // Tổng số lượng đã bán theo sản phẩm (gộp nhiều dòng Order_Detail của cùng 1 sản phẩm).
-        var soldRows = await db.OrderDetails
-            .AsNoTracking()
-            .Where(d => d.ProductId != null)
-            .Select(d => new { d.ProductId, d.Quantity })
-            .ToListAsync();
-
-        var soldDict = soldRows
-            .GroupBy(d => d.ProductId!.Value)
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity ?? 0));
-
-        var products = await db.Products.AsNoTracking().ToListAsync();
-        topProducts = products.Select(p => new TopProd
-        {
-            Name = p.Name,
-            ImageUrl = string.IsNullOrEmpty(p.ImageUrl) ? "https://ui-avatars.com/api/?name=SP" : p.ImageUrl,
-            Sold = soldDict.ContainsKey(p.ProductId) ? soldDict[p.ProductId] : 0
-        }).OrderByDescending(x => x.Sold).Take(3).ToList();
-
-        topSpaCount = completedSpas.Count;
         isLoading = false;
     }
 

@@ -1,0 +1,153 @@
+@using PetShop.Models
+
+@* ------------------------------------------------------------------
+   NotificationBell — port nguyên văn từ
+   Projectojt/frontend/src/components/staff/NotificationBell.jsx (nguồn OJT).
+
+   Hành vi giữ nguyên:
+     - Nút chuông có badge số chưa đọc (tối đa hiển thị "99+").
+     - Bấm nút mở/đóng panel thông báo.
+     - Panel gồm 3 phần: yêu cầu đổi ca chờ duyệt, yêu cầu của bạn, danh sách
+       thông báo.
+     - "Đánh dấu đã đọc" cho toàn bộ.
+     - Nút Chấp nhận / Từ chối cho yêu cầu đổi ca.
+     - Định dạng thời gian tương đối ("Vừa xong", "x phút trước", "x giờ trước").
+   ------------------------------------------------------------------ *@
+
+<div class="@($"notif-bell-wrap{((Variant == "topbar") ? " notif-bell-wrap--topbar" : string.Empty)}")">
+    <button type="button"
+            class="@($"notif-bell-btn {(PanelOpen ? "active" : string.Empty)}{((Variant == "topbar") ? " notif-bell-btn--topbar" : string.Empty)}")"
+            @onclick="TogglePanel"
+            aria-label="Thông báo">
+        <svg width="@IconSize" height="@IconSize" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+        </svg>
+        @if (UnreadCount > 0)
+        {
+            <span class="notif-badge">@(UnreadCount > 99 ? "99+" : UnreadCount.ToString())</span>
+        }
+    </button>
+
+    @if (PanelOpen)
+    {
+        <div class="notif-panel">
+            <div class="notif-panel-header">
+                <h3>Thông báo</h3>
+                @if (UnreadCount > 0)
+                {
+                    <button type="button" class="notif-mark-all" @onclick="MarkAllReadAsync">Đánh dấu đã đọc</button>
+                }
+            </div>
+
+            <div class="notif-panel-body">
+                @if (Loading)
+                {
+                    <div class="notif-empty">Đang tải…</div>
+                }
+                else if (!string.IsNullOrWhiteSpace(Error))
+                {
+                    <div class="notif-empty notif-empty--error">@Error</div>
+                }
+                else
+                {
+                    @if (PendingRequests.Count > 0)
+                    {
+                        <div class="notif-section">
+                            <div class="notif-section-title">Yêu cầu đổi ca chờ bạn duyệt</div>
+                            @foreach (var req in PendingRequests)
+                            {
+                                var request = req;
+                                <div class="notif-request-card notif-request-card--pending">
+                                    <div class="notif-request-top">
+                                        <span class="notif-request-type">
+                                            @(request.Type == "Swap" ? "🔄 Đổi ca" : "🤝 Nhờ làm thay")
+                                        </span>
+                                        <span class="notif-request-time">@FormatTime(request.CreatedAt)</span>
+                                    </div>
+                                    <div class="notif-request-from">
+                                        Từ: <strong>@(string.IsNullOrWhiteSpace(request.EmployeeName) ? $"Staff #{request.EmployeeId}" : request.EmployeeName)</strong>
+                                    </div>
+                                    <div class="notif-shift-info">
+                                        <span class="notif-shift-tag notif-shift-tag--give">@ShiftGiveLabel(request)</span>
+                                        @if (request.Type == "Swap")
+                                        {
+                                            <span class="notif-shift-arrow">⇄</span>
+                                            <span class="notif-shift-tag notif-shift-tag--take">@ShiftTakeLabel(request)</span>
+                                        }
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(request.Reason))
+                                    {
+                                        <div class="notif-request-reason">Lý do: @request.Reason</div>
+                                    }
+                                    <div class="notif-request-actions">
+                                        <button type="button"
+                                                class="notif-btn notif-btn--accept"
+                                                disabled="@(ActionLoadingId == request.RequestId)"
+                                                @onclick="@(() => AcceptAsync(request.RequestId))">
+                                            @(ActionLoadingId == request.RequestId ? "…" : "✓ Chấp nhận")
+                                        </button>
+                                        <button type="button"
+                                                class="notif-btn notif-btn--decline"
+                                                disabled="@(ActionLoadingId == request.RequestId)"
+                                                @onclick="@(() => DeclineAsync(request.RequestId))">
+                                            ✕ Từ chối
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (MyRequests.Count > 0)
+                    {
+                        <div class="notif-section">
+                            <div class="notif-section-title">Yêu cầu của bạn</div>
+                            @foreach (var req in MyRequests.Take(5))
+                            {
+                                var request = req;
+                                var status = NormalizeStatus(request.Status);
+                                var statusClass = status switch
+                                {
+                                    "approved" => "notif-request-status--approved",
+                                    "rejected" => "notif-request-status--rejected",
+                                    _ => "notif-request-status--pending",
+                                };
+                                var statusLabel = status switch
+                                {
+                                    "approved" => "✓ Đã duyệt",
+                                    "rejected" => "✕ Bị từ chối",
+                                    _ => "⏳ Chờ duyệt",
+                                };
+                                <div class="notif-request-card">
+                                    <div class="notif-request-top">
+                                        <span class="notif-request-type">
+                                            @(request.Type == "Swap" ? "🔄 Đổi ca" : "🤝 Nhờ làm thay")
+                                        </span>
+                                        <span class="@($"notif-request-status-pill {statusClass}")">@statusLabel</span>
+                                    </div>
+                                    <div class="notif-request-from">
+                                        Cho: <strong>@(string.IsNullOrWhiteSpace(request.ToStaffName) ? $"Staff #{request.ToStaffId}" : request.ToStaffName)</strong>
+                                    </div>
+                                    <div class="notif-request-reason">
+                                        @request.FromDate @(request.ToDate is not null ? $" ↔ {request.ToDate}" : string.Empty)
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(request.Reason))
+                                    {
+                                        <div class="notif-request-reason">Lý do: @request.Reason</div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (Notifications.Count == 0 && PendingRequests.Count == 0 && MyRequests.Count == 0)
+                    {
+                        <div class="notif-empty">Không có thông báo nào.</div>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>

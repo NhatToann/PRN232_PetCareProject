@@ -1,0 +1,331 @@
+@page "/grpc-demo"
+@rendermode InteractiveServer
+@inject PetShop.Services.GrpcPetCatalogClient GrpcClient
+@inject ILogger<GrpcDemo> Logger
+
+<PageTitle>gRPC Demo — PetShop Catalog</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="mb-4">
+        <h2 class="fw-bold mb-1"><i class="fas fa-layer-group me-2"></i> gRPC Demo — Pet Catalog</h2>
+        <p class="text-muted mb-0">
+            Demo đủ 4 loại RPC theo slide PRN232 Ch09: unary, server streaming, client streaming và
+            bidirectional streaming. Endpoint gRPC: <code>http://localhost:5287</code> (HTTP/2 h2c)
+        </p>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6 col-xl-3">
+            <label class="form-label fw-semibold" for="grpcKeyword">Từ khoá</label>
+            <input id="grpcKeyword" class="form-control" @bind="keyword" placeholder="Ví dụ: chó" />
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <label class="form-label fw-semibold" for="grpcCategory">Phân loại (0 = tất cả)</label>
+            <input id="grpcCategory" class="form-control" type="number" min="0" @bind="categoryId" />
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        @foreach (var (key, label, icon, desc) in RpcButtons)
+        {
+            <div class="col-12 col-md-6 col-xl-3">
+                <button class="btn btn-primary w-100 h-100 d-flex flex-column align-items-start text-start py-3"
+                        type="button"
+                        disabled="@isBusy"
+                        @onclick="() => InvokeRpcAsync(key)">
+                    <span class="fs-5 mb-1"><i class="@icon me-2"></i>@label</span>
+                    <span class="fw-normal small opacity-75">@desc</span>
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (isBusy)
+    {
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-muted mt-2 mb-0">Đang gọi gRPC…</p>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger d-flex align-items-start" role="alert">
+            <i class="fas fa-exclamation-triangle me-2 mt-1"></i>
+            <div>
+                <strong>Lỗi gRPC:</strong> @errorMessage
+                <div class="small mt-1">Chi tiết đã được ghi vào log ứng dụng (ILogger).</div>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <div class="alert alert-success" role="alert">
+            <i class="fas fa-check-circle me-2"></i>@successMessage
+        </div>
+    }
+
+    @if (lastResult is not null)
+    {
+        <div class="card shadow-sm">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <span class="fw-bold"><i class="fas fa-terminal me-2"></i>@lastResultTitle</span>
+                <span class="badge text-bg-secondary">@lastResult.Count mục</span>
+            </div>
+            <div class="card-body">
+                @if (lastResult.Count == 0)
+                {
+                    <p class="text-muted mb-0">Không có dữ liệu trả về.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Tên</th>
+                                    <th>Giá</th>
+                                    <th>Tồn kho</th>
+                                    <th>Mô tả</th>
+                                    <th>Kết quả</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in lastResult)
+                                {
+                                    <tr>
+                                        <td>@row.Id</td>
+                                        <td class="fw-semibold">@row.Name</td>
+                                        <td>@row.Price.ToString("N0") đ</td>
+                                        <td>@row.Stock</td>
+                                        <td class="small text-muted">@row.Description</td>
+                                        <td class="small">@row.Note</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly (string Key, string Label, string Icon, string Description)[] RpcButtons =
+    [
+        ("unary", "GetProducts", "fas fa-arrow-right-arrow-left", "Unary — 1 request → 1 response"),
+        ("server-stream", "StreamProducts", "fas fa-stream", "Server streaming — server phát nhiều message"),
+        ("client-stream", "UploadProducts", "fas fa-upload", "Client streaming — client gửi nhiều message"),
+        ("bidi", "SyncProducts", "fas fa-right-left", "Bidirectional — hai chiều cùng lúc")
+    ];
+
+    private string? keyword;
+    private int categoryId;
+    private bool isBusy;
+    private string? errorMessage;
+    private string? successMessage;
+    private string? lastResultTitle;
+    private List<DemoRow>? lastResult;
+
+    /// <summary>
+    /// Tự động gọi unary RPC sau lần render đầu để trang không trống khi mở.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        await InvokeRpcAsync("unary");
+    }
+
+    /// <summary>
+    /// Gọi 1 trong 4 loại RPC và hiển thị kết quả.
+    /// </summary>
+    private async Task InvokeRpcAsync(string rpcKey)
+    {
+        isBusy = true;
+        errorMessage = null;
+        successMessage = null;
+        lastResult = null;
+        lastResultTitle = null;
+
+        try
+        {
+            switch (rpcKey)
+            {
+                case "unary":
+                    await RunUnaryAsync();
+                    break;
+                case "server-stream":
+                    await RunServerStreamAsync();
+                    break;
+                case "client-stream":
+                    await RunClientStreamAsync();
+                    break;
+                case "bidi":
+                    await RunBidiAsync();
+                    break;
+                default:
+                    throw new InvalidOperationException($"Không hỗ trợ loại RPC '{rpcKey}'.");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogWarning("Người dùng huỷ thao tác gRPC tại trang /grpc-demo.");
+            errorMessage = "Thao tác đã bị huỷ.";
+        }
+        catch (Exception ex)
+        {
+            // Không nuốt lỗi: log đầy đủ rồi hiển thị thông báo cho người dùng.
+            Logger.LogError(ex, "Gọi gRPC '{RpcKey}' thất bại tại trang /grpc-demo.", rpcKey);
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>Unary — lấy danh sách sản phẩm.</summary>
+    private async Task RunUnaryAsync()
+    {
+        var reply = await GrpcClient.GetProductsAsync(keyword, categoryId);
+
+        lastResultTitle = "GetProducts (unary)";
+        lastResult = reply.Products.Select(p => new DemoRow(
+            p.ProductId,
+            p.Name,
+            p.Price,
+            p.StockQuantity,
+            p.Description ?? string.Empty,
+            $"Tổng {reply.TotalCount} bản ghi")).ToList();
+
+        successMessage = $"Unary RPC thành công — nhận {reply.Products.Count}/{reply.TotalCount} sản phẩm.";
+    }
+
+    /// <summary>Server streaming — đọc luồng sản phẩm server phát ra.</summary>
+    private async Task RunServerStreamAsync()
+    {
+        var items = await GrpcClient.StreamProductsAsync(keyword, categoryId);
+
+        lastResultTitle = "StreamProducts (server streaming)";
+        lastResult = items.Select(p => new DemoRow(
+            p.ProductId,
+            p.Name,
+            p.Price,
+            p.StockQuantity,
+            p.Description ?? string.Empty,
+            "Nhận từ server stream")).ToList();
+
+        successMessage = $"Server streaming thành công — đọc được {items.Count} sản phẩm.";
+    }
+
+    /// <summary>Client streaming — gửi 3 sản phẩm mẫu lên server.</summary>
+    private async Task RunClientStreamAsync()
+    {
+        var uploads = BuildSampleUploads();
+
+        var summary = await GrpcClient.UploadProductsAsync(uploads);
+
+        lastResultTitle = "UploadProducts (client streaming)";
+        lastResult = summary.Messages.Select((message, index) => new DemoRow(
+            index + 1,
+            message,
+            0,
+            0,
+            string.Empty,
+            "Client → Server")).ToList();
+
+        successMessage =
+            $"Client streaming thành công — nhận {summary.ReceivedCount}, chấp nhận {summary.AcceptedCount}, từ chối {summary.RejectedCount}.";
+    }
+
+    /// <summary>Bidirectional — gửi 2 thao tác và đọc 2 kết quả trả về.</summary>
+    private async Task RunBidiAsync()
+    {
+        var requests = new List<PetShop.Protos.ProductSyncRequest>();
+
+        // Thao tác 1: upsert — tạo sản phẩm mới.
+        var sample = BuildSampleUploads().First();
+        requests.Add(new PetShop.Protos.ProductSyncRequest
+        {
+            Operation = "upsert",
+            Product = sample
+        });
+
+        // Thao tác 2: delete — xoá mềm một sản phẩm không tồn tại (để minh hoạ xử lý lỗi).
+        requests.Add(new PetShop.Protos.ProductSyncRequest
+        {
+            Operation = "delete",
+            Product = new PetShop.Protos.ProductUploadRequest { ProductId = 999_999, Name = "Không tồn tại" }
+        });
+
+        var replies = await GrpcClient.SyncProductsAsync(requests);
+
+        lastResultTitle = "SyncProducts (bidirectional streaming)";
+        lastResult = replies.Select((reply, index) => new DemoRow(
+            reply.ProductId,
+            reply.Message,
+            0,
+            0,
+            string.Empty,
+            reply.Success ? "Thành công" : "Thất bại")).ToList();
+
+        successMessage = $"Bidirectional streaming thành công — nhận {replies.Count} kết quả.";
+    }
+
+    /// <summary>
+    /// Tạo danh sách sản phẩm mẫu để upload (dùng cho client streaming và bidirectional).
+    /// </summary>
+    private List<PetShop.Protos.ProductUploadRequest> BuildSampleUploads()
+    {
+        var now = DateTime.Now;
+        var suffix = now.ToString("HHmmssfff");
+
+        return
+        [
+            new PetShop.Protos.ProductUploadRequest
+            {
+                Name = $"Thức ăn mèo gRPC {suffix}",
+                CategoryId = 1,
+                Price = 125000,
+                StockQuantity = 12,
+                Description = "Sản phẩm demo tạo từ client streaming gRPC."
+            },
+            new PetShop.Protos.ProductUploadRequest
+            {
+                Name = $"Đồ chơi chó gRPC {suffix}",
+                CategoryId = 1,
+                Price = 89000,
+                StockQuantity = 20,
+                Description = "Sản phẩm demo tạo từ client streaming gRPC."
+            },
+            new PetShop.Protos.ProductUploadRequest
+            {
+                // Cố tình để trống tên để minh hoạ nhánh "bị từ chối" của server.
+                Name = string.Empty,
+                CategoryId = 1,
+                Price = 50000,
+                StockQuantity = 5,
+                Description = "Bản ghi thiếu tên — server sẽ từ chối."
+            }
+        ];
+    }
+
+    /// <summary>
+    /// Một dòng kết quả hiển thị trên bảng (dùng chung cho cả 4 loại RPC).
+    /// </summary>
+    /// <param name="Id">Mã hiển thị.</param>
+    /// <param name="Name">Tên / nội dung chính.</param>
+    /// <param name="Price">Giá (0 nếu không áp dụng).</param>
+    /// <param name="Stock">Tồn kho (0 nếu không áp dụng).</param>
+    /// <param name="Description">Mô tả.</param>
+    /// <param name="Note">Ghi chú kết quả.</param>
+    private sealed record DemoRow(int Id, string Name, double Price, int Stock, string Description, string Note);
+}

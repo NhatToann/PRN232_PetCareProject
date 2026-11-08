@@ -1,11 +1,9 @@
 ﻿@page "/products/list"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
-@using PetShop.Data
-@using Microsoft.EntityFrameworkCore
 @using PetShop.Models
-@using Microsoft.Extensions.DependencyInjection
-@inject IServiceProvider ServiceProvider
+@using PetShop.Services
+@inject IProductManagementService ProductService
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Danh Sách Sản Phẩm</PageTitle>
@@ -121,9 +119,7 @@
 
     private async Task LoadProducts()
     {
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
-        allProducts = await db.Products.AsNoTracking().Where(p => !p.IsDeleted).OrderByDescending(p => p.ProductId).ToListAsync();
+        allProducts = (await ProductService.GetActiveProductsAsync()).ToList();
         ApplySearch();
     }
 
@@ -140,9 +136,7 @@
         bool isConfirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Bạn có chắc chắn muốn chuyển sản phẩm này vào Thùng rác không?");
         if (isConfirmed)
         {
-            using var scope = ServiceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ShopPetDatabaseContext>();
-            await db.Database.ExecuteSqlRawAsync("UPDATE Products SET is_deleted = 1 WHERE product_id = {0}", id);
+            await ProductService.SoftDeleteAsync(id);
             await LoadProducts();
         }
     }

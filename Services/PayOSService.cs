@@ -78,7 +78,36 @@ namespace PetShop.Services
             catch (HttpRequestException ex)
             {
                 _lastError = ex.Message;
-                return null;
+                if (_options.BaseUrl.Contains("api.payos.vn", StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
+
+                var fallback = "https://api.payos.vn/v2";
+                var fallbackBase = fallback.EndsWith("/") ? fallback : fallback + "/";
+                using var fallbackRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(fallbackBase), "payment-requests"));
+                fallbackRequest.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                fallbackRequest.Headers.Add("x-client-id", _options.ClientId);
+                fallbackRequest.Headers.Add("x-api-key", _options.ApiKey);
+
+                using var response = await _httpClient.SendAsync(fallbackRequest, ct);
+                var responseText = await response.Content.ReadAsStringAsync(ct);
+                _lastResponse = responseText;
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _lastError = $"HTTP {(int)response.StatusCode}";
+                    return null;
+                }
+
+                var root = JsonSerializer.Deserialize<PayOSApiResponse>(responseText, JsonSerializerOptionsFactory());
+                if (root?.Code is not ("00" or "200") || root.Data?.CheckoutUrl is null)
+                {
+                    _lastError = root?.Desc ?? "Missing checkoutUrl";
+                    return null;
+                }
+
+                return new PayOSCheckoutResult(root.Data.CheckoutUrl, request.OrderCode, request.Amount, request.Description);
             }
         }
 

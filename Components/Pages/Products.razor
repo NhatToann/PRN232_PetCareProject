@@ -27,10 +27,7 @@
                             <span>Tất cả sản phẩm dành cho thú cưng</span>
                         }
                     </p>
-                    @if (!string.IsNullOrWhiteSpace(Keyword))
-                    {
-                        <button type="button" class="products-create-btn" style="margin-top:8px" @onclick="HandleClearSearch">Xóa từ khóa</button>
-                    }
+                    <ClearSearchButton Keyword="@Keyword" OnClear="HandleClearSearch" />
                 </div>
 
                 <div class="products-intro-actions">

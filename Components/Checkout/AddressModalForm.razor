@@ -1,0 +1,229 @@
+@using PetShop_PRN222.Components.Checkout
+
+@* ------------------------------------------------------------------
+   AddressModalForm — port nguyên văn từ
+   Projectojt/frontend/src/components/checkout/AddressModal.jsx (OJT),
+   hàm `AddressModalForm`.
+   ------------------------------------------------------------------ *@
+
+<div class="address-modal-form-wrap">
+    <div class="checkout-address-form">
+        <div class="checkout-form-row">
+            <div class="checkout-input-wrapper">
+                <input type="text"
+                       placeholder="Họ và tên *"
+                       value="@FullName"
+                       @oninput="@(e => OnFullName.InvokeAsync(e.Value?.ToString() ?? string.Empty))"
+                       @onblur="@(() => OnBlur.InvokeAsync("fullName"))"
+                       class="@($"checkout-input {(GetFieldError("fullName") is not null ? "input-error" : string.Empty)}")" />
+                @if (GetFieldError("fullName") is not null)
+                {
+                    <span class="error-message">@GetFieldError("fullName")</span>
+                }
+            </div>
+            <div class="checkout-input-wrapper">
+                <input type="tel"
+                       placeholder="Số điện thoại *"
+                       value="@Phone"
+                       @oninput="@(e => OnPhone.InvokeAsync(e.Value?.ToString() ?? string.Empty))"
+                       @onblur="@(() => OnBlur.InvokeAsync("phone"))"
+                       class="@($"checkout-input {(GetFieldError("phone") is not null ? "input-error" : string.Empty)}")" />
+                @if (GetFieldError("phone") is not null)
+                {
+                    <span class="error-message">@GetFieldError("phone")</span>
+                }
+            </div>
+        </div>
+
+        <div class="checkout-input-wrapper">
+            <input type="email"
+                   placeholder="Email *"
+                   value="@Email"
+                   @oninput="@(e => OnEmail.InvokeAsync(e.Value?.ToString() ?? string.Empty))"
+                   @onblur="@(() => OnBlur.InvokeAsync("email"))"
+                   class="@($"checkout-input checkout-input-full {(GetFieldError("email") is not null ? "input-error" : string.Empty)}")" />
+            @if (GetFieldError("email") is not null)
+            {
+                <span class="error-message">@GetFieldError("email")</span>
+            }
+        </div>
+
+        <div class="checkout-input-wrapper checkout-input-full">
+            <input type="text"
+                   placeholder="Tỉnh/Thành phố *"
+                   value="@Province"
+                   disabled
+                   class="checkout-input" />
+            <span class="input-hint">Chỉ hỗ trợ giao hàng tại Đà Nẵng</span>
+        </div>
+
+        <div class="checkout-form-row">
+            <div class="district-wrapper checkout-input-wrapper">
+                <div class="@($"checkout-select-trigger {(GetFieldError("district") is not null ? "input-error" : string.Empty)}")"
+                     @onclick="ToggleDistrictDropdown">
+                    <span class="@(string.IsNullOrEmpty(District) ? "placeholder" : string.Empty)">
+                        @(string.IsNullOrEmpty(District) ? "Chọn Quận/Huyện *" : District)
+                    </span>
+                </div>
+                @if (ShowDistrictDropdown)
+                {
+                    <div class="province-suggestions district-suggestions">
+                        @foreach (var item in DistrictSuggestions)
+                        {
+                            var suggestion = item;
+                            <button type="button"
+                                    class="@($"province-suggestion {(District == suggestion ? "selected" : string.Empty)}")"
+                                    @onmousedown="@(() => OnDistrict.InvokeAsync(suggestion))">
+                                @suggestion
+                            </button>
+                        }
+                    </div>
+                }
+                @if (GetFieldError("district") is not null)
+                {
+                    <span class="error-message">@GetFieldError("district")</span>
+                }
+            </div>
+
+            <div class="ward-wrapper checkout-input-wrapper">
+                <div class="@($"checkout-select-trigger {(GetFieldError("ward") is not null ? "input-error" : string.Empty)} {(string.IsNullOrEmpty(District) ? "disabled" : string.Empty)}")"
+                     @onclick="ToggleWardDropdown">
+                    <span class="@(string.IsNullOrEmpty(Ward) ? "placeholder" : string.Empty)">
+                        @(Ward is not null && Ward.Length > 0
+                            ? Ward
+                            : (string.IsNullOrEmpty(District) ? "Chọn quận trước" : "Chọn Phường/Xã *"))
+                    </span>
+                </div>
+                @if (ShowWardDropdown && WardSuggestions.Count > 0)
+                {
+                    <div class="province-suggestions ward-suggestions">
+                        @foreach (var item in WardSuggestions)
+                        {
+                            var suggestion = item;
+                            <button type="button"
+                                    class="@($"province-suggestion {(Ward == suggestion ? "selected" : string.Empty)}")"
+                                    @onmousedown="@(() => OnWard.InvokeAsync(suggestion))">
+                                @suggestion
+                            </button>
+                        }
+                    </div>
+                }
+                @if (GetFieldError("ward") is not null)
+                {
+                    <span class="error-message">@GetFieldError("ward")</span>
+                }
+            </div>
+        </div>
+
+        <div class="checkout-input-wrapper">
+            <input type="text"
+                   placeholder="Số nhà, tên đường *"
+                   value="@Address"
+                   @oninput="@(e => OnAddress.InvokeAsync(e.Value?.ToString() ?? string.Empty))"
+                   @onblur="@(() => OnBlur.InvokeAsync("address"))"
+                   class="@($"checkout-input checkout-input-full {(GetFieldError("address") is not null ? "input-error" : string.Empty)}")" />
+            @if (GetFieldError("address") is not null)
+            {
+                <span class="error-message">@GetFieldError("address")</span>
+            }
+        </div>
+    </div>
+
+    <div class="address-modal-form-actions">
+        @if (EditingAddressId is not null)
+        {
+            <button type="button" class="address-modal-btn-danger" @onclick="@(() => OnDelete.InvokeAsync())">
+                <i class="fas fa-trash address-modal-btn-danger-icon" aria-hidden="true"></i>
+                Xóa địa chỉ
+            </button>
+        }
+        <div class="address-modal-form-actions-right">
+            <button type="button" class="address-modal-btn-secondary" @onclick="@(() => OnBack.InvokeAsync())">
+                Quay lại
+            </button>
+            <button type="button" class="address-modal-btn-primary" @onclick="@(() => OnSave.InvokeAsync())">
+                Lưu địa chỉ
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string FullName { get; set; } = string.Empty;
+
+    [Parameter] public string Phone { get; set; } = string.Empty;
+
+    [Parameter] public string Email { get; set; } = string.Empty;
+
+    [Parameter] public string Province { get; set; } = string.Empty;
+
+    [Parameter] public string District { get; set; } = string.Empty;
+
+    [Parameter] public string Ward { get; set; } = string.Empty;
+
+    [Parameter] public string Address { get; set; } = string.Empty;
+
+    /// <summary>Lỗi theo tên field.</summary>
+    [Parameter] public IReadOnlyDictionary<string, string> Errors { get; set; } = new Dictionary<string, string>();
+
+    /// <summary>Field nào đã được chạm (blur).</summary>
+    [Parameter] public IReadOnlySet<string> Touched { get; set; } = new HashSet<string>();
+
+    [Parameter] public bool ShowWardDropdown { get; set; }
+
+    [Parameter] public bool ShowDistrictDropdown { get; set; }
+
+    /// <summary>Danh sách phường/xã gợi ý (tối đa 15).</summary>
+    [Parameter] public IReadOnlyList<string> WardSuggestions { get; set; } = Array.Empty<string>();
+
+    /// <summary>Danh sách quận/huyện gợi ý (tối đa 8).</summary>
+    [Parameter] public IReadOnlyList<string> DistrictSuggestions { get; set; } = Array.Empty<string>();
+
+    /// <summary>Id địa chỉ đang sửa; <c>null</c> khi thêm mới.</summary>
+    [Parameter] public long? EditingAddressId { get; set; }
+
+    /// <summary>Hàm lấy lỗi của field (chỉ trả lỗi khi field đã chạm).</summary>
+    [Parameter, EditorRequired] public Func<string, string?> GetFieldError { get; set; } = _ => null;
+
+    [Parameter] public EventCallback<string> OnFullName { get; set; }
+
+    [Parameter] public EventCallback<string> OnPhone { get; set; }
+
+    [Parameter] public EventCallback<string> OnEmail { get; set; }
+
+    [Parameter] public EventCallback<string> OnDistrict { get; set; }
+
+    [Parameter] public EventCallback<string> OnWard { get; set; }
+
+    [Parameter] public EventCallback<string> OnAddress { get; set; }
+
+    /// <summary>Mở/đóng dropdown phường.</summary>
+    [Parameter] public EventCallback<bool> OnShowWardDropdown { get; set; }
+
+    /// <summary>Mở/đóng dropdown quận.</summary>
+    [Parameter] public EventCallback<bool> OnShowDistrictDropdown { get; set; }
+
+    /// <summary>Blur một field (validate ngay).</summary>
+    [Parameter] public EventCallback<string> OnBlur { get; set; }
+
+    [Parameter] public EventCallback OnBack { get; set; }
+
+    [Parameter] public EventCallback OnSave { get; set; }
+
+    [Parameter] public EventCallback OnDelete { get; set; }
+
+    /// <summary>
+    /// Nguồn: onClick={() => { onShowDistrictDropdown(!showDistrictDropdown); if (district) onShowDistrictDropdown(true) }}
+    /// </summary>
+    private Task ToggleDistrictDropdown() =>
+        OnShowDistrictDropdown.InvokeAsync(!ShowDistrictDropdown || !string.IsNullOrEmpty(District));
+
+    /// <summary>
+    /// Nguồn: onClick={() => { if (district) { onShowWardDropdown(!showWardDropdown); if (!ward) onShowWardDropdown(true) } }}
+    /// </summary>
+    private Task ToggleWardDropdown()
+    {
+        if (string.IsNullOrEmpty(District)) return Task.CompletedTask;
+        return OnShowWardDropdown.InvokeAsync(!ShowWardDropdown || string.IsNullOrEmpty(Ward));
+    }
+}

@@ -1,0 +1,207 @@
+@page "/spa-booking-detail/{HistoryId:int}"
+@inject PetShop.Services.UserSessionService UserSession
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ILogger<SpaBookingDetail> Logger
+@implements IDisposable
+
+<PageTitle>Chi tiết dịch vụ spa - Pet Toy Shop</PageTitle>
+
+@* ------------------------------------------------------------------
+   SpaBookingDetail — port nguyên văn từ
+   Projectojt/frontend/src/pages/SpaBookingDetailPage.jsx (nguồn OJT).
+
+   LƯU Ý: Ở nguồn, trang này là ORPHAN — không có route trong `App.jsx`
+   nên không bao giờ truy cập được. Theo Q8 (PARITY.md) đã chốt:
+   "Port nguyên văn (yêu cầu 'giống 100%')" ⇒ dựng route
+   `/spa-booking-detail/{HistoryId:int}` với param `historyId` đúng như
+   `useParams()` của nguồn.
+
+   Dữ liệu đọc từ `localStorage.spaBookingHistory` — cùng nguồn với nguồn OJT
+   (`SpaBookingHistoryPage.jsx` ghi localStorage này).
+
+   Ở nguồn, các class `spa-bd-*` KHÔNG có trong bất kỳ file CSS nào
+   (nguồn cũng vậy) ⇒ giữ nguyên class name để parity 100%.
+   ------------------------------------------------------------------ *@
+
+<div class="spa-bd-page">
+    <TopBar />
+    <PageContextBar Title="Chi tiết dịch vụ spa" />
+
+    <main class="spa-bd-main">
+        <div class="spa-bd-container">
+            @if (!loaded)
+            {
+                <LoadingIndicator Message="Đang tải chi tiết dịch vụ spa..." />
+            }
+            else if (booking is null)
+            {
+                <div class="spa-bh-empty">
+                    <p>Không tìm thấy thông tin dịch vụ trong lịch sử đặt spa.</p>
+                    <a href="/spa-booking-history" class="spa-bh-empty__cta">
+                        Quay về lịch sử
+                    </a>
+                </div>
+            }
+            else
+            {
+                <article class="spa-bd-card">
+                    <div class="spa-bd-card__media">
+                        <img src="@GetSpaServiceThumb(booking.ServiceName)" alt="@(string.IsNullOrWhiteSpace(booking.ServiceName) ? "Dịch vụ spa" : booking.ServiceName)" />
+                    </div>
+
+                    <div class="spa-bd-card__body">
+                        <div class="spa-bd-card__head">
+                            <div>
+                                <h1 class="spa-bd-card__title">@(string.IsNullOrWhiteSpace(booking.ServiceName) ? "Dịch vụ spa" : booking.ServiceName)</h1>
+                                <p class="spa-bd-card__sub">Mã booking: #@(booking.BookingId is not null ? booking.BookingId.ToString() : "—")</p>
+                            </div>
+
+                            <span class="spa-bh-card__status-pill"
+                                  style="color: @StatusConfig(booking.Status).Color; background: @StatusConfig(booking.Status).Bg; border-color: @StatusConfig(booking.Status).Border;">
+                                @StatusConfig(booking.Status).Label
+                            </span>
+                        </div>
+
+                        <div class="spa-bd-grid">
+                            <div class="spa-bd-grid__item">
+                                <span>Thú cưng</span>
+                                <strong>@(string.IsNullOrWhiteSpace(booking.PetName) ? "—" : booking.PetName)</strong>
+                            </div>
+                            <div class="spa-bd-grid__item">
+                                <span>Giờ hẹn</span>
+                                <strong>@FormatDateTime(booking.Date, booking.Time)</strong>
+                            </div>
+                            <div class="spa-bd-grid__item">
+                                <span>Tổng tiền</span>
+                                <strong>@FormatCurrency(booking.Total)</strong>
+                            </div>
+                            <div class="spa-bd-grid__item">
+                                <span>Phương thức thanh toán</span>
+                                <strong>@(string.Equals(booking.PaymentMethod, "payos", StringComparison.OrdinalIgnoreCase) ? "PayOS" : "Tiền mặt")</strong>
+                            </div>
+                        </div>
+
+                        <div class="spa-bd-actions">
+                            <a href="/spa-booking-history" class="spa-bh-btn spa-bh-btn--outline">
+                                Quay lại lịch sử
+                            </a>
+                            <a href="/services" class="spa-bh-btn spa-bh-btn--primary">
+                                Đặt dịch vụ mới
+                            </a>
+                        </div>
+                    </div>
+                </article>
+            }
+        </div>
+    </main>
+
+    <Footer />
+</div>
+
+@code {
+    /// <summary>
+    /// Id của dòng lịch sử đặt spa — tương đương <c>useParams().historyId</c> của nguồn.
+    /// </summary>
+    [Parameter] public int HistoryId { get; set; }
+
+    private SpaBookingHistoryItem? booking;
+    private bool loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadBookingAsync();
+    }
+
+    /// <summary>
+    /// Đọc <c>localStorage.spaBookingHistory</c> và tìm dòng có <c>id</c> trùng
+    /// <see cref="HistoryId"/> (port nguyên văn logic <c>useMemo</c> của nguồn).
+    /// </summary>
+    private async Task LoadBookingAsync()
+    {
+        loaded = false;
+        booking = null;
+
+        try
+        {
+            var raw = await JS.InvokeAsync<string?>("localStorage.getItem", "spaBookingHistory");
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                var list = System.Text.Json.JsonSerializer.Deserialize<List<SpaBookingHistoryItem>>(raw);
+                if (list is not null)
+                {
+                    booking = list.FirstOrDefault(item => string.Equals(
+                        item.Id?.ToString(),
+                        HistoryId.ToString(),
+                        StringComparison.Ordinal));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[SpaBookingDetail] Không đọc được localStorage.spaBookingHistory: {ex.GetType().Name} {ex.Message}");
+        }
+
+        loaded = true;
+        StateHasChanged();
+    }
+
+    /// <summary>Định dạng số tiền — port <c>formatCurrency</c> của nguồn.</summary>
+    private static string FormatCurrency(decimal value) =>
+        value.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) + "₫";
+
+    /// <summary>Định dạng ngày giờ — port <c>formatDateTime</c> của nguồn.</summary>
+    private static string FormatDateTime(string? date, string? time)
+    {
+        if (string.IsNullOrWhiteSpace(date) && string.IsNullOrWhiteSpace(time)) return "—";
+
+        if (!string.IsNullOrWhiteSpace(date) && !string.IsNullOrWhiteSpace(time))
+        {
+            if (DateTime.TryParse($"{date}T{time}", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed))
+            {
+                return parsed.ToString("dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"));
+            }
+        }
+
+        return string.Join(" ", new[] { date, time }.Where(part => !string.IsNullOrWhiteSpace(part)));
+    }
+
+    /// <summary>Cấu hình hiển thị trạng thái — port <c>getStatusConfig</c> của nguồn.</summary>
+    private static (string Label, string Color, string Bg, string Border) StatusConfig(string? status)
+    {
+        var normalized = (status ?? string.Empty).ToLowerInvariant();
+
+        if (normalized.Contains("hủy"))
+        {
+            return (string.IsNullOrWhiteSpace(status) ? "Đã hủy" : status, "#dc2626", "#fef2f2", "#fecaca");
+        }
+
+        if (normalized.Contains("thanh toán") || normalized.Contains("paid"))
+        {
+            return (string.IsNullOrWhiteSpace(status) ? "Đã thanh toán" : status, "#16a34a", "#f0fdf4", "#bbf7d0");
+        }
+
+        return (string.IsNullOrWhiteSpace(status) ? "Chưa thanh toán" : status, "#ca8a04", "#fefce8", "#fde68a");
+    }
+
+    /// <summary>Chọn ảnh đại diện cho dịch vụ — port <c>getSpaServiceThumb</c> của nguồn.</summary>
+    private static string GetSpaServiceThumb(string? serviceName)
+    {
+        var n = (serviceName ?? string.Empty).ToLowerInvariant().Trim();
+
+        if (n == "spa cao cấp") return "/images/spa-caocap1.jpg";
+        if (n == "tắm + vệ sinh cơ bản") return "/images/bath1.png";
+        if (n == "cắt tỉa lông chuyên nghiệp") return "/images/cut1.jpg";
+        if (n == "vệ sinh răng miệng") return "/images/teeth1.jpg";
+        if (n.Contains("tắm") || n.Contains("bath") || n.Contains("vệ sinh cơ bản")) return "/images/bath1.png";
+        if (n.Contains("cắt") || n.Contains("tỉa")) return "/images/cut1.jpg";
+        if (n.Contains("spa") || n.Contains("cao cấp")) return "/images/spa-caocap1.jpg";
+        if (n.Contains("răng") || n.Contains("miệng")) return "/images/teeth1.jpg";
+        if (n.Contains("khám") || n.Contains("chuyên sâu")) return "/images/spa-caocap1.jpg";
+        return "/images/placeholder.jpg";
+    }
+
+    public void Dispose()
+    {
+    }
+}
