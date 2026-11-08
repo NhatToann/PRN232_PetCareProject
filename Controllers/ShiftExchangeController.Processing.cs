@@ -158,6 +158,14 @@ namespace PetShop.Controllers
 
             await _db.SaveChangesAsync(ct);
 
+            // LS-11 — báo realtime cho người gửi biết yêu cầu đã được duyệt.
+            await PushNotificationAsync(
+                req.EmployeeId,
+                "Yêu cầu đã được duyệt",
+                $"Yêu cầu #{req.RequestId} của bạn đã được nhân viên #{responderStaffId} chấp nhận.",
+                req.RequestId,
+                ct);
+
             return Ok(new ShiftExchangeActionResultDto("success", "Đã chấp nhận yêu cầu đổi ca."));
         }
 
@@ -177,6 +185,14 @@ namespace PetShop.Controllers
 
             await _db.SaveChangesAsync(ct);
 
+            // LS-11 — báo realtime cho người gửi biết yêu cầu bị từ chối.
+            await PushNotificationAsync(
+                req.EmployeeId,
+                "Yêu cầu bị từ chối",
+                $"Yêu cầu #{req.RequestId} của bạn đã bị nhân viên #{responderStaffId} từ chối.",
+                req.RequestId,
+                ct);
+
             return Ok(new ShiftExchangeActionResultDto("success", "Đã từ chối yêu cầu."));
         }
 
@@ -194,6 +210,14 @@ namespace PetShop.Controllers
             req.Status = "Cancelled";
 
             await _db.SaveChangesAsync(ct);
+
+            // LS-11 — báo realtime cho người được nhờ/đổi ca biết yêu cầu đã huỷ.
+            await PushNotificationAsync(
+                req.ToStaffId,
+                "Yêu cầu đã được huỷ",
+                $"Nhân viên #{req.EmployeeId} đã huỷ yêu cầu #{req.RequestId}.",
+                req.RequestId,
+                ct);
 
             return Ok(new ShiftExchangeActionResultDto("success", "Đã huỷ yêu cầu."));
         }

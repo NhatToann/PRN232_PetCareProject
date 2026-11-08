@@ -105,6 +105,14 @@ namespace PetShop.Controllers
             _db.ShiftRequests.Add(req);
             await _db.SaveChangesAsync(ct);
 
+            // LS-11 — đẩy thông báo realtime tới người được nhờ làm thay.
+            await PushNotificationAsync(
+                req.ToStaffId,
+                "Yêu cầu nhờ làm thay",
+                $"Nhân viên #{req.EmployeeId} muốn nhờ bạn làm thay ca ngày {req.FromDate:dd/MM/yyyy}.",
+                req.RequestId,
+                ct);
+
             return Ok(new ShiftExchangeActionResultDto("success", "Gửi yêu cầu nhờ làm thay thành công."));
         }
 
@@ -253,6 +261,14 @@ namespace PetShop.Controllers
 
             _db.ShiftRequests.Add(req);
             await _db.SaveChangesAsync(ct);
+
+            // LS-11 — đẩy thông báo realtime tới người được đổi ca.
+            await PushNotificationAsync(
+                req.ToStaffId,
+                "Yêu cầu đổi ca",
+                $"Nhân viên #{req.EmployeeId} muốn đổi ca ngày {req.FromDate:dd/MM/yyyy} với bạn.",
+                req.RequestId,
+                ct);
 
             return Ok(new ShiftExchangeActionResultDto("success", "Gửi yêu cầu đổi ca thành công."));
         }

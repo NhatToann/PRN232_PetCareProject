@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.JSInterop;
+using PetShop.Hubs;
 using PetShop.Interfaces;
 using PetShop.Models;
 using PetShop.Services;
@@ -13,8 +15,15 @@ namespace PetShop_PRN222.Components.Staff;
 /// Port nguyên văn từ <c>Projectojt/frontend/src/components/staff/NotificationBell.jsx</c> (nguồn OJT).
 /// Dữ liệu lấy qua <see cref="INotificationClient"/> (self-HTTP tới <c>api/notifications/*</c>
 /// và <c>api/shift-exchange/*</c>) — không inject DbContext trực tiếp vào component.
+///
+/// <para><b>LS-11 — realtime (SignalR):</b> component cũng kết nối hub
+/// <c>/hubs/notification</c> để nhận thông báo mới ngay khi có, thay cho việc chỉ
+/// tải dữ liệu theo thao tác của người dùng. Toàn bộ thao tác SignalR được bọc
+/// try/catch: nếu hub lỗi thì component vẫn hoạt động bình thường qua đường HTTP
+/// cũ (fallback) — UI hiển thị không thay đổi.
+/// </para>
 /// </summary>
-public partial class NotificationBell : ComponentBase
+public partial class NotificationBell : ComponentBase, IAsyncDisposable
 {
     [Inject] private INotificationClient NotificationClient { get; set; } = default!;
 
@@ -23,6 +32,8 @@ public partial class NotificationBell : ComponentBase
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
     [Inject] private ILogger<NotificationBell> Logger { get; set; } = default!;
+
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
 
     /// <summary>
     /// Biến thể hiển thị: "default" hoặc "topbar" (dùng trong <c>TopBar</c>).
@@ -85,6 +96,162 @@ public partial class NotificationBell : ComponentBase
         catch (Exception ex) { Logger.LineWarning($"[NotificationBell] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
 
         await LoadAllAsync();
+
+        // LS-11 — kết nối hub realtime (chạy nền, lỗi không ảnh hưởng UI).
+        await StartRealtimeAsync();
+    }
+
+    // ---------------------------------------------------------------------
+    // LS-11 — SignalR realtime
+    // ---------------------------------------------------------------------
+
+    /// <summary>Đường dẫn hub — phải khớp với <c>app.MapHub&lt;NotificationHub&gt;("/hubs/notification")</c>.</summary>
+    private const string HubPath = "/hubs/notification";
+
+    private HubConnection? _hubConnection;
+
+    /// <summary>
+    /// Mở kết nối SignalR tới hub thông báo và vào group <c>user:{userId}</c>.
+    ///
+    /// <para>
+    /// Mọi lỗi đều bị nuốt kèm log: component tiếp tục hoạt động qua đường HTTP cũ
+    /// (fallback). Không được để lỗi realtime làm hỏng UI hiện tại.
+    /// </para>
+    /// </summary>
+    private async Task StartRealtimeAsync()
+    {
+        try
+        {
+            var staffId = EffectiveStaffId;
+            if (staffId <= 0)
+            {
+                Logger.Line("[NotificationBell] Bỏ qua kết nối SignalR: chưa xác định được user id.");
+                return;
+            }
+
+            if (_hubConnection is not null)
+            {
+                return;
+            }
+
+            var hubUrl = BuildHubUrl(staffId);
+
+            var connection = new HubConnectionBuilder()
+                .WithUrl(hubUrl)
+                .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10) })
+                .Build();
+
+            // Payload server gửi là 1 object DTO (RealtimeNotificationDto / ChatEnvelope)
+            // ⇒ handler phải khớp đúng số tham số, nếu không client sẽ không giải mã được.
+            connection.On<RealtimeNotificationDto>(
+                NotificationHub.NotificationReceivedEvent,
+                notification =>
+                {
+                    _ = HandleNotificationReceivedAsync(notification);
+                });
+
+            connection.On<ChatEnvelope>(
+                NotificationHub.ChatReceivedEvent,
+                chat =>
+                {
+                    _ = HandleChatReceivedAsync(chat);
+                });
+
+            connection.Closed += async _ =>
+            {
+                Logger.LineWarning("[NotificationBell] Kết nối SignalR đã đóng — sẽ thử kết nối lại ở lần render sau.");
+                await Task.CompletedTask;
+            };
+
+            await connection.StartAsync();
+
+            await connection.InvokeAsync("JoinGroup", staffId);
+
+            _hubConnection = connection;
+
+            Logger.Line($"[NotificationBell] Đã kết nối SignalR tới {hubUrl} và vào group user:{staffId}.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[NotificationBell] Không kết nối được SignalR (fallback sang HTTP): {ex.GetType().Name} — {ex.Message}");
+
+            await DisposeHubAsync();
+        }
+    }
+
+    /// <summary>
+    /// Dựng URL hub trên cùng host.
+    ///
+    /// <para>
+    /// Dùng query string <c>userId</c> vì client Blazor (circuit server-side) không
+    /// gửi header session tới kết nối WebSocket; đây là chế độ LOCAL DEMO giống
+    /// <c>SessionHeaderAuthenticationHandler</c> (không phải cơ chế bảo mật production).
+    /// </para>
+    /// </summary>
+    private string BuildHubUrl(int staffId)
+    {
+        var baseUri = Navigation.BaseUri;
+        var separator = baseUri.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+
+        return $"{baseUri.TrimEnd('/')}{HubPath}{separator}userId={staffId}";
+    }
+
+    /// <summary>
+    /// Xử lý sự kiện nhận thông báo mới — chỉ cần tải lại dữ liệu, không đổi markup.
+    /// </summary>
+    private async Task HandleNotificationReceivedAsync(RealtimeNotificationDto notification)
+    {
+        try
+        {
+            Logger.Line($"[NotificationBell] Nhận thông báo realtime: {notification.Title}");
+
+            await InvokeAsync(async () =>
+            {
+                await LoadAllAsync();
+                StateHasChanged();
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[NotificationBell] Không xử lý được sự kiện thông báo realtime: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Xử lý sự kiện nhận tin nhắn chat — hiện chỉ ghi log (chưa có UI chat widget).
+    /// </summary>
+    private async Task HandleChatReceivedAsync(ChatEnvelope chat)
+    {
+        try
+        {
+            Logger.Line($"[NotificationBell] Nhận tin nhắn chat realtime từ user:{chat.FromUserId}.");
+            await Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[NotificationBell] Không xử lý được sự kiện chat realtime: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>Huỷ kết nối SignalR (an toàn khi đã dispose).</summary>
+    private async Task DisposeHubAsync()
+    {
+        var connection = _hubConnection;
+        _hubConnection = null;
+
+        if (connection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await connection.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[NotificationBell] Lỗi khi huỷ kết nối SignalR: {ex.GetType().Name}");
+        }
     }
 
     /// <summary>
@@ -298,11 +465,25 @@ public partial class NotificationBell : ComponentBase
     private void HandleSessionChanged() => InvokeAsync(async () =>
     {
         await LoadAllAsync();
+
+        // LS-11 — khi phiên đăng nhập có user id thì mới mở được kết nối hub.
+        await StartRealtimeAsync();
+
         StateHasChanged();
     });
 
     public void Dispose()
     {
         UserSession.Changed -= HandleSessionChanged;
+    }
+
+    /// <summary>
+    /// Giải phóng kết nối SignalR khi component bị huỷ (Blazor Server gọi
+    /// <see cref="IAsyncDisposable.DisposeAsync"/> khi circuit kết thúc).
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        Dispose();
+        await DisposeHubAsync();
     }
 }

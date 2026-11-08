@@ -1,0 +1,123 @@
+@page "/signalr-demo"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject ILogger<SignalRDemo> Logger
+@inject PetShop.Interfaces.IRealtimeNotificationService Realtime
+
+<PageTitle>SignalR Demo — Realtime Notification/Chat</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="mb-4">
+        <h2 class="fw-bold mb-1"><i class="fas fa-bolt me-2"></i> SignalR Demo — Realtime Notification/Chat</h2>
+        <p class="text-muted mb-0">
+            Hub: <code>/hubs/notification</code> — nhóm theo user (<code>user:{id}</code>).
+            Server push <code>NotificationReceived</code> · <code>ChatReceived</code>.
+            Trang này chỉ dùng để demo; KHÔNG thêm vào menu điều hướng.
+        </p>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light fw-bold">Trạng thái kết nối</div>
+                <div class="card-body">
+                    <p class="mb-2">
+                        <span class="badge @StatusBadgeClass">@StatusText</span>
+                    </p>
+                    <p class="small text-muted mb-0">
+                        User ID: <strong>@currentUserId</strong> ·
+                        Nhóm: <code>@($"user:{currentUserId}")</code>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-8">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-light fw-bold">Gửi tin nhắn test</div>
+                <div class="card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-sm-4">
+                            <label class="form-label fw-semibold" for="signalrTargetId">Người nhận (userId)</label>
+                            <input id="signalrTargetId" class="form-control" type="number" min="1" @bind="targetUserId" />
+                        </div>
+                        <div class="col-12 col-sm-5">
+                            <label class="form-label fw-semibold" for="signalrMessage">Nội dung</label>
+                            <input id="signalrMessage" class="form-control" @bind="message" @bind:event="oninput"
+                                   placeholder="Nhập nội dung tin nhắn…" />
+                        </div>
+                        <div class="col-12 col-sm-3">
+                            <button class="btn btn-primary w-100" type="button" disabled="@isBusy" @onclick="SendAsync">
+                                @if (isBusy)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1"></span>
+                                }
+                                Gửi
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr />
+
+                    <label class="form-label fw-semibold" for="signalrNotifyTitle">Gửi thông báo test tới chính mình</label>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-sm-8">
+                            <input id="signalrNotifyTitle" class="form-control" @bind="notificationTitle"
+                                   placeholder="Tiêu đề thông báo" />
+                        </div>
+                        <div class="col-12 col-sm-4">
+                            <button class="btn btn-outline-secondary w-100" type="button" disabled="@isBusy" @onclick="NotifySelfAsync">
+                                Gửi thông báo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger d-flex align-items-start" role="alert">
+            <i class="fas fa-exclamation-triangle me-2 mt-1"></i>
+            <div><strong>Lỗi:</strong> @errorMessage</div>
+        </div>
+    }
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <span class="fw-bold"><i class="fas fa-terminal me-2"></i>Nhật ký sự kiện</span>
+            <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="ClearLog">Xoá log</button>
+        </div>
+        <div class="card-body">
+            @if (eventLog.Count == 0)
+            {
+                <p class="text-muted mb-0">Chưa nhận được sự kiện nào.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 90px;">Thời gian</th>
+                                <th style="width: 190px;">Sự kiện</th>
+                                <th>Nội dung</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var entry in eventLog)
+                            {
+                                <tr>
+                                    <td class="small text-muted">@entry.Timestamp.ToString("HH:mm:ss")</td>
+                                    <td><span class="badge text-bg-secondary">@entry.EventName</span></td>
+                                    <td class="small">@entry.Detail</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>

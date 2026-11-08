@@ -28,10 +28,17 @@ namespace PetShop.Controllers
 
         private readonly IAttendanceService _attendanceService;
 
+        /// <summary>
+        /// Đẩy thông báo realtime (SignalR) tới các bên liên quan.
+        /// Lỗi push được nuốt trong service ⇒ không làm hỏng luồng đổi ca.
+        /// </summary>
+        private readonly IRealtimeNotificationService _realtimeNotification;
+
         public ShiftExchangeController(
             ShopPetDatabaseContext db,
             IConfiguration configuration,
             IAttendanceService attendanceService,
+            IRealtimeNotificationService realtimeNotification,
             ILogger<ShiftExchangeController> logger)
         {
             _db = db;
@@ -39,6 +46,7 @@ namespace PetShop.Controllers
             _allowedIpPrefixes = configuration.GetSection("Attendance:AllowedIpPrefixes")
                 .Get<string[]>() ?? new[] { "192.168.1." };
             _attendanceService = attendanceService;
+            _realtimeNotification = realtimeNotification;
         }
 
         [HttpGet("verify-network")]
@@ -99,6 +107,46 @@ namespace PetShop.Controllers
                 return addr.MapToIPv4().ToString();
 
             return addr.ToString();
+        }
+
+        /// <summary>
+        /// Đẩy thông báo realtime tới một nhân viên qua SignalR.
+        ///
+        /// <para>
+        /// Bọc try/catch riêng: lỗi đẩy thông báo KHÔNG được làm hỏng request chính
+        /// (người dùng vẫn phải tạo/duyệt được yêu cầu đổi ca dù hub không hoạt động).
+        /// </para>
+        /// </summary>
+        private async Task PushNotificationAsync(
+            int? userId,
+            string title,
+            string message,
+            int requestId,
+            CancellationToken ct)
+        {
+            if (userId is null || userId.Value <= 0)
+            {
+                return;
+            }
+
+            try
+            {
+                await _realtimeNotification.NotifyAsync(
+                    userId.Value,
+                    title,
+                    message,
+                    requestId,
+                    ct);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LineWarning(
+                    $"[ShiftExchange] Không đẩy được thông báo realtime tới user:{userId.Value} (request #{requestId}): {ex.GetType().Name} — {ex.Message}");
+            }
         }
 
         /// <summary>

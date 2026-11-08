@@ -196,6 +196,18 @@ builder.Services.AddScoped<PetShop.Services.GrpcPetCatalogService>();
 builder.Services.AddScoped<PetShop.Services.GrpcPetCatalogClient>();
 
 // ---------------------------------------------------------------------------
+// LS-11 — SignalR (realtime notification + chat):
+//   - AddSignalR() đăng ký server SignalR (package server-side đã có sẵn trong
+//     Microsoft.NET.Sdk.Web, KHÔNG thêm package riêng).
+//   - NotificationHub nhóm theo user ("user:{userId}") — xem Hubs/NotificationHub.cs.
+//   - RealtimeNotificationService là tầng service của luồng 3-layer: controller/
+//     service gọi qua interface IRealtimeNotificationService, không inject DbContext
+//     vào component Razor.
+// ---------------------------------------------------------------------------
+builder.Services.AddSignalR();
+builder.Services.AddScoped<PetShop.Interfaces.IRealtimeNotificationService, PetShop.Services.RealtimeNotificationService>();
+
+// ---------------------------------------------------------------------------
 // Chatbot AI (slide LS-08 — port từ OJT):
 //   - ChatbotOptions: đọc khối "Chatbot" trong appsettings.json.
 //   - IAiProviderService: chỉ Gemini (quyết định của chủ dự án, không port Ollama).
@@ -289,6 +301,11 @@ app.MapControllers();
 // LS-09 — đăng ký endpoint gRPC (PetCatalog): /PetCatalog/GetProducts, /PetCatalog/StreamProducts,
 // /PetCatalog/UploadProducts, /PetCatalog/SyncProducts.
 app.MapGrpcService<PetShop.Services.GrpcPetCatalogService>();
+
+// LS-11 — đăng ký endpoint SignalR (realtime notification + chat): /hubs/notification.
+// Hub dùng chung AddAuthentication của app; client Blazor kết nối qua WebSocket
+// trên cổng 5286 (HTTP/1.1).
+app.MapHub<PetShop.Hubs.NotificationHub>("/hubs/notification");
 
 app.MapRazorComponents<PetShop_PRN222.Components.App>()
     .AddInteractiveServerRenderMode();
