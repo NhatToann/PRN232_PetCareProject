@@ -448,6 +448,9 @@ namespace PetShop.Data
                 entity.Property(e => e.AddressCustomer)
                     .HasMaxLength(255)
                     .HasColumnName("address_Customer");
+                entity.Property(e => e.AvatarUrl)
+                    .HasMaxLength(500)
+                    .HasColumnName("avatar_url");
                 entity.Property(e => e.Email)
                     .HasMaxLength(100)
                     .IsUnicode(false)

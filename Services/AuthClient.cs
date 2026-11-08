@@ -35,6 +35,38 @@ public sealed class AuthClient : IAuthClient
     public Task<FrontendApiResult<AuthResponseDto>> GoogleLoginAsync(GoogleLoginRequestDto request, CancellationToken cancellationToken = default) =>
         PostJsonAsync<AuthResponseDto>("api/auth/google-login", request, cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<FrontendApiResult<string?>> GetAvatarAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await _httpClient.GetAsync("api/auth/me", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return FrontendApiResult<string?>.Failure(await ReadErrorAsync(response, cancellationToken), (int)response.StatusCode);
+            }
+
+            var data = await response.Content.ReadFromJsonAsync<CurrentUserDto>(cancellationToken);
+            return FrontendApiResult<string?>.Success(data?.AvatarUrl);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LineError(ex, ex.Message);
+            return FrontendApiResult<string?>.Failure(ex.Message);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<FrontendApiResult<SimpleMessageDto>> UpdateAvatarAsync(string? avatarUrl, CancellationToken cancellationToken = default)
+    {
+        var payload = new UpdateAvatarRequestDto(avatarUrl);
+        return PostJsonAsync<SimpleMessageDto>("api/auth/avatar", payload, cancellationToken);
+    }
+
     public async Task<FrontendApiResult<SimpleMessageDto>> GetGoogleClientIdAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -82,6 +114,31 @@ public sealed class AuthClient : IAuthClient
     private static async Task<string> ReadErrorAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        return string.IsNullOrWhiteSpace(body) ? $"API returned {(int)response.StatusCode}." : body;
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return $"API returned {(int)response.StatusCode}.";
+        }
+
+        // Controller trả lỗi theo convention `new { message = "..." }` — rút ra message cho dễ đọc.
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(body);
+            if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                && document.RootElement.TryGetProperty("message", out var messageElement)
+                && messageElement.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var message = messageElement.GetString();
+                if (!string.IsNullOrWhiteSpace(message))
+                {
+                    return message;
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Body không phải JSON — trả nguyên văn.
+        }
+
+        return body;
     }
 }

@@ -13,6 +13,17 @@ namespace PetShop.Interfaces
         Task UpdateCustomerAsync(Customer customer, CancellationToken ct = default);
 
         /// <summary>
+        /// Cập nhật riêng cột <c>avatar_url</c> của một khách hàng.
+        /// Trả về <c>false</c> nếu không tồn tại khách hàng tương ứng.
+        /// </summary>
+        Task<bool> UpdateCustomerAvatarAsync(int customerId, string? avatarUrl, CancellationToken ct = default);
+
+        /// <summary>
+        /// Đọc riêng cột <c>avatar_url</c> của một khách hàng (null nếu chưa đặt avatar).
+        /// </summary>
+        Task<string?> GetCustomerAvatarAsync(int customerId, CancellationToken ct = default);
+
+        /// <summary>
         /// Nâng cấp mật khẩu của mọi tài khoản có email tương ứng sang hash BCrypt mới.
         /// Dùng cho migrate-on-login: tài khoản seed cũ đang lưu mật khẩu dạng chữ đơn giản
         /// sẽ được hash lại ngay lần đăng nhập đầu tiên.

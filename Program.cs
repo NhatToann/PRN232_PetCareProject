@@ -108,7 +108,7 @@ builder.Services.AddAuthorization();
 
 // Typed HttpClient trỏ về chính API của ứng dụng (xem Services/SelfHttpClientExtensions.cs).
 builder.Services.AddSelfHttpClient<PetShop.Interfaces.IProductCatalogClient, PetShop.Services.ProductCatalogClient>();
-builder.Services.AddSelfHttpClient<PetShop.Interfaces.IAuthClient, PetShop.Services.AuthClient>();
+builder.Services.AddSelfHttpClientWithAuth<PetShop.Interfaces.IAuthClient, PetShop.Services.AuthClient>();
 builder.Services.AddSelfHttpClient<PetShop.Interfaces.ICheckoutClient, PetShop.Services.CheckoutClient>();
 builder.Services.AddSelfHttpClient<PetShop.Interfaces.IOrderClient, PetShop.Services.OrderClient>();
 builder.Services.AddSelfHttpClient<PetShop.Interfaces.IReviewClient, PetShop.Services.ReviewClient>();

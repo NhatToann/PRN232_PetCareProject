@@ -84,14 +84,16 @@ namespace PetShop.Models
 
     /// <summary>
     /// Kết quả đăng nhập. Không có attribute validate vì đây là response DTO.
+    /// <see cref="AvatarUrl"/> là ảnh đại diện khách hàng (data-URI hoặc http/https),
+    /// đồng bộ với cột <c>Customer.avatar_url</c>.
     /// </summary>
     public sealed record AuthResponseDto(
         int UserId,
         string Name,
         string Email,
         string Role,
-        string Status
-    );
+        string Status,
+        string? AvatarUrl = null);
 
     public sealed record SimpleMessageDto(string Message);
 
@@ -111,5 +113,13 @@ namespace PetShop.Models
         int UserId,
         string Name,
         string Email,
-        string Role);
+        string Role,
+        string? AvatarUrl = null);
+
+    /// <summary>
+    /// Body cho endpoint cập nhật ảnh đại diện.
+    /// <see cref="AvatarUrl"/> = null ⇒ xoá ảnh đại diện.
+    /// </summary>
+    public sealed record UpdateAvatarRequestDto(
+        string? AvatarUrl);
 }

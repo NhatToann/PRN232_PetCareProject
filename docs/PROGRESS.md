@@ -188,7 +188,7 @@
 | Q6 | SignalR trong phạm vi? | ✅ **ĐÃ LÀM (LS-11)** — ngoài slide, theo yêu cầu chủ dự án: realtime notification/chat (hub + service 3-layer + client Blazor + gắn vào luồng đổi ca + `/signalr-demo`) |
 | Q7 | `CartController` MVC có `Views/`? | ✅ `/cart/session` → 200 (R3 đóng) |
 | Q8 | Route/component "chết" ở nguồn — port hay sửa? | Port nguyên văn (còn: `ClearSearchButton`, `NotificationBell`, role `doctor`) |
-| Q9 | `Customer.birth_date`/`avatar_url` — cho phép đụng schema? | Chấp nhận lệch (ràng buộc 1) |
+| Q9 | `Customer.birth_date`/`avatar_url` — cho phép đụng schema? | ✅ **MỘT NỬA — `avatar_url` đã làm** (user duyệt "thêm vào cột url cho avatar"): cột `Customer.avatar_url NVARCHAR(500) NULL` + EF mapping + API `POST/PUT api/auth/avatar` + 3-layer + UI đọc avatar localStorage → DB → rỗng. ⚠️ `birth_date` **chưa** được duyệt — vẫn còn thiếu |
 | Q10 | `daNangData.js` — copy `.js` hay viết lại C#? | Copy nguyên `.js` |
 | Q11 | Google Maps embed key? | User cung cấp hoặc bỏ iframe |
 | Q12 | Namespace? | Giữ `PetShop.*` |

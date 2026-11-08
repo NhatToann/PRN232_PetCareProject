@@ -68,7 +68,7 @@
 
 | Mục | Nguồn | Đích | Trạng thái | Bằng chứng |
 |---|---|---|---|---|
-| E-01..E-29 Entity (27 bảng + view) | ✅ | ✅ | ✅ | `Grep`/runtime: `GET /api/pets/customer/1` → 200; `GET /api/boarding-rooms` → 200 trả 6668 B (đọc `BoardingRoom` + `vwBoardingAvailabilityStat`) |
+| E-01..E-29 Entity (27 bảng + view) | ✅ | ✅ | ✅ | `Grep`/runtime: `GET /api/pets/customer/1` → 200; `GET /api/boarding-rooms` → 200 trả 6668 B (đọc `BoardingRoom` + `vwBoardingAvailabilityStat`). 🆕 Q9: `Customer` có thêm `avatar_url` (nvarchar(500) NULL) + mapping EF — đọc entity `Customer` không lỗi "Invalid column name" |
 | T-01 `ChatbotDtos` | ✅ | ✅ | ✅ | `POST /api/chatbot/message` → 200 body có `reply`/`source`/`intent`/`data`/`timestamp` (khớp `ChatMessageResponseDto`) |
 | T-05 `PayrollDtos` | ✅ | ❌ | ⚠️ | `GeneratePayrollDto`/`PayrollResultDto` vẫn thiếu — nhưng **không endpoint nào dùng**; `GET /api/payroll/*` vẫn 200 (xem §3-L6) |
 
@@ -186,6 +186,7 @@
 | BF-18 gửi email | ⚠️ | Template render OK (không còn `FileNotFoundException`) nhưng SMTP lỗi **5.7.8 BadCredentials** — lỗi thông tin tài khoản, không phải lỗi code (xem §3-L14) |
 | BF-19 chatbot AI | ⚠️ | 4 endpoint 200; `message` → `source=fallback` do Gemini key leaked (Q13) |
 | BF-20 boarding | ✅ | `GET /api/boarding-rooms` 200 trả 6 668 B dữ liệu phòng thật |
+| **BF-21 hồ sơ + ảnh đại diện (Q9)** | ✅ | `POST /api/auth/avatar` → 401 (no token) · 200 (giá trị hợp lệ) · 400 (`javascript:` / >500 ký tự) · 200 (`null` = xoá); `SELECT avatar_url FROM Customer WHERE customer_id=1` → đã lưu thật. `/profile` + `/account` → 200. Xem §4.9 |
 
 ### LỚP 9 — EMAIL TEMPLATE
 
@@ -217,7 +218,7 @@
 
 | Mục | Trạng thái | Bằng chứng |
 |---|---|---|
-| TS-01 Unit test | ✅ | **56/56 pass** (nhiều hơn 30 mục PARITY ghi) — 49 cũ + 7 test LS-11 (`NotificationHubTests.cs`) |
+| TS-01 Unit test | ✅ | **70/70 pass** (nhiều hơn 30 mục PARITY ghi) — 49 cũ + 7 test LS-11 (`NotificationHubTests.cs`) + **14 test Q9** (`AuthServiceAvatarTests.cs`) |
 | TS-02 Test chatbot service | ❌ | Chưa có unit test; đã smoke 5 probe runtime |
 | TS-03 Test PayOS signature | ✅ | `tests/PetShop.Tests/PayOSServiceTests.cs` có `ComputeHmacHex` + test webhook |
 | TS-04 Contract test từng dòng PARITY | ⚠️ | Chưa viết test tự động; **GĐ3 đã kiểm chứng thủ công 128 probe** (xem file này) |
@@ -357,6 +358,23 @@
 
 **Còn lại:** App Password SMTP hợp lệ (L14).
 
+### 4.9. Hồ sơ khách hàng + ảnh đại diện (Q9)
+
+| Bước | Kết quả |
+|---|---|
+| 1. Schema | `ALTER TABLE Customer ADD avatar_url NVARCHAR(500) NULL` (có `IF COL_LENGTH(...) IS NULL` ⇒ idempotent). Verify `INFORMATION_SCHEMA.COLUMNS` → `avatar_url / nvarchar / 500` ✅. **KHÔNG** xoá dữ liệu, **KHÔNG** chạy EF migration |
+| 2. EF mapping | `Models/Customer.cs` (`AvatarUrl`) + `Data/ShopPetDatabaseContext.cs` (`HasMaxLength(500).HasColumnName("avatar_url")`) ⇒ đọc entity `Customer` **không lỗi** "Invalid column name" ✅ |
+| 3. API — không token | `GET /api/auth/me` → **401** ✅ · `POST /api/auth/avatar` → **401** ✅ |
+| 4. API — giá trị hợp lệ | `POST /api/auth/avatar` + header `X-User-Id: 1` + `{"avatarUrl":"data:image/png;base64,iVBORw0KGgo="}` → **200** `{"message":"Đã cập nhật ảnh đại diện."}` ✅ |
+| 5. API — payload nguy hiểm | `{"avatarUrl":"javascript:alert(1)"}` → **400** với message VI `Ảnh đại diện phải là dữ liệu ảnh (data:image/...) hoặc đường dẫn http(s).` ✅ |
+| 6. API — quá độ dài | `{"avatarUrl":"https://example.com/" + 600 ký tự}` → **400** ✅ (giới hạn 500 ký tự khớp `NVARCHAR(500)`) |
+| 7. API — xoá avatar | `{"avatarUrl":null}` → **200** ✅ (xoá avatar, UI fallback chữ cái đầu) |
+| 8. API — đọc lại | `GET /api/auth/me` (có `X-User-Id`) → **200** kèm `avatarUrl` ✅ |
+| 9. Verify DB | `SELECT customer_id, avatar_url FROM Customer WHERE customer_id = 1` → `data:image/png;base64,iVBORw0KGgo=` ✅ **đã lưu thật** |
+| 10. UI | `GET /profile` → **200** ✅ · `GET /account` → **200** ✅ (markup giữ nguyên, chỉ bổ sung logic dữ liệu) |
+
+**Còn lại:** ⚠️ cột `birth_date` (nguồn OJT có) — **user chỉ duyệt `avatar_url`**, chưa đụng schema thêm.
+
 ---
 
 ## 5. RÀNG BUỘC GĐ3 — KẾT QUẢ RÀ SOÁT
@@ -435,7 +453,7 @@
 | **Q18** *(mới)* | **Tông màu chủ đạo**: giữ tím `#4a2477` (đích hiện tại) hay revert gốc `#6fd5dd`? Yêu cầu gốc là "giữ nguyên giao diện" | 🟠 5 file CSS lệch + 3 file CSS thiếu | **User chọn** — nếu ưu tiên parity ⇒ revert + port 3 file CSS còn thiếu | ⛔ Chặn parity 100% |
 | **Q2** | Refresh token (slide Ch06) — làm hay không? | SL-07 | Làm tối giản nếu ưu tiên "khớp slide" | ⏳ Chờ |
 | **Q8** | Route/component "chết" ở nguồn (`SpaBookingDetailPage` orphan, tab `breed-pricing` không truy cập được, 11 link trong Navigation không có route) — port nguyên văn hay sửa? | U-28, CM-14..17, GU-03 | Port nguyên văn (yêu cầu "giống 100%") | ⏳ Chờ (đích đã có `/spa-booking-detail/{id}`) |
-| **Q9** | `Customer` nguồn có `birth_date`/`avatar_url`, đích thiếu ⇒ profile UI không giống 100%. Cho phép đụng schema DB? | U-08, U-10 | Chấp nhận lệch, hoặc user cho phép thêm 2 cột | ⏳ Chờ |
+| **Q9** | `Customer` nguồn có `birth_date`/`avatar_url`, đích thiếu ⇒ profile UI không giống 100%. Cho phép đụng schema DB? | U-08, U-10 | ✅ **ĐÃ LÀM (một nửa)** — user duyệt `avatar_url`: cột `Customer.avatar_url NVARCHAR(500) NULL` đã thêm (ALTER idempotent, không xoá dữ liệu, không EF migration) + EF mapping + API `POST/PUT api/auth/avatar` + 3-layer + UI đọc avatar theo thứ tự localStorage → DB → rỗng. **Verify runtime:** 401 (no token) / 200 (giá trị hợp lệ) / 400 (`javascript:`) / 400 (>500 ký tự); DB `customer_id=1` → `data:image/png;base64,iVBORw0KGgo=`. ⚠️ **`birth_date` chưa được duyệt — vẫn thiếu** |
 | **Q10** | `daNangData.js` — copy nguyên file `.js` hay viết lại C#? | CM-16 | Copy nguyên file `.js` | ✅ **Đã có** `wwwroot/js/daNangData.js` (7 494 B) — cần user xác nhận |
 | **Q11** | Google Maps embed key trong `daNangData.js` (`VITE_GOOGLE_MAPS_EMBED_API_KEY`) — có key thật không? | U-06 | User cấp hoặc bỏ iframe | ⏳ Chờ |
 | **Q14** | Chatbot có cần **UI widget** ở trang bán hàng không? | LS-08 / BF-19 | Cần user quyết lát cắt UI riêng hay để sau LS-12 | ⏳ Chờ |

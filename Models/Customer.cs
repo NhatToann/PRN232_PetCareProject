@@ -19,6 +19,12 @@ namespace PetShop.Models
 
         public string? AddressCustomer { get; set; }
 
+        /// <summary>
+        /// Đường dẫn (http/https) hoặc data-URI của ảnh đại diện khách hàng.
+        /// Cột DB: <c>Customer.avatar_url</c> (nvarchar(500), nullable).
+        /// </summary>
+        public string? AvatarUrl { get; set; }
+
         public string? Status { get; set; }
 
         public string? OtpCode { get; set; }

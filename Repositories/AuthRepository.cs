@@ -62,6 +62,40 @@ namespace PetShop.Repositories
             await _db.SaveChangesAsync(ct);
         }
 
+        public async Task<bool> UpdateCustomerAvatarAsync(int customerId, string? avatarUrl, CancellationToken ct = default)
+        {
+            if (customerId <= 0)
+            {
+                return false;
+            }
+
+            var customer = await _db.Customers
+                .FirstOrDefaultAsync(x => x.CustomerId == customerId, ct);
+            if (customer is null)
+            {
+                return false;
+            }
+
+            customer.AvatarUrl = avatarUrl;
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        public async Task<string?> GetCustomerAvatarAsync(int customerId, CancellationToken ct = default)
+        {
+            if (customerId <= 0)
+            {
+                return null;
+            }
+
+            var avatar = await _db.Customers
+                .Where(x => x.CustomerId == customerId)
+                .Select(x => x.AvatarUrl)
+                .FirstOrDefaultAsync(ct);
+
+            return avatar;
+        }
+
         public async Task<bool> EmailExistsInAnyRoleAsync(string email, CancellationToken ct = default)
         {
             var normalizedEmail = NormalizeEmail(email);
