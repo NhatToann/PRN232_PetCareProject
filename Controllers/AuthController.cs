@@ -161,6 +161,8 @@ namespace PetShop.Controllers
         /// Endpoint này bổ sung cho luồng nội bộ: Blazor Server dùng session,
         /// còn React/Postman/mobile app dùng token trả về ở đây rồi gửi
         /// <c>Authorization: Bearer &lt;token&gt;</c> cho các request sau.
+        ///
+        /// Slide PRN232 Ch06 S41: login trả về **cả access token và refresh token**.
         /// </summary>
         [HttpPost("token")]
         [AllowAnonymous]
@@ -188,6 +190,61 @@ namespace PetShop.Controllers
             {
                 return BadRequest(new { message = ex.Message });
             }
+        }
+
+        /// <summary>
+        /// Làm mới access token bằng refresh token (slide PRN232 Ch06 S42).
+        ///
+        /// Body: <c>{ "refreshToken": "...", "accessToken": "..." }</c> — theo slide,
+        /// client gửi kèm cả access token cũ (tuỳ chọn) và refresh token.
+        ///
+        /// Quy tắc bảo mật:
+        ///  - Chỉ **refresh token** mới được dùng để refresh. Access token bị từ chối (401)
+        ///    nhờ claim <c>token_type</c> trong <c>Services/JwtTokenService.cs</c>.
+        ///  - Refresh token hết hạn / sai chữ ký / rác ⇒ 401.
+        ///  - Khi thành công trả về access token mới **và** refresh token mới (rotate).
+        /// </summary>
+        [HttpPost("refreshtoken")]
+        [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public ActionResult<RefreshTokenResponseDto> RefreshToken([FromBody] RefreshTokenRequestDto request)
+        {
+            if (request is null || string.IsNullOrWhiteSpace(request.RefreshToken))
+            {
+                return BadRequest(new { message = "Refresh token không được để trống." });
+            }
+
+            if (!_jwtTokenService.ValidateRefreshToken(request.RefreshToken, out var principal) || principal is null)
+            {
+                return Unauthorized(new { message = "Refresh token không hợp lệ hoặc đã hết hạn." });
+            }
+
+            var userIdClaim = principal.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? principal.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+
+            if (!int.TryParse(userIdClaim, out var userId) || userId <= 0)
+            {
+                return Unauthorized(new { message = "Refresh token không chứa thông tin người dùng hợp lệ." });
+            }
+
+            var name = principal.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? string.Empty;
+            var email = principal.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? string.Empty;
+            var role = principal.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? string.Empty;
+
+            // Rotate: cấp access token mới + refresh token mới (thời hạn dài hơn).
+            var accessToken = _jwtTokenService.CreateToken(userId, name, email, role);
+            var newRefreshToken = _jwtTokenService.CreateRefreshToken(userId, name, email, role);
+
+            return Ok(new RefreshTokenResponseDto(
+                accessToken,
+                newRefreshToken,
+                "Bearer",
+                userId,
+                name,
+                email,
+                role));
         }
 
         /// <summary>

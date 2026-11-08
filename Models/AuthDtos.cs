@@ -110,6 +110,33 @@ namespace PetShop.Models
         string Email,
         string Role);
 
+    /// <summary>
+    /// Body cho endpoint làm mới access token bằng refresh token (slide Ch06 S42).
+    ///
+    /// Slide mô tả body gồm cả <c>accessToken</c> lẫn <c>refreshToken</c>.
+    /// <see cref="AccessToken"/> là **tuỳ chọn** — client có thể gửi kèm access token
+    /// cũ (đúng format slide) hoặc chỉ gửi refresh token.
+    /// </summary>
+    public sealed record RefreshTokenRequestDto(
+        [Required(ErrorMessage = "Refresh token không được để trống.")]
+        [StringLength(4000, ErrorMessage = "Refresh token không hợp lệ.")]
+        string RefreshToken,
+
+        [StringLength(4000, ErrorMessage = "Access token không hợp lệ.")]
+        string? AccessToken = null);
+
+    /// <summary>
+    /// Kết quả làm mới token — trả về access token mới và refresh token mới (rotate).
+    /// </summary>
+    public sealed record RefreshTokenResponseDto(
+        string AccessToken,
+        string RefreshToken,
+        string TokenType,
+        int UserId,
+        string Name,
+        string Email,
+        string Role);
+
     /// <summary>Thông tin người dùng đang xác thực (từ token hoặc header nội bộ).</summary>
     public sealed record CurrentUserDto(
         int UserId,

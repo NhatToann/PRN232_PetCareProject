@@ -65,10 +65,23 @@ Swagger UI: **http://localhost:5286/swagger**
 > # 2. (Khuyến nghị) Lưu secret vào User Secrets — không bao giờ lên git
 > dotnet user-secrets set "ConnectionStrings:DBDefault" "Data Source=(local);Database=SHOP_PET_Database;Integrated Security=true;TrustServerCertificate=true;Encrypt=false"
 > dotnet user-secrets set "Mail:Password" "<app-password>"
+> dotnet user-secrets set "PayOS:ClientId" "<client-id>"
+> dotnet user-secrets set "PayOS:ApiKey" "<api-key>"
 > dotnet user-secrets set "PayOS:ChecksumKey" "<checksum-key>"
+> dotnet user-secrets set "Chatbot:Providers:gemini:ApiKey" "<gemini-api-key>"
+>
+> # 3. Xem lại các secret đã lưu (KHÔNG commit output này)
+> dotnet user-secrets list
 > ```
 >
 > `UserSecretsId` đã khai báo trong `.csproj` (`petshop-prn232-local-dev`).
+> User Secrets được nạp **chỉ khi `ASPNETCORE_ENVIRONMENT=Development`** và **ghi đè** giá trị
+> trong `appsettings.json` / `appsettings.Development.json`.
+>
+> 🔒 **Q19:** `PayOS:ClientId` / `PayOS:ApiKey` / `PayOS:ChecksumKey` **KHÔNG** còn nằm trong
+> `appsettings.json` (file đó để **rỗng** cho 3 key này) cũng **KHÔNG** còn trong file test.
+> Đặt qua User Secrets là cách duy nhất — vậy `git ls-files` không bao giờ có secret.
+> Bộ test PayOS dùng **key giả cố định** ⇒ **CI chạy được không cần secret thật**.
 
 Cấu hình trong `appsettings.Development.json` (ưu tiên) hoặc `appsettings.json`:
 
@@ -263,6 +276,36 @@ curl -X POST http://localhost:5286/api/auth/token \
 curl http://localhost:5286/api/auth/me -H "Authorization: Bearer <accessToken>"
 ```
 
+### Refresh token (slide PRN232 Ch06)
+
+Khi access token hết hạn (mặc định **2 giờ**), client dùng **refresh token** (hạn **7 ngày**)
+để lấy access token mới — **không** cần đăng nhập lại.
+
+```bash
+curl -X POST http://localhost:5286/api/auth/refreshtoken \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<refreshToken>","accessToken":"<accessToken>"}'
+```
+
+```jsonc
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIs...",   // access token MỚI
+  "refreshToken": "eyJhbGciOiJIUzI1NiIs...",  // refresh token MỚI (rotate)
+  "tokenType": "Bearer",
+  "userId": 2,
+  "name": "Lê Thị B",
+  "email": "leb@petshop.com",
+  "role": "staff"
+}
+```
+
+> 🔒 **Bảo mật:** access token và refresh token dùng **cùng** key ký / issuer / audience,
+> nhưng mang claim riêng `token_type` (`"access"` vs `"refresh"`).
+> ⇒ **Access token KHÔNG dùng để refresh được** (trả `401`).
+> Body `accessToken` là **tuỳ chọn** — client có thể gửi kèm (đúng format slide) hoặc chỉ gửi `refreshToken`.
+> Mã nguồn: `Services/JwtTokenService.cs` (`CreateRefreshToken` / `ValidateRefreshToken`) +
+> `Controllers/AuthController.cs` (`POST api/auth/refreshtoken`).
+
 ### Cấu hình
 
 Trong `appsettings.Development.json` (hoặc User Secrets):
@@ -273,7 +316,8 @@ Trong `appsettings.Development.json` (hoặc User Secrets):
     "Issuer": "PetShop",
     "Audience": "PetShopClients",
     "Key": "petshop-prn232-local-dev-signing-key-32bytes-min",  // >= 32 ký tự
-    "ExpiresInMinutes": 120
+    "ExpiresInMinutes": 120,               // hạn access token (phút)
+    "RefreshTokenExpiresInMinutes": 10080  // hạn refresh token (phút) = 7 ngày
   }
 }
 ```
@@ -308,6 +352,8 @@ dotnet test
 | `WorkScheduleDedupTests.cs` | Gom dòng lịch trùng, giữ `schedule_id` nhỏ nhất, sắp xếp |
 | `AuthServiceTests.cs` | Xác thực BCrypt, migrate-on-login, tài khoản bị khoá, sai mật khẩu |
 | `JwtTokenServiceTests.cs` | Phát hành/kiểm tra JWT: claim, chữ ký sai, hết hạn, khoá quá ngắn |
+| `RefreshTokenTests.cs` | Refresh token (slide Ch06): claim `token_type`, hạn 7 ngày, **access token không dùng để refresh được**, rotate |
+| `PayOSServiceTests.cs` | HMAC-SHA256 webhook + fallback URL — dùng **key giả cố định** ⇒ CI chạy được **không cần secret thật** |
 
 ---
 

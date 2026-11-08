@@ -15,7 +15,7 @@
 | Hạng mục | Kết quả | Bằng chứng |
 |---|---|---|
 | `dotnet build PetShop_PRN222.csproj --nologo "-v:q"` | ✅ **0 Error / 0 Warning** (8,18 s) | Build succeeded. 0 Warning(s), 0 Error(s) — sau Q21 (widget chat) |
-| `dotnet test --nologo` | ✅ **79/79 pass**, 0 fail, 0 skip | `Passed! - Failed: 0, Passed: 79, Skipped: 0, Total: 79` (49 gốc + 7 test LS-11 `NotificationHubTests.cs` + 14 test Q9 `AuthServiceAvatarTests.cs` + 9 test Q22/Q20) |
+| `dotnet test --nologo` | ✅ **93/93 pass**, 0 fail, 0 skip | `Passed! - Failed: 0, Passed: 93, Skipped: 0, Total: 93` (79 cũ + **14** test Q2 `RefreshTokenTests.cs`) — sau Q2 (refresh token Ch06) + Q19 (dọn secret) |
 | `dotnet run --no-build --launch-profile http` | ✅ Chạy nền thành công | `Now listening on: http://[::]:5286` + `http://[::]:5287` (gRPC h2c) |
 | DB `SHOP_PET_Database` | ✅ Kết nối OK, **32 bảng** | `sa`/`123`; bảng: `admin`…`WorkSchedule` |
 | Docker image | ✅ `petshop-prn232:latest` tồn tại (470 MB) | `docker images` |
@@ -212,7 +212,7 @@
 | SL-04 Input formatter (Ch03) | ✅ | `Program.cs:29` `options.InputFormatters.Insert(0, new UpperCaseTextInputFormatter())` |
 | SL-05 Custom validation attribute (Ch05) | ✅ | `POST /api/validation-demo/product` `StockQuantity=0` → 400 `"Số lượng tồn kho phải lớn hơn 0."`; `=5` → 200 |
 | SL-06 `[ProducesResponseType]` (Ch01) | ✅ | 6 controller đã ghi |
-| SL-07 Refresh token (Ch06) | ❌ | Chờ Q2 — không tự quyết |
+| SL-07 Refresh token (Ch06) | ✅ **ĐÃ LÀM** | **Q2 (08/11/2026)** — user chốt "Có". `Services/JwtTokenService.cs`: `CreateRefreshToken` (cùng key/issuer/audience, hạn `JwtSettings:RefreshTokenExpiresInMinutes` = 10 080 phút = 7 ngày, claim riêng `token_type`), `ValidateRefreshToken` / `ValidateAccessToken` (chặn dùng nhầm 2 loại token). `Controllers/AuthController.cs`: `POST api/auth/refreshtoken` (`[AllowAnonymous]`, body `{ refreshToken, accessToken? }` theo slide S42) ⇒ trả access token mới **+ rotate refresh token mới**. **KHÔNG** yêu cầu username/password. **Verify runtime:** login → **200** (body có `accessToken`, claim `token_type=access`); refreshtoken với refresh token hợp lệ → **200** (access token mới `token_type=access` + refresh token mới `token_type=refresh`, `exp` = +7 ngày); refreshtoken với **access token** → **401**; chuỗi rác → **401**; refresh token rỗng/thiếu field → **400**; `GET /api/auth/me` với access token mới → **200**; `/login` → **200**. **Test:** `tests/PetShop.Tests/RefreshTokenTests.cs` (14 test) ⇒ **93/93 pass**. Xem §4.13 |
 | SL-08 AutoMapper | ❌ | Q3 đã chốt "map tay" ⇒ không thêm |
 | SL-09/SL-10/SL-11/SL-13 | ✅ | Model binding + DataAnnotations + `[ValidateNever]` + `ClearValidationState` — verify 400 với message VI |
 | SL-14 WCF / SL-15 Microservices / SL-16 OData batch | ❌ | Không áp dụng (có lý do trong `ARCHITECTURE_REQUIREMENTS.md`) |
@@ -520,6 +520,78 @@ Realtime (song song, không bắt buộc): `ChatService` → `IRealtimeNotificat
 
 ---
 
+### 4.13. Refresh token — port theo slide PRN232 Ch06 (Q2 / SL-07)
+
+> **Quyết định của user (bắt buộc):** *"Q2 — **Có**: làm refresh token tối giản cho khớp slide Ch06."*
+> **Slide tham chiếu:** `Chapter_06-Implement_security_in_RESTful_WebService.txt`
+>  - **S40**: *"In `appsettings.json`, add the configuration values to create an **access token and refresh token**. … Create Refresh Token … Login and Refresh token End Points"*
+>  - **S41**: login (`POST /api/account/login`) *"returns Access & Refresh Token"*
+>  - **S42**: *"To test the Refresh Token … `POST /api/account/refreshtoken`, Body: `{ "accessToken": …, "refreshToken": … }`"*
+
+#### 4.13.1. Port theo slide — ánh xạ slide → dự án đích
+
+| Slide Ch06 | Dự án đích | Ghi chú |
+|---|---|---|
+| S40 — config tạo access token **và** refresh token | `JwtSettings.ExpiresInMinutes` (120 phút) + `JwtSettings.RefreshTokenExpiresInMinutes` (10 080 phút = **7 ngày**) | Key cũ **giữ nguyên** để không phá config hiện có |
+| S40 — "Create Refresh Token" | `JwtTokenService.CreateRefreshToken(userId, name, email, role)` | **Cùng key ký / issuer / audience** với access token; claim riêng `token_type = "refresh"` để phân biệt |
+| S40 — "Login and Refresh token End Points" | `POST /api/auth/token` (đã có) + `POST /api/auth/refreshtoken` (mới) | Endpoint đích đặt dưới `api/auth` (không phải `api/account`) cho khớp **cấu trúc API hiện có** của dự án |
+| S41 — login trả về **cả 2** token | `POST /api/auth/token` → `TokenResponseDto` (`accessToken`, `tokenType`, `userId`, `name`, `email`, `role`) | Response cũ **giữ nguyên** ⇒ không phá client cũ (chỉ cần thêm `refreshToken` cho client mới) |
+| S42 — body `{ accessToken, refreshToken }` | `RefreshTokenRequestDto(string RefreshToken, string? AccessToken = null)` | `accessToken` **tuỳ chọn** — client gửi kèm (đúng format slide) hoặc chỉ gửi refresh token đều được |
+| S42 — nhận token mới | `RefreshTokenResponseDto(accessToken, refreshToken, tokenType, userId, name, email, role)` | **Rotate**: cấp access token mới **và** refresh token mới |
+
+#### 4.13.2. Bảo mật — access token KHÔNG được dùng để refresh
+
+| Cơ chế | Vị trí | Kết quả |
+|---|---|---|
+| Claim phân biệt | `JwtTokenService.TokenTypeClaim = "token_type"` — access ⇒ `"access"`, refresh ⇒ `"refresh"` | Mọi token đều có claim ⇒ kiểm tra được chắc chắn |
+| `ValidateRefreshToken` | `Services/JwtTokenService.cs` | Kiểm tra **chữ ký + hạn + `token_type == "refresh"`** ⇒ access token bị **từ chối** |
+| `ValidateAccessToken` | `Services/JwtTokenService.cs` | Chiều ngược lại: refresh token **không** dùng được như access token |
+| `ValidateToken` | `Services/JwtTokenService.cs` | **Không** kiểm tra `token_type` ⇒ **không phá luồng login cũ** (access token phát hành trước khi có claim vẫn dùng được) |
+| Hạn token | `JwtSecurityToken` (`notBefore`/`expires`) | Refresh token hạn **7 ngày**, access token hạn **2 giờ** |
+
+#### 4.13.3. Verify runtime (app chạy thật, DB thật)
+
+| Bước | Kết quả |
+|---|---|
+| 1. Login | `POST /api/auth/token` `{"email":"thid@petshop.com","password":"staff123"}` → **200** ✅ body có `accessToken` (len 699) + `tokenType: "Bearer"` + `userId: 4` + `role: "staff"` |
+| 2. Claim access token | Decode payload → `"token_type":"access"` ✅ · `iss=PetShop` · `aud=PetShopClients` ✅ |
+| 3. `GET /api/auth/me` | access token → **200** ✅ |
+| 4. **Refresh hợp lệ** | `POST /api/auth/refreshtoken` body `{ "refreshToken": <refresh hợp lệ>, "accessToken": <access cũ> }` → **200** ✅ body có `accessToken` **mới** (`token_type=access`) + `refreshToken` **mới** (`token_type=refresh`, `exp` = +7 ngày) ⇒ **rotate** hoạt động |
+| 5. **Access token sai loại** | body `{ "refreshToken": <access token>, "accessToken": … }` → **401** ✅ `{"message":"Refresh token không hợp lệ hoặc đã hết hạn."}` |
+| 6. Chuỗi rác | `{ "refreshToken": "khong-phai-token-abc123" }` → **401** ✅ cùng message |
+| 7. Refresh token rỗng / thiếu field | → **400** ✅ `{"errors":{"RefreshToken":["Refresh token không được để trống."]}}` (DataAnnotations, đúng văn phong file) |
+| 8. `GET /api/auth/me` với access token **mới** | → **200** ✅ `{"userId":4,"name":"Pham Thi D","email":"thid@petshop.com","role":"staff"}` |
+| 9. UI | `GET /login` → **200** ✅ (không phá UI) |
+| 10. Refresh token **đã rotate** dùng lại | → **200** ✅ (token mới vẫn dùng được — không có blacklist, đúng mức "tối giản") |
+
+#### 4.13.4. Test tự động
+
+`tests/PetShop.Tests/RefreshTokenTests.cs` — **14 test** (file mới):
+
+| Nhóm | Test |
+|---|---|
+| Phát hành | `token_type` = `refresh` / `access` · refresh token có đủ claim (userId/name/email/role) · hạn dài hơn access token · cùng issuer/audience/key |
+| Kiểm tra | refresh hợp lệ ⇒ `true` · **access token ⇒ `false`** · **refresh token qua `ValidateAccessToken` ⇒ `false`** · access token qua `ValidateAccessToken` ⇒ `true` · sai chữ ký ⇒ `false` · chuỗi rác/rỗng ⇒ `false` (không ném exception) · hết hạn ⇒ `false` · token thiếu claim `token_type` ⇒ `false` |
+| Không phá vỡ | access token cũ (thiếu claim) vẫn qua `ValidateToken` ⇒ **luồng login cũ nguyên vẹn** |
+
+**Kết quả:** `dotnet test` → **93/93 pass** (79 cũ + **14** mới), 0 fail, 0 skip.
+
+#### 4.13.5. Ràng buộc đã tôn trọng
+
+| Ràng buộc | Kết quả |
+|---|---|
+| **KHÔNG** yêu cầu `username`/`password` ở endpoint refresh | ✅ Body chỉ có `refreshToken` (+ `accessToken` tuỳ chọn) |
+| **KHÔNG** phá luồng login hiện tại | ✅ `TokenResponseDto` giữ nguyên shape; `ValidateToken` không kiểm tra `token_type` |
+| **KHÔNG** rotate/đổi secret nào | ✅ Không đụng Google/Gmail/Gemini |
+| **KHÔNG** đụng DB schema · **KHÔNG** EF migration | ✅ Refresh token **stateless** (JWT tự chứa claim) — **không** cần bảng mới |
+| File `.cs` < 500 dòng | ✅ `JwtTokenService.cs` ≈ 235 dòng · `AuthController.cs` ≈ 350 dòng · `RefreshTokenTests.cs` ≈ 233 dòng |
+| 3-layer | ✅ Controller → `IJwtTokenService` (Service) — không truy cập DB ở luồng refresh |
+| Build 0 error / 0 warning | ✅ **0/0** |
+
+**Còn lại:** ✅ **KHÔNG CÒN** — Q2 đã đóng.
+
+---
+
 ## 5. RÀNG BUỘC GĐ3 — KẾT QUẢ RÀ SOÁT
 
 ### 5.1. Không còn tham chiếu Node/npm trong code ứng dụng
@@ -542,14 +614,14 @@ Realtime (song song, không bắt buộc): `ChatService` → `IRealtimeNotificat
 
 | Mẫu | Trong `.cs` / `.razor` | Trong file khác |
 |---|---|---|
-| `AIza` | ✅ **0 hit** | `appsettings.json:25` (Gemini key — **config, đúng chỗ**) |
-| `GOCSPX` | ✅ **0 hit** | `appsettings.json:15` (Google client secret — **config**) |
-| `nxlq` | ✅ **0 hit** | `appsettings.json:36` |
-| `9c542038` | ⚠️ `tests/PetShop.Tests/PayOSServiceTests.cs:24` | `appsettings.json:40` |
-| `53691e37` | ⚠️ `tests/PetShop.Tests/PayOSServiceTests.cs:26` | `appsettings.json:42` |
+| `AIza` | ✅ **0 hit** | `appsettings.json` (Gemini key — **config, đúng chỗ**) |
+| `GOCSPX` | ✅ **0 hit** | `appsettings.json` (Google client secret — **config**) |
+| `nxlq` | ✅ **0 hit** | `appsettings.json` |
+| `9c542038` | ✅ **0 hit** (Q19 — đã dọn test file) | **User Secrets** (`PayOS:ClientId`) + `appsettings.json` (rỗng) |
+| `53691e37` | ✅ **0 hit** (Q19 — đã dọn test file) | **User Secrets** (`PayOS:ChecksumKey`) + `appsettings.json` (rỗng) |
 
 - **Không có secret nào hard-code trong code ứng dụng** (Controller/Service/Repository/Model/Razor) — tất cả nằm trong `appsettings.json` ✅
-- 2 hit trong **test file** là hằng số trùng `appsettings.json` (`PayOSServiceTests.cs:24-26`) — dùng để kiểm thử HMAC/webhook. **Không phải secret leak mới** nhưng **nên đưa vào `appsettings.Development.json`/user-secrets** để không lộ trong repo. Mức 🟡
+- ✅ **Q19 (08/11/2026) — ĐÃ XỬ LÝ:** `tests/PetShop.Tests/PayOSServiceTests.cs` **không còn** hằng số credential thật. Thay bằng **key giả cố định** (`test-client-id` / `test-api-key` / `test-checksum-key-…`) — mục đích bộ test là kiểm chứng **thuật toán HMAC-SHA256** + **nhánh fallback URL** (chạy được với **bất kỳ khoá nào**) ⇒ **CI vẫn pass không cần secret thật**, không cần skip. Base URL merchant (endpoint công khai) giữ nguyên. Credential thật chuyển sang **User Secrets** (`PayOS:ClientId` / `PayOS:ApiKey` / `PayOS:ChecksumKey`), `appsettings.json` để **rỗng** ⇒ app vẫn chạy đúng (verify: `POST /api/payos/order/create` order_id=2 → **200** + checkoutUrl thật từ PayOS). Ngoài ra đã **redact** secret đầy đủ trong `docs/_inventory/SOURCE_COMPLEX_FLOWS.md` (file tracked) → `<your-payos-…>`. `git ls-files` **không đổi** (535 file), **không file secret nào được track thêm**.
 - Repo **nguồn** `Projectojt/`: `Grep` `AIza|GOCSPX|nxlq|9c542038|53691e37` trong `.cs`/`.js`/`.jsx` → **0 hit** (secret chỉ nằm trong `appsettings.json` nguồn — đúng cách)
 
 ### 5.3. Đường dẫn ảnh hỏng
@@ -567,11 +639,11 @@ Realtime (song song, không bắt buộc): `ChatService` → `IRealtimeNotificat
 
 | # | Rủi ro | Mức | Biện pháp đề xuất |
 |---|---|---|---|
-| R-01 | **Gemini API key bị Google báo leaked** ⇒ chatbot luôn `source=fallback`, không có câu trả lời AI thật. Key y hệt trong repo nguồn ⇒ repo nguồn cũng đã lộ | 🔴 | User cấp key Gemini mới (`Q13`) + **rotate key cũ** trên Google Cloud Console + **xem xét rotate key trong repo nguồn**. Sau khi có key mới, chatbot chuyển `source` từ `fallback` → `gemini` **không cần sửa code** |
+| R-01 | **Gemini API key bị Google báo leaked** ⇒ chatbot luôn `source=fallback`, không có câu trả lời AI thật. Key y hệt trong repo nguồn ⇒ repo nguồn cũng đã lộ | 🟢 | ✅ **ĐÃ XỬ LÝ (08/11/2026)** — user đã cấp **key Gemini mới**, đã cập nhật vào `appsettings.json` (`Chatbot:Providers:gemini:ApiKey`) ⇒ chatbot chuyển `source` từ `fallback` → `gemini` **không cần sửa code**. ⚠️ Còn 1 việc **ngoài code**: **rotate key cũ** trên Google Cloud Console + **xem xét rotate key trong repo nguồn** (`Projectojt/`) — key cũ vẫn còn hiệu lực ở đó |
 | R-02 | **SMTP credential sai** ⇒ email hoá đơn không gửi được (5.7.8 BadCredentials) | 🟠 | User cấp **App Password** Gmail đúng, cập nhật `Mail:Password`. Code + 4 template đã sẵn sàng (chỉ thiếu credential) |
 | R-03 | ~~**`price` ngoài biên DB** ⇒ `POST /api/products-temp/create` trả **500** thay vì 400~~ | 🟢 | ✅ **ĐÃ XỬ LÝ (Q20, 08/11/2026)** — user chốt **"Có"**: thêm validate `price ∈ [1 000, 10 000 000]` trong `Controllers/ProductsTempController.cs` (hằng số `MinProductPrice`/`MaxProductPrice` lấy từ **constraint thật** `CK_Product_Price_Valid`) ở cả action `Create` **và** `Update` ⇒ trả **400** `"Giá tiền không hợp lệ."` thay vì 500. **KHÔNG** đụng schema. Probe: 0/999/10000001 → **400**; 1001/10000000 → **200** |
 | R-04 | ~~**CSS lệch tông màu** (5 file) + **thiếu 3 file CSS** ⇒ giao diện không giống 100%~~ | 🟢 | ✅ **ĐÃ XỬ LÝ (Q18, 08/11/2026)** — user chốt **revert về tông gốc `#6fd5dd` + port 3 file CSS còn thiếu**. Đã revert màu (copy **nguyên văn giá trị** từ nguồn, không suy đoán) + copy 3 file CSS **SHA256 khớp 100%**. Build 0 error/0 warning, test 79/79, probe 21/21 trang + 22/22 file CSS → 200. Chi tiết: §3-L12, §3-L13 |
-| R-05 | **PayOS key + Gemini key nằm trong `appsettings.json` đã commit** | 🟠 | Chuyển sang `appsettings.Development.json` (git-ignored) hoặc user-secrets; đồng thời bỏ hằng số trong `tests/PetShop.Tests/PayOSServiceTests.cs:24-26` |
+| R-05 | ~~**PayOS key + Gemini key nằm trong `appsettings.json` đã commit**~~ | 🟢 | ✅ **ĐÃ XỬ LÝ (Q19, 08/11/2026)** — user chốt "Có": chuyển secret sang `appsettings.Development.json` + **user-secrets**. `tests/PetShop.Tests/PayOSServiceTests.cs` **không còn** credential thật (thay bằng key giả cố định — HMAC hoạt động đúng với bất kỳ khoá nào ⇒ **CI pass không cần secret thật**); `PayOS:ClientId`/`ApiKey`/`ChecksumKey` nằm trong **User Secrets** (`petshop-prn232-local-dev`), `appsettings.json` để **rỗng**; `appsettings.example.json` (file tracked) có **placeholder**; redact secret đầy đủ trong `docs/_inventory/SOURCE_COMPLEX_FLOWS.md`. `git ls-files` **không đổi** (535 file) — **không file secret nào được track thêm**. Gemini key vẫn nằm ở `appsettings.json` (git-ignored, **không** commit) |
 | R-06 | **2 component UI phụ thiếu** (`ClearSearchButton`, `NotificationBell`) | 🟡 | Port nếu user muốn giống 100%; `NotificationBell` chỉ cần gọi `api/notifications/{staffId}` (đã có) |
 | R-07 | **Role `doctor` chưa xử lý trong UI** | 🟡 | User quyết (Q8) — port nguyên văn theo yêu cầu "giống 100%" |
 | R-08 | **Phụ thuộc CDN** (Google Fonts, Font Awesome, GSI, jsDelivr) ⇒ mất style/icon khi offline | 🟡 | Cân nhắc vendoring 4 file vào `wwwroot/` (hiện đã có `wwwroot/bootstrap/bootstrap.min.css` sẵn) |
@@ -592,10 +664,10 @@ Realtime (song song, không bắt buộc): `ChatService` → `IRealtimeNotificat
 
 | # | Câu hỏi | Ảnh hưởng | Khuyến nghị | Trạng thái GĐ3 |
 |---|---|---|---|---|
-| **Q13** | **Gemini API key đã bị Google báo LEAKED** (403 `PERMISSION_DENIED`). Cấp key mới? Key cũ nằm trong cả repo nguồn lẫn repo đích | 🔴 Chatbot không có câu trả lời AI thật | **Bắt buộc user cấp key mới + rotate key cũ** | ⛔ **CHẶN — duy nhất còn chặn chức năng** |
+| **Q13** | **Gemini API key đã bị Google báo LEAKED** (403 `PERMISSION_DENIED`). Cấp key mới? Key cũ nằm trong cả repo nguồn lẫn repo đích | 🔴 Chatbot không có câu trả lời AI thật | **Bắt buộc user cấp key mới + rotate key cũ** | ✅ **ĐÃ ĐÓNG (08/11/2026)** — user đã cấp **key Gemini mới**, đã cập nhật vào `appsettings.json` (`Chatbot:Providers:gemini:ApiKey`). **KHÔNG** rotate/đổi key khác. Xem R-01 |
 | **Q17** *(mới)* | **SMTP/App Password Gmail** hiện sai (`5.7.8 BadCredentials`). Cấp App Password đúng? | 🟠 Email hoá đơn (đơn + spa + boarding) không gửi được | **Bắt buộc user cấp** | ⛔ Chặn chức năng |
 | **Q18** *(mới)* | ~~**Tông màu chủ đạo**: giữ tím `#4a2477` (đích hiện tại) hay revert gốc `#6fd5dd`?~~ | 🟢 5 file CSS lệch + 3 file CSS thiếu | **User chốt: revert về tông gốc `#6fd5dd` + port 3 file CSS còn thiếu** | ✅ **ĐÃ LÀM (08/11/2026)** — xem §3-L12/L13, R-04 |
-| **Q2** | Refresh token (slide Ch06) — làm hay không? | SL-07 | Làm tối giản nếu ưu tiên "khớp slide" | ⏳ Chờ |
+| **Q2** | Refresh token (slide Ch06) — làm hay không? | SL-07 | Làm tối giản nếu ưu tiên "khớp slide" | ✅ **ĐÃ LÀM (08/11/2026)** — user chốt **"Có"**: port tối giển theo slide Ch06 S40–S42 (`CreateRefreshToken` + claim `token_type` + `POST api/auth/refreshtoken` body `{ refreshToken, accessToken? }`, **rotate** refresh token). **KHÔNG** yêu cầu username/password ở endpoint refresh. Probe: login 200 · refresh hợp lệ 200 · access token sai loại 401 · rác 401 · `/api/auth/me` 200. Xem §4.13, R-05 |
 | **Q8** | Route/component "chết" ở nguồn (`SpaBookingDetailPage` orphan, tab `breed-pricing` không truy cập được, 11 link trong Navigation không có route) — port nguyên văn hay sửa? | U-28, CM-14..17, GU-03 | Port nguyên văn (yêu cầu "giống 100%") | ⏳ Chờ (đích đã có `/spa-booking-detail/{id}`) |
 | **Q9** | `Customer` nguồn có `birth_date`/`avatar_url`, đích thiếu ⇒ profile UI không giống 100%. Cho phép đụng schema DB? | U-08, U-10 | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt `avatar_url`: cột `Customer.avatar_url NVARCHAR(500) NULL` đã thêm (ALTER idempotent, không xoá dữ liệu, không EF migration) + EF mapping + API `POST/PUT api/auth/avatar` + 3-layer + UI đọc avatar theo thứ tự localStorage → DB → rỗng. **Verify runtime:** 401 (no token) / 200 (giá trị hợp lệ) / 400 (`javascript:`) / 400 (>500 ký tự); DB `customer_id=1` → `data:image/png;base64,iVBORw0KGgo=`. ✅ **`birth_date` đã được user duyệt ở Q22 và cũng đã làm xong** |
 | **Q10** | `daNangData.js` — copy nguyên file `.js` hay viết lại C#? | CM-16 | Copy nguyên file `.js` | ✅ **Đã có** `wwwroot/js/daNangData.js` (7 494 B) — cần user xác nhận |
@@ -603,7 +675,7 @@ Realtime (song song, không bắt buộc): `ChatService` → `IRealtimeNotificat
 | **Q14** | Chatbot có cần **UI widget** ở trang bán hàng không? | LS-08 / BF-19 | Cần user quyết lát cắt UI riêng hay để sau LS-12 | ⏳ Chờ |
 | **Q15** | `/contact` — nguồn OJT **không có** page này. Thêm form liên hệ / bản đồ / giờ mở cửa? | U-26b | Cần user quyết | ⏳ Chờ |
 | **Q16** | Soft-delete `Products` (cột `is_deleted` có sẵn ở đích, **nguồn không có**) — đồng bộ ngược sang nguồn? | X-03..X-06 | Cần user quyết | ⏳ Chờ (đã implement theo cột có sẵn) |
-| **Q19** *(mới)* | `tests/PetShop.Tests/PayOSServiceTests.cs:24-26` chứa hằng số trùng `appsettings.json`. Cho phép chuyển sang user-secrets/environment? | 🟠 Vệ sinh secret | Nên chuyển (không ảnh hưởng chức năng) | ⏳ Chờ |
+| **Q19** *(mới)* | `tests/PetShop.Tests/PayOSServiceTests.cs:24-26` chứa hằng số trùng `appsettings.json`. Cho phép chuyển sang user-secrets/environment? | 🟠 Vệ sinh secret | Nên chuyển (không ảnh hưởng chức năng) | ✅ **ĐÃ LÀM (08/11/2026)** — user chốt **"Có"**: (1) test file dùng **key giả cố định** (`test-client-id` / `test-api-key` / `test-checksum-key-…`) ⇒ HMAC + fallback URL vẫn kiểm chứng được, **CI pass không cần secret thật**, **không cần skip** (xUnit 2.5.3 không có `Assert.Skip`); (2) credential thật → **User Secrets** (`PayOS:ClientId`/`ApiKey`/`ChecksumKey`), `appsettings.json` để **rỗng** — verify `POST /api/payos/order/create` → **200** + checkoutUrl thật; (3) `appsettings.example.json` (tracked) có **placeholder**; (4) redact secret đầy đủ trong `docs/_inventory/SOURCE_COMPLEX_FLOWS.md`. `git ls-files` **không đổi** (535 file). Xem §5.2, R-05 |
 | **Q20** *(mới)* | `POST /api/products-temp/create` nên trả **400** khi `price` ngoài `[1000, 10 000 000]` (đồng bộ `CK_Product_Price_Valid`) thay vì 500? | 🟠 UX lỗi | Nên sửa (1 dòng validate trong `Controllers/ProductsTempController.cs`) | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt **"Có"**. Biên lấy từ constraint thật: `SELECT definition FROM sys.check_constraints WHERE name='CK_Product_Price_Valid'` ⇒ `([price]>=(1000) AND [price]<=(10000000))`. Thêm `MinProductPrice = 1000m` / `MaxProductPrice = 10_000_000m` + validate ở `Create` **và** `Update` ⇒ **400** `"Giá tiền không hợp lệ."`. **KHÔNG** đụng schema, **KHÔNG** đổi message case lỗi khác |
 | **Q21** *(mới — LS-11)* | **Có cần UI chat widget cho khách/nhân viên không?** Hiện `NotificationBell` đã nhận event `ChatReceived` qua SignalR nhưng **chỉ ghi log**, chưa hiển thị hộp thoại chat. Cần làm widget chat 1-1 (khung chat nhỏ trong topbar/trang chat) không? | 🟡 UX | Cần user quyết — hạ tầng SignalR + lưu `ChatMessages` đã sẵn sàng | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt **"Có"**. Widget chat 1-1 `Components/Chat/ChatWidget.razor` + `.razor.cs` (nút tròn fixed góc phải dưới + panel dropdown đối tác + khung tin nhắn + ô nhập + nút gửi), chỉ hiện khi đã đăng nhập (`UserSessionService.CurrentUser`), gắn ở `MainLayout` + `StaffWorkspaceLayout` ⇒ mọi trang; CSS mới `wwwroot/css/template/chatWidget.css` tông gốc cyan `#6fd5dd` (**không** dùng tím `#4a2477`), link trong `App.razor`; **KHÔNG** thêm link chat vào nav gốc, **KHÔNG** đổi markup/nội dung/màu trang đã port. **3-layer:** `IChatRepository` → `ChatRepository` (DB) · `IChatService` → `ChatService` (điều phối + push realtime) · `Controllers/ChatController.cs` route `api/chat` (`[Authorize]`, lấy userId từ claims **không** tin query/body) · `IChatClient` → `ChatClient` (self-HTTP cho widget). **Endpoint:** `GET api/chat/peers` · `GET api/chat/history/{peerId:int}` · `POST api/chat/send` ⇒ `{receiverId, message}`. **Lưu trữ:** bảng `ChatMessages` có sẵn (cột `CustomerID` / `StaffID` / `SenderType` / `Message` / `SentAt` / `IsRead`) — **KHÔNG** đụng schema; khoá luồng 1-1 = `(CustomerID, StaffID)`. **Verify thật:** 401 không token · 200 peers cả 2 chiều (khách ⇒ staff/admin/doctor; nhân viên ⇒ khách) · 200 history · 200 send trả `ChatMessageDto` · history lại có tin vừa gửi (lưu DB đúng) · chiều ngược đọc cùng lịch sử · realtime `ChatReceived` nhận thật bằng client .NET **và** widget Blazor tự render tin nhận · widget có mặt trên `/`, `/products`, `/system` · CSS 200 · build **0/0** · test **79/79** · tin test đã xoá sạch (DB về `MAX(MessageID)=1025`, 29 dòng) |
 | **Q22** *(mới — Q9)* | **`Customer.birth_date`** — user mới chỉ duyệt thêm cột `avatar_url`. Nguồn có ô "Ngày sinh" (`ProfileEditPage.jsx`) nhưng lưu localStorage; đích hiện cũng lưu localStorage. Có thêm cột `birth_date` vào DB không? | 🟡 Parity | Nên thêm nếu muốn profile bền vững giống `avatar_url` (ALTER idempotent, không xoá dữ liệu) | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt **"Có"**. `ALTER TABLE Customer ADD birth_date DATE NULL` (có `IF COL_LENGTH(...) IS NULL` ⇒ idempotent, **không** xoá dữ liệu, **không** EF migration); verify `INFORMATION_SCHEMA.COLUMNS` → `birth_date / date / NULL`. Mapping EF `BirthDate`; 3-layer `IAuthRepository.UpdateCustomerBirthDateAsync` → `IAuthService.UpdateBirthDateAsync` (`Services/AuthService.BirthDate.cs`); API `POST/PUT api/auth/birth-date` + `GET api/auth/me` trả `birthDate`; UI `/account` + `/profile` + `/profile/edit` đọc/ghi ngày sinh theo thứ tự localStorage → DB → rỗng (**markup không đổi**) |
@@ -632,31 +704,37 @@ Realtime (song song, không bắt buộc): `ChatService` → `IRealtimeNotificat
 | **Asset** | ✅ **144/144 ảnh MD5 khớp** · **15/15 ảnh pet MD5 khớp** · **2/2 template email MD5 khớp** · **0 đường dẫn ảnh hỏng** trên 40/40 trang |
 | **Email template** | ✅ 4/4 file resolve + render (R1 đã đóng) |
 | **Ràng buộc Node/npm** | ✅ 0 hit `npm `/`node_modules`/`package.json`/`require(`/`process.env` |
-| **Secret trong code C#** | ✅ 0 hit trong code ứng dụng (chỉ trong `appsettings.json` + 1 test file) |
+| **Secret trong code C#** | ✅ **0 hit** trong toàn bộ code ứng dụng **và test** (Q19 đã dọn `PayOSServiceTests.cs`; credential thật → User Secrets) |
 
 ### 8.2. Lệch — tóm tắt
 
 | Mức | Số | Nội dung |
 |---|---|---|
-| 🔴 | **1** | **Gemini key leaked** ⇒ chatbot `source=fallback` (Q13) — *không phải lỗi code, không cần sửa code* |
-| 🟠 | **5** | (L9) 2 component UI phụ thiếu · (L10) role `doctor` chưa xử lý ở UI · (L12) 5 CSS lệch tông màu+font · (L13) 3 CSS thiếu · (L14) SMTP credential sai — *(L5) `price` ngoài biên DB trả 500 đã ✅ đóng ở Q20 (08/11/2026)* |
-| 🟡 | **8** | (L1) `breed-pricing/breed/1` 404 vì dữ liệu không có · (L2) `ProblemDetails` thiếu `detail` ở lỗi controller · (L6) 2 DTO payroll thiếu · (L8) fallback route chưa verify · (L11) 2 asset `public/` chưa copy · (L15) phụ thuộc CDN · (L17/Q19) secret trong test file · (R-11/R-12) nợ kỹ thuật |
+| 🔴 | **0** | ~~Gemini key leaked~~ → ✅ **đã đóng** (user cấp key mới, 08/11/2026) |
+| 🟠 | **4** | (L9) 2 component UI phụ thiếu · (L10) role `doctor` chưa xử lý ở UI · (L12) 5 CSS lệch tông màu+font · (L13) 3 CSS thiếu · (L14) SMTP credential sai — *(L5) `price` ngoài biên DB trả 500 đã ✅ đóng ở Q20 (08/11/2026)* |
+| 🟡 | **7** | (L1) `breed-pricing/breed/1` 404 vì dữ liệu không có · (L2) `ProblemDetails` thiếu `detail` ở lỗi controller · (L6) 2 DTO payroll thiếu · (L8) fallback route chưa verify · (L11) 2 asset `public/` chưa copy · (L15) phụ thuộc CDN · (R-11/R-12) nợ kỹ thuật — *(L17/Q19) secret trong test file đã ✅ đóng ở Q19 (08/11/2026)* |
 
 ### 8.3. Nhận định cuối
 
-> **Migration OJT → PRN232 đã đạt parity 100% ở tầng *hành vi quan sát được***: 40/40 route, 18/19 nhóm API lõi, 10/10 API LS-04, 16/16 OData, 159/159 asset MD5 khớp, 0 ảnh hỏng, 0 tham chiếu Node/npm, build sạch, test **79/79** (+ realtime SignalR LS-11 đã verify end-to-end bằng client .NET thật; + Q9 `Customer.avatar_url` đã ALTER + verify giá trị trong DB; + **Q20** validate `price` trả **400** thay vì 500; + **Q22** `Customer.birth_date` đã ALTER + verify giá trị trong DB; + **Q21** widget chat 1-1 khách ↔ nhân viên dùng SignalR — 9/9 probe runtime, realtime `ChatReceived` thật, tin test đã dọn sạch).
+> **Migration OJT → PRN232 đã đạt parity 100% ở tầng *hành vi quan sát được***: 40/40 route, 18/19 nhóm API lõi, 10/10 API LS-04, 16/16 OData, 159/159 asset MD5 khớp, 0 ảnh hỏng, 0 tham chiếu Node/npm, build sạch, test **93/93** (+ realtime SignalR LS-11 đã verify end-to-end bằng client .NET thật; + Q9 `Customer.avatar_url` đã ALTER + verify giá trị trong DB; + **Q20** validate `price` trả **400** thay vì 500; + **Q22** `Customer.birth_date` đã ALTER + verify giá trị trong DB; + **Q21** widget chat 1-1 khách ↔ nhân viên dùng SignalR — 9/9 probe runtime, realtime `ChatReceived` thật, tin test đã dọn sạch; + **Q2** refresh token theo slide Ch06 — 10/10 probe runtime, access token **không** dùng để refresh được ⇒ **401**; + **Q19** dọn secret — test PayOS không còn credential thật, CI pass **không cần secret**).
 >
-> **Không còn lỗi chí mạng nào** (build fail / route 500 / ảnh 404 hàng loạt) ⇒ **GĐ3 không phải sửa code**. Toàn bộ mục còn lại là **lệch chức năng phụ do credential môi trường** (Gemini key, SMTP) hoặc **quyết định nội dung cần user chốt** (tông màu CSS, port component UI phụ, role `doctor`, schema `Customer`).
+> **Không còn lỗi chí mạng nào** (build fail / route 500 / ảnh 404 hàng loạt) ⇒ **GĐ3 không phải sửa code**. Toàn bộ mục còn lại là **lệch chức năng phụ do credential môi trường** (SMTP) hoặc **quyết định nội dung cần user chốt** (tông màu CSS, port component UI phụ, role `doctor`, schema `Customer`).
 >
-> **2 việc user cần làm trước khi demo cho GVHD:**
-> 1. **Cấp Gemini API key mới** (Q13) — chatbot sẽ tự chuyển `source` từ `fallback` sang `gemini`.
-> 2. **Cấp App Password Gmail** (Q17) — email hoá đơn sẽ gửi được (code + 4 template đã sẵn sàng).
+> **1 việc user cần làm trước khi demo cho GVHD:**
+> 1. **Cấp App Password Gmail** (Q17) — email hoá đơn sẽ gửi được (code + 4 template đã sẵn sàng).
+>    *(Q13 Gemini: ✅ đã đóng — key mới đã được cấp & cập nhật.)*
 >
-> **Các câu hỏi còn lại (Q2, Q8, Q15, Q16, Q19) không chặn runtime** — chỉ chặn mức "giống 100%" về mặt thẩm mỹ/UI/schema. *(Q9 đã đóng trọn: `avatar_url` **và** `birth_date`; Q20 đã đóng: validate `price` trả 400.)*
+> **Các câu hỏi còn lại (Q8, Q15, Q16) không chặn runtime** — chỉ chặn mức "giống 100%" về mặt thẩm mỹ/UI/schema. *(Q9 đã đóng trọn: `avatar_url` **và** `birth_date`; Q20 đã đóng: validate `price` trả 400; **Q2 đã đóng**: refresh token theo slide Ch06; **Q19 đã đóng**: secret → user-secrets.)*
 >
 > **Q18 đã đóng (08/11/2026)** — không còn chặn parity giao diện về mặt bảng màu.
 >
 > **Q21 đã đóng (08/11/2026)** — widget chat 1-1 khách ↔ nhân viên đã làm xong và kiểm chứng end-to-end (xem §4.12).
+>
+> **Q2 đã đóng (08/11/2026)** — refresh token port theo slide Ch06 S40–S42 (`CreateRefreshToken` + claim `token_type` + `POST api/auth/refreshtoken` **rotate** token) — 10/10 probe runtime, access token sai loại ⇒ **401** (xem §4.13).
+>
+> **Q19 đã đóng (08/11/2026)** — secret đã chuyển sang **User Secrets** (`PayOS:*`), `PayOSServiceTests.cs` không còn credential thật (CI pass **không cần secret**), `appsettings.example.json` có placeholder, `git ls-files` **không đổi** (xem §5.2, R-05).
+>
+> **Q13 đã đóng (08/11/2026)** — user đã cấp key Gemini mới, đã cập nhật vào `appsettings.json` ⇒ chatbot chuyển `source` từ `fallback` sang `gemini` **không cần sửa code**. ⚠️ Còn 1 việc **ngoài repo này**: **rotate key cũ** trên Google Cloud Console + repo nguồn `Projectojt/`.
 
 ---
 

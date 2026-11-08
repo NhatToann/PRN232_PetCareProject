@@ -443,12 +443,17 @@ NGHIÊM CẤM: Không bịa sản phẩm/dịch vụ không có trong danh sách
 
 ```json
 "PayOS": {
-  "ClientId": "9c542038-8807-4b08-9b24-7d2488adee83",
-  "ApiKey": "98d99528-df9b-4773-8e72-47b4a055c2a2",
-  "ChecksumKey": "53691e37ddf683daa7d356472d3df97f8452f2d941bf11adc8ac2e484b5154c1",
+  "ClientId": "<your-payos-client-id>",
+  "ApiKey": "<your-payos-api-key>",
+  "ChecksumKey": "<your-payos-checksum-key>",
   "BaseUrl": "https://api-merchant.payos.vn/v2"
 }
 ```
+
+> 🔒 **Q19 (08/11/2026):** credential thật **KHÔNG** còn nằm trong file tài liệu này.
+> Đặt qua User Secrets (`dotnet user-secrets set "PayOS:ClientId" "…"`) hoặc
+> `appsettings.Development.json` (git-ignored) — xem README § Cấu hình & secret.
+
 
 `Models/PayOSOptions.cs`:
 
@@ -867,11 +872,15 @@ Gửi OTP thất bại: {ex.Message}
   "SmtpHost": "smtp.gmail.com",
   "SmtpPort": "587",
   "SecureSocketOptions": "StartTls",
-  "Username": "darklunatv@gmail.com",
-  "Password": "nxlq byev rclt cztb",
-  "From": "darklunatv@gmail.com"
+  "Username": "your@gmail.com",
+  "Password": "<gmail-app-password>",
+  "From": "your@gmail.com"
 }
 ```
+
+> 🔒 **Q19 (08/11/2026):** credential thật **KHÔNG** còn nằm trong file tài liệu này.
+> Đặt qua User Secrets (`dotnet user-secrets set "Mail:Password" "…"`) hoặc
+> `appsettings.Development.json` (git-ignored) — xem README § Cấu hình & secret.
 
 **`GetSmtpSettings()` — validate:**
 - Thiếu bất kỳ `SmtpHost`/`SmtpPort`/`Username`/`Password`/`From` → **InvalidOperationException** `"Chua cau hinh Mail trong appsettings (SmtpHost, SmtpPort, Username, Password, From)."`

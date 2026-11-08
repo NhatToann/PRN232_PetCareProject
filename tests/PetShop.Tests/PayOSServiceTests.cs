@@ -18,12 +18,36 @@ namespace PetShop.Tests;
 ///    <c>BaseUrl</c> **không** chứa <c>api.payos.vn</c> ⇒ retry với fallback
 ///    <c>https://api.payos.vn/v2</c> (cùng payload + cùng header).
 ///  - <c>NormalizeDescription</c> bỏ dấu, giữ <c>[a-zA-Z0-9 #]</c>, cắt còn tối đa 25 ký tự.
+///
+/// <para><b>Q19 — Vệ sinh secret:</b> bộ test dùng <b>key giả cố định</b>
+/// (<c>test-client-id</c> / <c>test-api-key</c> / <c>test-checksum-key-…</c>) thay cho
+/// credential thật của PayOS. HMAC-SHA256 hoạt động đúng với bất kỳ khoá nào ⇒ thuật toán
+/// vẫn được kiểm chứng đầy đủ, và CI chạy được <b>không cần secret thật</b>.
+/// Credential thật nằm trong User Secrets / <c>appsettings.Development.json</c> (không track).</para>
 /// </summary>
 public class PayOSServiceTests
 {
-    private const string ClientId = "9c542038-8807-4b08-9b24-7d2488adee83";
-    private const string ApiKey = "98d99528-df9b-4773-8e72-47b4a055c2a2";
-    private const string ChecksumKey = "53691e37ddf683daa7d356472d3df97f8452f2d941bf11adc8ac2e484b5154c1";
+    // ---------------------------------------------------------------------------
+    // Q19 — Vệ sinh secret (R-05):
+    //   KHÔNG hard-code credential thật của PayOS trong file test.
+    //   Mục đích của bộ test này là kiểm chứng **thuật toán HMAC-SHA256** và
+    //   **nhánh fallback URL** — không phải kiểm chứng credential thật.
+    //   ⇒ Dùng **key giả cố định** (deterministic) cho test:
+    //       - HMAC-SHA256 hoạt động đúng với BẤT KỲ key nào ⇒ key giả vẫn kiểm chứng được.
+    //       - Test chạy được trong CI **không cần secret thật** ⇒ không cần skip.
+    //   Base URL merchant là endpoint công khai (không phải secret) ⇒ giữ nguyên.
+    // ---------------------------------------------------------------------------
+
+    /// <summary>Client ID giả — chỉ dùng để đối chiếu header gửi đi.</summary>
+    private const string ClientId = "test-client-id";
+
+    /// <summary>API key giả — chỉ dùng để đối chiếu header gửi đi.</summary>
+    private const string ApiKey = "test-api-key";
+
+    /// <summary>Checksum key giả — chỉ dùng làm khoá HMAC trong unit test.</summary>
+    private const string ChecksumKey = "test-checksum-key-0123456789abcdef0123456789abcdef";
+
+    /// <summary>Base URL merchant PayOS — endpoint công khai, KHÔNG phải secret.</summary>
     private const string MerchantBaseUrl = "https://api-merchant.payos.vn/v2";
 
     /// <summary>Raw body webhook mẫu (giữ nguyên format byte như PayOS gửi).</summary>

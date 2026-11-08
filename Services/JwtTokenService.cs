@@ -26,8 +26,17 @@ namespace PetShop.Services
         /// </summary>
         public string Key { get; set; } = string.Empty;
 
-        /// <summary>Thời gian sống của token (phút).</summary>
+        /// <summary>Thời gian sống của access token (phút).</summary>
         public int ExpiresInMinutes { get; set; } = 120;
+
+        /// <summary>
+        /// Thời gian sống của refresh token (phút). Mặc định 10 080 phút = 7 ngày.
+        ///
+        /// Slide PRN232 Ch06 S40 yêu cầu cấu hình trong <c>appsettings.json</c> để tạo
+        /// **cả access token và refresh token** — tách 2 mốc hạn riêng biệt.
+        /// Key cũ (<c>ExpiresInMinutes</c>) giữ nguyên để không phá config hiện có.
+        /// </summary>
+        public int RefreshTokenExpiresInMinutes { get; set; } = 10080;
     }
 
     /// <summary>
@@ -38,24 +47,60 @@ namespace PetShop.Services
     ///   2. Client API bên ngoài — dùng <c>Authorization: Bearer &lt;token&gt;</c>.
     ///
     /// Cả hai cùng tồn tại; endpoint nào cần bảo vệ thì thêm <c>[Authorize]</c>.
+    ///
+    /// Ngoài access token, service còn phát hành **refresh token** theo slide
+    /// PRN232 Ch06 S40–S42 (login trả về cả 2 token; client gửi refresh token
+    /// tới endpoint refresh để lấy access token mới).
     /// </summary>
     public interface IJwtTokenService
     {
-        /// <summary>Sinh token cho một người dùng đã xác thực.</summary>
+        /// <summary>Sinh access token cho một người dùng đã xác thực.</summary>
         string CreateToken(int userId, string name, string email, string role);
 
-        /// <summary>Sinh token kèm thời hạn tuỳ biến (dùng cho luồng refresh token).</summary>
+        /// <summary>Sinh access token kèm thời hạn tuỳ biến.</summary>
         string CreateToken(int userId, string name, string email, string role, TimeSpan lifetime);
+
+        /// <summary>
+        /// Sinh **refresh token** (slide Ch06 S40) — cùng key/issuer/audience với access token,
+        /// nhưng thời hạn dài hơn và mang claim <c>token_type = "refresh"</c> để phân biệt.
+        /// </summary>
+        string CreateRefreshToken(int userId, string name, string email, string role);
 
         /// <summary>Đọc các claim từ token (không xác thực chữ ký) — dùng để hiển thị/log.</summary>
         ClaimsPrincipal? GetPrincipalFromToken(string token);
 
         /// <summary>Kiểm tra chữ ký + hạn của token.</summary>
         bool ValidateToken(string token, out ClaimsPrincipal? principal);
+
+        /// <summary>
+        /// Kiểm tra token có phải **refresh token** hợp lệ không (chữ ký + hạn + claim <c>token_type</c>).
+        ///
+        /// Access token <b>không</b> được dùng để refresh ⇒ claim <c>token_type</c> phải
+        /// đúng là <see cref="JwtTokenService.TokenTypeRefresh"/>.
+        /// </summary>
+        bool ValidateRefreshToken(string token, out ClaimsPrincipal? principal);
+
+        /// <summary>
+        /// Kiểm tra token có phải **access token** hợp lệ không (chữ ký + hạn + claim <c>token_type</c>).
+        /// Refresh token không được dùng như access token.
+        /// </summary>
+        bool ValidateAccessToken(string token, out ClaimsPrincipal? principal);
     }
 
     public sealed class JwtTokenService : IJwtTokenService
     {
+        /// <summary>Giá trị claim phân biệt access token với refresh token.</summary>
+        public const string TokenTypeClaim = "token_type";
+
+        /// <summary>Giá trị claim của access token.</summary>
+        public const string TokenTypeAccess = "access";
+
+        /// <summary>Giá trị claim của refresh token (slide Ch06 S40).</summary>
+        public const string TokenTypeRefresh = "refresh";
+
+        /// <summary>Thời hạn refresh token mặc định khi config không hợp lệ (7 ngày).</summary>
+        private const int DefaultRefreshTokenExpiresInMinutes = 10080;
+
         private readonly JwtSettings _settings;
         private readonly ILogger<JwtTokenService> _logger;
 
@@ -95,6 +140,28 @@ namespace PetShop.Services
         }
 
         public string CreateToken(int userId, string name, string email, string role, TimeSpan lifetime)
+            => BuildToken(userId, name, email, role, lifetime, TokenTypeAccess);
+
+        public string CreateRefreshToken(int userId, string name, string email, string role)
+        {
+            var minutes = _settings.RefreshTokenExpiresInMinutes > 0
+                ? _settings.RefreshTokenExpiresInMinutes
+                : DefaultRefreshTokenExpiresInMinutes;
+
+            return BuildToken(userId, name, email, role, TimeSpan.FromMinutes(minutes), TokenTypeRefresh);
+        }
+
+        /// <summary>
+        /// Dựng JWT với claim <c>token_type</c> để phân biệt access / refresh token.
+        /// Cùng key ký, issuer và audience ⇒ client có thể dùng chung 1 hệ thống xác thực.
+        /// </summary>
+        private string BuildToken(
+            int userId,
+            string name,
+            string email,
+            string role,
+            TimeSpan lifetime,
+            string tokenType)
         {
             var claims = new List<Claim>
             {
@@ -103,6 +170,7 @@ namespace PetShop.Services
                 new(ClaimTypes.Name, name ?? string.Empty),
                 new(ClaimTypes.Email, email ?? string.Empty),
                 new(ClaimTypes.Role, role ?? string.Empty),
+                new(TokenTypeClaim, tokenType),
                 new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
@@ -144,6 +212,21 @@ namespace PetShop.Services
         }
 
         public bool ValidateToken(string token, out ClaimsPrincipal? principal)
+            => ValidateTokenInternal(token, null, out principal);
+
+        public bool ValidateRefreshToken(string token, out ClaimsPrincipal? principal)
+            => ValidateTokenInternal(token, TokenTypeRefresh, out principal);
+
+        public bool ValidateAccessToken(string token, out ClaimsPrincipal? principal)
+            => ValidateTokenInternal(token, TokenTypeAccess, out principal);
+
+        /// <summary>
+        /// Kiểm tra chữ ký + hạn + (tuỳ chọn) claim <c>token_type</c>.
+        ///
+        /// Khi <paramref name="requiredTokenType"/> khác null thì token phải mang đúng
+        /// claim đó ⇒ **access token không thể dùng để refresh** và ngược lại.
+        /// </summary>
+        private bool ValidateTokenInternal(string token, string? requiredTokenType, out ClaimsPrincipal? principal)
         {
             principal = null;
             if (string.IsNullOrWhiteSpace(token))
@@ -166,7 +249,20 @@ namespace PetShop.Services
                     ClockSkew = TimeSpan.FromMinutes(1)
                 };
 
-                principal = handler.ValidateToken(token, validationParameters, out _);
+                var validated = handler.ValidateToken(token, validationParameters, out _);
+
+                if (requiredTokenType is not null)
+                {
+                    var tokenType = validated.FindFirst(TokenTypeClaim)?.Value;
+                    if (!string.Equals(tokenType, requiredTokenType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LineWarning(
+                            $"[Jwt] Token không đúng loại yêu cầu ('{requiredTokenType}') — bị từ chối.");
+                        return false;
+                    }
+                }
+
+                principal = validated;
                 return true;
             }
             catch (Exception ex)
