@@ -32,9 +32,15 @@ public sealed record RealtimeNotificationDto(
 /// <c>true</c> nếu tin nhắn đã được ghi vào bảng <c>ChatMessages</c>;
 /// <c>false</c> ở chế độ demo (chưa xác thực) nên không ghi log.
 /// </param>
+/// <param name="MessageId">
+/// Id bản ghi trong bảng <c>ChatMessages</c> (Q21 — dùng để chống trùng khi
+/// client nhận tin qua realtime và đồng thời qua HTTP). Bằng <c>0</c> nếu tin
+/// chưa được ghi log.
+/// </param>
 public sealed record ChatEnvelope(
     int UserId,
     int FromUserId,
     string Message,
     DateTime SentAt,
-    bool IsPersisted);
+    bool IsPersisted,
+    int MessageId = 0);

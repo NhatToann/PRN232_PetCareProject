@@ -14,8 +14,8 @@
 
 | Hạng mục | Kết quả | Bằng chứng |
 |---|---|---|
-| `dotnet build PetShop_PRN222.csproj --nologo "-v:q"` | ✅ **0 Error / 0 Warning** (9,72 s) | Build succeeded. 0 Warning(s), 0 Error(s) |
-| `dotnet test --nologo` | ✅ **70/70 pass**, 0 fail, 0 skip | `Passed! - Failed: 0, Passed: 70, Skipped: 0, Total: 70` (49 gốc + 7 test LS-11 `NotificationHubTests.cs` + 14 test Q9 `AuthServiceAvatarTests.cs`) |
+| `dotnet build PetShop_PRN222.csproj --nologo "-v:q"` | ✅ **0 Error / 0 Warning** (8,18 s) | Build succeeded. 0 Warning(s), 0 Error(s) — sau Q21 (widget chat) |
+| `dotnet test --nologo` | ✅ **79/79 pass**, 0 fail, 0 skip | `Passed! - Failed: 0, Passed: 79, Skipped: 0, Total: 79` (49 gốc + 7 test LS-11 `NotificationHubTests.cs` + 14 test Q9 `AuthServiceAvatarTests.cs` + 9 test Q22/Q20) |
 | `dotnet run --no-build --launch-profile http` | ✅ Chạy nền thành công | `Now listening on: http://[::]:5286` + `http://[::]:5287` (gRPC h2c) |
 | DB `SHOP_PET_Database` | ✅ Kết nối OK, **32 bảng** | `sa`/`123`; bảng: `admin`…`WorkSchedule` |
 | Docker image | ✅ `petshop-prn232:latest` tồn tại (470 MB) | `docker images` |
@@ -39,7 +39,8 @@
 | **L. PayOS** | 2 | 0 (4xx) | ⚠️ Xem §3-L3 |
 | **M. gRPC** | 1 | 0 (HTTP/1.1) | ✅ Thực tế **PASS** qua client .NET (xem §3-L4) |
 | **O. API khác (đổi ca/chấm công/lương/đánh giá/boarding)** | 14 | 13 | ✅ 1 lệch (`api/test/email/health` route không tồn tại — không phải gap) |
-| **Tổng** | **128 probe** | — | **102 × 2xx, 1 × 302, 25 × 4xx (đúng thiết kế), 0 × lỗi code chặn** |
+| **Q. Chat 1-1 (Q21 — widget chat SignalR)** | 9 | 9 | ✅ **100%** — 401 không token · 200 peers (2 chiều) · 200 history (2 chiều) · 200 send + lưu DB · realtime `ChatReceived` thật · widget có mặt trên mọi trang · CSS 200 |
+| **Tổng** | **137 probe** | — | **111 × 2xx, 1 × 302, 25 × 4xx (đúng thiết kế), 0 × lỗi code chặn** |
 
 > **Tỉ lệ khớp 100%:** UI **40/40 (100%)** · API lõi **18/19 (94,7%)** · API mới LS-04 **10/10 route tồn tại (100%)** · OData **16/16 hợp lệ** · Asset **159/159 MD5 khớp (100%)** · Email template **2/2 khớp MD5 + 4/4 render được**.
 
@@ -189,6 +190,7 @@
 | **BF-21 hồ sơ + ảnh đại diện (Q9)** | ✅ | `POST /api/auth/avatar` → 401 (no token) · 200 (giá trị hợp lệ) · 400 (`javascript:` / >500 ký tự) · 200 (`null` = xoá); `SELECT avatar_url FROM Customer WHERE customer_id=1` → đã lưu thật. `/profile` + `/account` → 200. Xem §4.9 |
 | **BF-22 hồ sơ + ngày sinh (Q22)** | ✅ | `POST /api/auth/birth-date` → 401 (no token) · 400 (ngày ở tương lai `2030-01-01`) · 200 (`1995-05-20`); `GET /api/auth/me` → 200 kèm `birthDate`; `SELECT birth_date FROM Customer WHERE customer_id=1` → `1995-05-20` đã lưu thật. `/profile` + `/profile/edit` + `/account` → 200. Xem §4.10 |
 | **BF-23 validate `price` sản phẩm (Q20)** | ✅ | `POST /api/products-temp/create` price=0/999/10000001 → **400** `"Giá tiền không hợp lệ."` (trước đây ⇒ 500); price=1001/10000000 → **200**. Xem §4.11 |
+| **BF-24 chat 1-1 khách ↔ nhân viên (Q21)** | ✅ | `GET /api/chat/peers` → 401 không token · 200 (17 khách cho nhân viên / 18 nhân viên cho khách) · `GET /api/chat/history/{peerId}` → 200 (2 chiều) · `POST /api/chat/send` → 200 + `ChatMessageDto` ⇒ lịch sử có tin vừa gửi (lưu `ChatMessages` đúng) · realtime `ChatReceived` push thật (client .NET + widget Blazor đều nhận) · widget có mặt ở mọi trang (`/`, `/products`, `/system`) + CSS 200. Xem §4.12 |
 
 ### LỚP 9 — EMAIL TEMPLATE
 
@@ -214,13 +216,14 @@
 | SL-08 AutoMapper | ❌ | Q3 đã chốt "map tay" ⇒ không thêm |
 | SL-09/SL-10/SL-11/SL-13 | ✅ | Model binding + DataAnnotations + `[ValidateNever]` + `ClearValidationState` — verify 400 với message VI |
 | SL-14 WCF / SL-15 Microservices / SL-16 OData batch | ❌ | Không áp dụng (có lý do trong `ARCHITECTURE_REQUIREMENTS.md`) |
-| **SignalR realtime** (LS-11, ngoài slide) | ✅ **ĐÃ LÀM** | `Hubs/NotificationHub.cs` (group `user:{id}`) · `Services/RealtimeNotificationService.cs` + `Interfaces/IRealtimeNotificationService.cs` (3-layer) · `Models/RealtimeDtos.cs` · `Program.cs` `AddSignalR()` + `MapHub<NotificationHub>("/hubs/notification")` · client trong `Components/Staff/NotificationBell.razor.cs` · trang demo `/signalr-demo`. **Verify:** `POST /hubs/notification/negotiate` → **200** (`connectionId` + `connectionToken` + transport `WebSockets`) · `GET /hubs/notification` → **400** (đúng, **không 500**) · `/signalr-demo` → **200** · `/system` → **200** · **client .NET thật**: WebSocket Connected → `JoinGroup` OK → nhận `ChatReceived` **và** `NotificationReceived` từ server push (`IHubContext`) với đúng payload · **0 exception SignalR** trong log |
+| **SignalR realtime** (LS-11, ngoài slide) | ✅ **ĐÃ LÀM** | `Hubs/NotificationHub.cs` (group `user:{id}`) · `Services/RealtimeNotificationService.cs` + `Interfaces/IRealtimeNotificationService.cs` (3-layer) · `Models/RealtimeDtos.cs` · `Program.cs` `AddSignalR()` + `MapHub<NotificationHub>("/hubs/notification")` · client trong `Components/Staff/NotificationBell.razor.cs` + `Components/Chat/ChatWidget.razor.cs` (Q21) · trang demo `/signalr-demo`. **Verify:** `POST /hubs/notification/negotiate` → **200** (`connectionId` + `connectionToken` + transport `WebSockets`) · `GET /hubs/notification` → **400** (đúng, **không 500**) · `/signalr-demo` → **200** · `/system` → **200** · **client .NET thật**: WebSocket Connected → `JoinGroup` OK → nhận `ChatReceived` **và** `NotificationReceived` từ server push (`IHubContext`) với đúng payload · **0 exception SignalR** trong log |
+| **Widget chat 1-1** (Q21 — UI chat khách ↔ nhân viên) | ✅ **ĐÃ LÀM** | `Components/Chat/ChatWidget.razor` + `.razor.cs` (nút tròn fixed góc phải dưới + panel: dropdown đối tác, khung tin nhắn, ô nhập, nút gửi) · `wwwroot/css/template/chatWidget.css` (**tông gốc cyan `#6fd5dd`**, KHÔNG dùng tím `#4a2477`) · gắn vào `Components/Layout/MainLayout.razor` + `Components/Layout/StaffWorkspaceLayout.razor` (mọi trang) · link CSS trong `Components/App.razor` · **KHÔNG** thêm link chat vào nav gốc · **KHÔNG** đổi markup/nội dung/màu của trang đã port. **3-layer:** `Interfaces/IChatRepository.cs` → `Repositories/ChatRepository.cs` → DbContext; `Interfaces/IChatService.cs` → `Services/ChatService.cs`; `Controllers/ChatController.cs` (`api/chat`, `[Authorize]`); `Interfaces/IChatClient.cs` → `Services/ChatClient.cs` (self-HTTP). **Verify:** `GET /api/chat/peers` không token → **401** · `X-User-Id:1` (staff) → **200** 17 khách · `X-User-Id:5` (user) → **200** 18 nhân viên (staff/admin/doctor) · `GET /api/chat/history/2` → **200** · `POST /api/chat/send` → **200** + `ChatMessageDto` · history lại → **200** có tin vừa gửi · chiều ngược (khách 2 xem staff 1) → **200** cùng lịch sử (`isMine` đảo đúng) · realtime: client .NET thật nhận `ChatReceived` (`messageId` khớp) **và** widget Blazor tự thêm tin nhận vào khung chat (bubble `chat-row--theirs`) · trang `/`, `/products`, `/system` → **200** + markup `chat-widget` · CSS → **200** |
 
 ### LỚP 11 — TEST & KIỂM CHỨNG
 
 | Mục | Trạng thái | Bằng chứng |
 |---|---|---|
-| TS-01 Unit test | ✅ | **70/70 pass** (nhiều hơn 30 mục PARITY ghi) — 49 cũ + 7 test LS-11 (`NotificationHubTests.cs`) + **14 test Q9** (`AuthServiceAvatarTests.cs`) |
+| TS-01 Unit test | ✅ | **79/79 pass** (nhiều hơn 30 mục PARITY ghi) — 49 cũ + 7 test LS-11 (`NotificationHubTests.cs`) + **14 test Q9** (`AuthServiceAvatarTests.cs`) + 9 test Q20/Q22 |
 | TS-02 Test chatbot service | ❌ | Chưa có unit test; đã smoke 5 probe runtime |
 | TS-03 Test PayOS signature | ✅ | `tests/PetShop.Tests/PayOSServiceTests.cs` có `ComputeHmacHex` + test webhook |
 | TS-04 Contract test từng dòng PARITY | ⚠️ | Chưa viết test tự động; **GĐ3 đã kiểm chứng thủ công 128 probe** (xem file này) |
@@ -416,6 +419,107 @@
 
 ---
 
+### 4.12. Widget chat 1-1 khách ↔ nhân viên dùng SignalR (Q21)
+
+> **Quyết định của user (bắt buộc):** *"Q21 — **Có**: làm widget chat 1-1 cho khách/nhân viên."*
+> Đây là **hành vi MỚI** của đích (nguồn OJT không có widget chat) — không sửa markup/nội dung/màu của bất kỳ trang đã port.
+
+#### 4.12.1. Bối cảnh schema — đọc từ DB thật, KHÔNG đụng schema
+
+Bảng `ChatMessages` đã có sẵn trong DB (không tạo bảng mới):
+
+| Cột | Kiểu | Ghi chú |
+|---|---|---|
+| `MessageID` | `int` identity | khóa chính |
+| `CustomerID` | `int` **NOT NULL** | id khách trong luồng chat |
+| `StaffID` | `int` NULL | id nhân viên trong luồng chat |
+| `SenderType` | `nvarchar(10)` | CHECK: `'Staff'` hoặc `'Customer'` |
+| `Message` | `nvarchar(max)` | nội dung |
+| `SentAt` | `datetime` | default `getdate()` |
+| `IsRead` | `bit` | default `0` |
+
+**Hai phát hiện quan trọng khi đọc schema thật:**
+
+1. **FK của bảng đều bị DISABLE** (`sys.foreign_keys.is_disabled = 1` cho `FK_ChatMessages_Admin` và `FK_ChatMessages_Customer`) ⇒ khi INSERT không bị kiểm tra khóa ngoại. Đã verify bằng transaction thật: `INSERT (CustomerID=5, StaffID=3, SenderType='staff')` với `StaffID=3` là `Staff.staff_id` (không có dòng `admin_id=3` tương ứng) ⇒ **thành công**, rollback sạch.
+2. **Bốn bảng người dùng có không gian id RIÊNG BIỆT** — `Staff.staff_id`, `Admin.admin_id`, `Doctor.doctor_id`, `Customer.customer_id` đều bắt đầu từ 1 ⇒ id `1` có thể vừa là staff vừa là admin vừa là khách. Đã verify: `Staff.staff_id=6` ↔ `admin.admin_id=6` là **hai người khác nhau**.
+
+**⇒ Quyết định thiết kế (không đụng schema):**
+
+- **Khoá luồng chat 1-1 = `(CustomerID, StaffID)`** — `CustomerID` = id khách, `StaffID` = id nhân viên.
+- Hai chiều của cùng một cuộc hội thoại **luôn đọc được lịch sử giống nhau** (đã verify ở §4.12.2 bước 7).
+- Vì id không gian chung, DTO `ChatPeerDto` mang thêm `PeerKind` (`staff`/`admin`/`doctor`/`customer`) để tra cứu đúng bảng — đây là hệ quả tất yếu của schema, **không phải** dữ liệu giả.
+- `SenderType` ghi `'customer'` hoặc `'staff'` — collation của SQL Server là case-insensitive nên khớp CHECK constraint (đã verify các dòng gốc trong DB đều dùng chữ thường).
+
+#### 4.12.2. Kiểm chứng runtime (app thật, `http://localhost:5286`)
+
+| # | Probe | Kết quả thật |
+|---|---|---|
+| 1 | `GET /api/chat/peers` **không** token | **401** ✅ (đúng chuẩn `[Authorize]`) |
+| 2 | `GET /api/chat/peers` + `X-User-Id: 1` (role `staff`) | **200** — 17 khách hàng (`peerKind=customer`) ✅ |
+| 3 | `GET /api/chat/peers` + `X-User-Id: 5` (role `user`) | **200** — 18 nhân viên (`peerKind` ∈ `staff,admin,doctor`) ✅ |
+| 4 | `GET /api/chat/history/2` + `X-User-Id: 1` | **200** — list (rỗng lúc đầu) ✅ |
+| 5 | `POST /api/chat/send` `{receiverId:2,message:"Xin chào"}` + `X-User-Id: 1` | **200** + `{"message":{"id":1027,"senderId":1,"receiverId":2,"message":"Xin chào",...,"isMine":true},"peer":{...}}` ✅ |
+| 6 | `GET /api/chat/history/2` lại | **200** + **có tin vừa gửi** ⇒ xác nhận lưu DB đúng ✅ |
+| 7 | Chiều ngược: `GET /api/chat/history/1?peerKind=staff` + `X-User-Id: 2` (khách) | **200** — **cùng lịch sử**, `isMine` đảo đúng (`false`) ⇒ luồng đối xứng ✅ |
+| 8 | Trang `/`, `/products`, `/system` | **200** + HTML có markup `<div class="chat-widget …">` ✅ |
+| 9 | `GET /css/template/chatWidget.css` | **200** (7 885 B) ✅ |
+
+**Xác nhận lưu DB (đọc trực tiếp `ChatMessages`):**
+
+```
+MessageID|CustomerID|StaffID|SenderType|Message
+1027     |2         |1      |staff     |Xin chào
+1028     |2         |3      |staff     |Chào bạn, tôi là nhân viên hỗ trợ.
+1029-1032|2         |1 hoặc 3|customer/staff|PROBE_REALTIME_Q21
+```
+
+**Realtime SignalR (verify bằng client .NET thật + trình duyệt thật):**
+
+- Client .NET: `HubConnection` → `Connected` → `JoinGroup(2)` → `POST /api/chat/send` → nhận event `ChatReceived` với payload `{"userId":2,"fromUserId":3,"message":"PROBE_REALTIME_Q21","sentAt":"…","isPersisted":true,"messageId":1030}` ⇒ **PASS**. Server log: `[Realtime] Đã push chat tới user:2 từ user:3`.
+- Widget Blazor trong trình duyệt (đã đăng nhập staff id 3): nhận tin qua SignalR ⇒ tự thêm vào khung chat với bubble `chat-row--theirs` (bên trái, nền trắng) + timestamp "Vừa xong"; tin của chính mình hiển thị `chat-row--mine` (bên phải, nền cyan). Trạng thái trên header đổi từ "● ngoại tuyến" → "● trực tuyến" khi hub kết nối được.
+
+**Dọn dẹp:** đã `DELETE FROM ChatMessages WHERE MessageID >= 1027` ⇒ xoá đúng **7** dòng test ⇒ DB trở về nguyên trạng: `MAX(MessageID) = 1025`, `COUNT(*) = 29` (khớp số dòng gốc). App đã dừng, file log tạm đã xoá, project probe tạm đã xoá.
+
+#### 4.12.3. Kiến trúc 3-layer (KHÔNG inject DbContext trong component)
+
+```
+Components/Chat/ChatWidget.razor(.cs)        ← UI (nút tròn fixed + panel)
+        │  IChatClient (self-HTTP, gắn header phiên từ UserSessionService)
+        ▼
+Controllers/ChatController.cs                 ← api/chat/*, [Authorize], lấy userId từ CLAIMS
+        │  IChatService
+        ▼
+Services/ChatService.cs                       ← điều phối: ghi DB trước, đẩy realtime sau
+        │  IChatRepository
+        ▼
+Repositories/ChatRepository.cs                ← truy vấn/ghi bảng ChatMessages
+        │  ShopPetDatabaseContext
+        ▼
+     SQL Server (SHOP_PET_Database)
+```
+
+Realtime (song song, không bắt buộc): `ChatService` → `IRealtimeNotificationService.SendChatAsync` → `IHubContext<NotificationHub>` → group `user:{id}` → event `ChatReceived`.
+
+> **Ghi chú kỹ thuật:** `ChatClient` **tự gắn** header `X-User-Id`/`X-User-Role`/`X-Customer-Id` từ `UserSessionService` (scoped) thay vì dùng `SpaAuthHeaderHandler`. Lý do: handler được tạo **ngoài scope Blazor** nên không thấy được `CurrentUser` ⇒ request thiếu header ⇒ **401**. Đã xác nhận bằng log runtime (`Received HTTP response headers … - 401`) trước khi sửa. Đây **cùng pattern** với `Services/PetsClient.cs` (`CreateAuthedRequest`).
+
+#### 4.12.4. Ràng buộc đã tôn trọng
+
+| Ràng buộc | Kết quả |
+|---|---|
+| **KHÔNG** đụng DB schema | ✅ Chỉ đọc/ghi bảng `ChatMessages` sẵn có; **không** `ALTER`/`CREATE` |
+| **KHÔNG** đụng `appsettings.json` | ✅ Không sửa file này |
+| **KHÔNG** dùng tím `#4a2477` | ✅ CSS widget chỉ dùng cyan `#6fd5dd` + `#3a9ea8` (đậm hơn) + biến sẵn có (`--main-bg`, `--card-bg`, `--text`, `--text-light`, `--text-dark`, `--border-radius`) |
+| **KHÔNG** đổi markup/nội dung/màu trang đã port | ✅ Widget là phần **thêm mới**, `fixed` góc phải dưới; không sửa nội dung trang nào |
+| **KHÔNG** thêm link chat vào nav | ✅ Menu điều hướng giữ nguyên 100% |
+| 3-layer bắt buộc | ✅ Razor → Service → Repository → DbContext |
+| File `.cs` < 500 dòng · `.razor` tách code-behind nếu > 300 dòng | ✅ `ChatWidget.razor` ≈ 140 dòng · `ChatWidget.razor.cs` ≈ 430 dòng · `ChatController.cs` ≈ 165 dòng · `ChatService.cs` ≈ 195 dòng · `ChatRepository.cs` ≈ 245 dòng |
+| **KHÔNG** Node/npm · **KHÔNG** placeholder/mock/fake data | ✅ Không có; dữ liệu lấy 100% từ DB thật |
+| Build 0 error / 0 warning · test không giảm | ✅ **0/0** · **79/79 pass** (không giảm) |
+
+**Còn lại:** ✅ **KHÔNG CÒN** — Q21 đã đóng.
+
+---
+
 ## 5. RÀNG BUỘC GĐ3 — KẾT QUẢ RÀ SOÁT
 
 ### 5.1. Không còn tham chiếu Node/npm trong code ứng dụng
@@ -477,7 +581,8 @@
 | R-12 | **Chatbot không có UI widget** gọi 4 endpoint (API đã sẵn sàng) | 🟡 | User quyết (Q14) |
 | R-13 | **SignalR chạy sau reverse proxy / IIS** ⇒ WebSocket bị chặn, realtime không hoạt động (chỉ fallback HTTP pull) | 🟡 | Khi deploy thật: bật `WebSockets` trong proxy, giới hạn idle timeout (`KeepAliveTimeout`), và cân nhắc dùng `LongPolling` fallback (`SignalR` tự chuyển). Trên LOCAL (Kestrel cổng 5286) đã verify WebSocket hoạt động thật |
 | R-14 | **Hub dùng query string `?userId=` khi chưa xác thực** ⇒ client SignalR trong browser không gửi được header session ⇒ không xác thực được ⇒ chat **không** ghi log DB và không chống được spoof | 🟡 | Đây là chế độ **LOCAL DEMO** (cùng mức độ với `SessionHeaderAuthenticationHandler`, xem AGENTS.md §0). Khi deploy thật: bắt client gửi `accessTokenFactory` (JWT Bearer) ⇒ claim `NameIdentifier` được dùng, chat log lại bật và chống spoof. **Đã để sẵn đường này trong code** |
-| R-15 | **Chưa có UI chat widget cho khách** — `ChatReceived` hiện chỉ được `NotificationBell` ghi log, chưa hiển thị cho người dùng | 🟡 | User quyết (Q21) — có cần widget chat 1-1 cho khách/nhân viên không |
+| R-15 | ~~**Chưa có UI chat widget cho khách** — `ChatReceived` hiện chỉ được `NotificationBell` ghi log, chưa hiển thị cho người dùng~~ | ✅ | **ĐÃ ĐÓNG (08/11/2026)** — user quyết **Q21 = "Có"** ⇒ đã làm widget chat 1-1 `Components/Chat/ChatWidget.razor` (+ `.razor.cs`) với API `api/chat/{peers,history/{peerId},send}` 3-layer, lưu `ChatMessages`, realtime SignalR `ChatReceived`, CSS `wwwroot/css/template/chatWidget.css` (cyan `#6fd5dd`), gắn ở `MainLayout` + `StaffWorkspaceLayout`. Xem mục "Widget chat 1-1" ở LỚP 10 |
+| R-16 | **Widget chat dùng cơ chế session header `X-User-Id`/`X-User-Role`** (giống `SessionHeaderAuthenticationHandler`) ⇒ khi deploy thật cần đổi sang JWT Bearer (`accessTokenFactory`) cho cả client SignalR lẫn self-HTTP | 🟡 | Cùng mức độ với R-14 (chế độ LOCAL DEMO). Đã để sẵn đường: `ChatClient` gắn header từ `UserSessionService` (dễ thay bằng `Authorization: Bearer`); `NotificationHub` đã ưu tiên claim `NameIdentifier` khi có Bearer token |
 
 ---
 
@@ -500,7 +605,7 @@
 | **Q16** | Soft-delete `Products` (cột `is_deleted` có sẵn ở đích, **nguồn không có**) — đồng bộ ngược sang nguồn? | X-03..X-06 | Cần user quyết | ⏳ Chờ (đã implement theo cột có sẵn) |
 | **Q19** *(mới)* | `tests/PetShop.Tests/PayOSServiceTests.cs:24-26` chứa hằng số trùng `appsettings.json`. Cho phép chuyển sang user-secrets/environment? | 🟠 Vệ sinh secret | Nên chuyển (không ảnh hưởng chức năng) | ⏳ Chờ |
 | **Q20** *(mới)* | `POST /api/products-temp/create` nên trả **400** khi `price` ngoài `[1000, 10 000 000]` (đồng bộ `CK_Product_Price_Valid`) thay vì 500? | 🟠 UX lỗi | Nên sửa (1 dòng validate trong `Controllers/ProductsTempController.cs`) | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt **"Có"**. Biên lấy từ constraint thật: `SELECT definition FROM sys.check_constraints WHERE name='CK_Product_Price_Valid'` ⇒ `([price]>=(1000) AND [price]<=(10000000))`. Thêm `MinProductPrice = 1000m` / `MaxProductPrice = 10_000_000m` + validate ở `Create` **và** `Update` ⇒ **400** `"Giá tiền không hợp lệ."`. **KHÔNG** đụng schema, **KHÔNG** đổi message case lỗi khác |
-| **Q21** *(mới — LS-11)* | **Có cần UI chat widget cho khách/nhân viên không?** Hiện `NotificationBell` đã nhận event `ChatReceived` qua SignalR nhưng **chỉ ghi log**, chưa hiển thị hộp thoại chat. Cần làm widget chat 1-1 (khung chat nhỏ trong topbar/trang chat) không? | 🟡 UX | Cần user quyết — hạ tầng SignalR + lưu `ChatMessages` đã sẵn sàng | ⏳ Chờ |
+| **Q21** *(mới — LS-11)* | **Có cần UI chat widget cho khách/nhân viên không?** Hiện `NotificationBell` đã nhận event `ChatReceived` qua SignalR nhưng **chỉ ghi log**, chưa hiển thị hộp thoại chat. Cần làm widget chat 1-1 (khung chat nhỏ trong topbar/trang chat) không? | 🟡 UX | Cần user quyết — hạ tầng SignalR + lưu `ChatMessages` đã sẵn sàng | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt **"Có"**. Widget chat 1-1 `Components/Chat/ChatWidget.razor` + `.razor.cs` (nút tròn fixed góc phải dưới + panel dropdown đối tác + khung tin nhắn + ô nhập + nút gửi), chỉ hiện khi đã đăng nhập (`UserSessionService.CurrentUser`), gắn ở `MainLayout` + `StaffWorkspaceLayout` ⇒ mọi trang; CSS mới `wwwroot/css/template/chatWidget.css` tông gốc cyan `#6fd5dd` (**không** dùng tím `#4a2477`), link trong `App.razor`; **KHÔNG** thêm link chat vào nav gốc, **KHÔNG** đổi markup/nội dung/màu trang đã port. **3-layer:** `IChatRepository` → `ChatRepository` (DB) · `IChatService` → `ChatService` (điều phối + push realtime) · `Controllers/ChatController.cs` route `api/chat` (`[Authorize]`, lấy userId từ claims **không** tin query/body) · `IChatClient` → `ChatClient` (self-HTTP cho widget). **Endpoint:** `GET api/chat/peers` · `GET api/chat/history/{peerId:int}` · `POST api/chat/send` ⇒ `{receiverId, message}`. **Lưu trữ:** bảng `ChatMessages` có sẵn (cột `CustomerID` / `StaffID` / `SenderType` / `Message` / `SentAt` / `IsRead`) — **KHÔNG** đụng schema; khoá luồng 1-1 = `(CustomerID, StaffID)`. **Verify thật:** 401 không token · 200 peers cả 2 chiều (khách ⇒ staff/admin/doctor; nhân viên ⇒ khách) · 200 history · 200 send trả `ChatMessageDto` · history lại có tin vừa gửi (lưu DB đúng) · chiều ngược đọc cùng lịch sử · realtime `ChatReceived` nhận thật bằng client .NET **và** widget Blazor tự render tin nhận · widget có mặt trên `/`, `/products`, `/system` · CSS 200 · build **0/0** · test **79/79** · tin test đã xoá sạch (DB về `MAX(MessageID)=1025`, 29 dòng) |
 | **Q22** *(mới — Q9)* | **`Customer.birth_date`** — user mới chỉ duyệt thêm cột `avatar_url`. Nguồn có ô "Ngày sinh" (`ProfileEditPage.jsx`) nhưng lưu localStorage; đích hiện cũng lưu localStorage. Có thêm cột `birth_date` vào DB không? | 🟡 Parity | Nên thêm nếu muốn profile bền vững giống `avatar_url` (ALTER idempotent, không xoá dữ liệu) | ✅ **ĐÃ LÀM (08/11/2026)** — user duyệt **"Có"**. `ALTER TABLE Customer ADD birth_date DATE NULL` (có `IF COL_LENGTH(...) IS NULL` ⇒ idempotent, **không** xoá dữ liệu, **không** EF migration); verify `INFORMATION_SCHEMA.COLUMNS` → `birth_date / date / NULL`. Mapping EF `BirthDate`; 3-layer `IAuthRepository.UpdateCustomerBirthDateAsync` → `IAuthService.UpdateBirthDateAsync` (`Services/AuthService.BirthDate.cs`); API `POST/PUT api/auth/birth-date` + `GET api/auth/me` trả `birthDate`; UI `/account` + `/profile` + `/profile/edit` đọc/ghi ngày sinh theo thứ tự localStorage → DB → rỗng (**markup không đổi**) |
 | **Q23** *(mới — Q9)* | **Nút "Xoá ảnh"** trong UI profile — API đã hỗ trợ `avatarUrl: null` nhưng chưa có nút (vì markup phải giữ 100% bản gốc). Thêm nút hay không? | 🟡 UX | Nguồn **không có** nút này ⇒ theo yêu cầu parity ⇒ **không thêm** | ⏳ Chờ |
 
@@ -512,10 +617,11 @@
 
 | Nhóm | Kết quả |
 |---|---|
-| **Build & test** | ✅ 0 error / 0 warning · **70/70** test pass · app chạy 2 cổng (5286 HTTP/1.1 + 5287 HTTP/2 h2c) |
+| **Build & test** | ✅ 0 error / 0 warning · **79/79** test pass · app chạy 2 cổng (5286 HTTP/1.1 + 5287 HTTP/2 h2c) |
 | **Route UI** | ✅ **40/40** trả 200 — gồm mọi route nguồn + `/about` + `/contact` + `/profile` + `/spa-booking-detail/{id}` |
 | **API lõi (18 nhóm)** | ✅ `api/products`, `api/pet-services`, `api/pets/*`, `api/spa-booking/*`, `api/shift-exchange/*`, `api/attendance/*`, `api/payroll/*`, `api/notifications/*`, `api/breed-pricing`, `api/reviews/*`, `api/orders/*`, `api/auth/*`, `api/config/*`, `api/boarding-rooms`, `api/validation-demo/*` |
 | **API mới LS-04 (X-01..X-10)** | ✅ **10/10 route tồn tại**; vòng đời create→read→update→soft-delete→restore→permanent-delete đã chạy thật và **dọn sạch DB** |
+| **Chat 1-1 + widget (Q21)** | ✅ `api/chat/{peers,history/{peerId},send}` — 401 không token · 200 hai chiều (khách ↔ nhân viên) · lưu `ChatMessages` đúng · realtime `ChatReceived` thật (client .NET + widget Blazor) · widget có mặt ở mọi trang · CSS cyan `#6fd5dd` · **không** đụng schema/nav/trang đã port |
 | **MVC routes LS-03** | ✅ `/cart/session` 200 · `/mvc/ProductsPage/Index` **302→/products** · `Details/2` 200 · `Details/999999` **404** |
 | **Content negotiation** | ✅ XML / CSV / JSON — đúng `Content-Type`, CSV có header cột đầy đủ |
 | **OData** | ✅ `$metadata` (20 624 B) · `$filter` · `$select` · `$orderby` · `$top` · `$skip` · `$count` · `$expand` — **16/16 hợp lệ** |
@@ -538,7 +644,7 @@
 
 ### 8.3. Nhận định cuối
 
-> **Migration OJT → PRN232 đã đạt parity 100% ở tầng *hành vi quan sát được***: 40/40 route, 18/19 nhóm API lõi, 10/10 API LS-04, 16/16 OData, 159/159 asset MD5 khớp, 0 ảnh hỏng, 0 tham chiếu Node/npm, build sạch, test **79/79** (+ realtime SignalR LS-11 đã verify end-to-end bằng client .NET thật; + Q9 `Customer.avatar_url` đã ALTER + verify giá trị trong DB; + **Q20** validate `price` trả **400** thay vì 500; + **Q22** `Customer.birth_date` đã ALTER + verify giá trị trong DB).
+> **Migration OJT → PRN232 đã đạt parity 100% ở tầng *hành vi quan sát được***: 40/40 route, 18/19 nhóm API lõi, 10/10 API LS-04, 16/16 OData, 159/159 asset MD5 khớp, 0 ảnh hỏng, 0 tham chiếu Node/npm, build sạch, test **79/79** (+ realtime SignalR LS-11 đã verify end-to-end bằng client .NET thật; + Q9 `Customer.avatar_url` đã ALTER + verify giá trị trong DB; + **Q20** validate `price` trả **400** thay vì 500; + **Q22** `Customer.birth_date` đã ALTER + verify giá trị trong DB; + **Q21** widget chat 1-1 khách ↔ nhân viên dùng SignalR — 9/9 probe runtime, realtime `ChatReceived` thật, tin test đã dọn sạch).
 >
 > **Không còn lỗi chí mạng nào** (build fail / route 500 / ảnh 404 hàng loạt) ⇒ **GĐ3 không phải sửa code**. Toàn bộ mục còn lại là **lệch chức năng phụ do credential môi trường** (Gemini key, SMTP) hoặc **quyết định nội dung cần user chốt** (tông màu CSS, port component UI phụ, role `doctor`, schema `Customer`).
 >
@@ -549,6 +655,8 @@
 > **Các câu hỏi còn lại (Q2, Q8, Q15, Q16, Q19) không chặn runtime** — chỉ chặn mức "giống 100%" về mặt thẩm mỹ/UI/schema. *(Q9 đã đóng trọn: `avatar_url` **và** `birth_date`; Q20 đã đóng: validate `price` trả 400.)*
 >
 > **Q18 đã đóng (08/11/2026)** — không còn chặn parity giao diện về mặt bảng màu.
+>
+> **Q21 đã đóng (08/11/2026)** — widget chat 1-1 khách ↔ nhân viên đã làm xong và kiểm chứng end-to-end (xem §4.12).
 
 ---
 

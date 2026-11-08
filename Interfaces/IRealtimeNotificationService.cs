@@ -39,9 +39,15 @@ public interface IRealtimeNotificationService
     /// <param name="fromUserId">Id người gửi.</param>
     /// <param name="message">Nội dung tin nhắn.</param>
     /// <param name="cancellationToken">Token huỷ.</param>
+    /// <param name="messageId">
+    /// Id bản ghi trong bảng <c>ChatMessages</c> (Q21) — client dùng để chống
+    /// hiển thị trùng khi nhận tin qua cả realtime lẫn HTTP. Bằng <c>0</c> nếu
+    /// tin chưa được ghi log.
+    /// </param>
     Task SendChatAsync(
         int toUserId,
         int fromUserId,
         string message,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        int messageId = 0);
 }

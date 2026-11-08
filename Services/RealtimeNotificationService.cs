@@ -81,7 +81,8 @@ public sealed class RealtimeNotificationService : IRealtimeNotificationService
         int toUserId,
         int fromUserId,
         string message,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int messageId = 0)
     {
         if (toUserId <= 0)
         {
@@ -96,7 +97,8 @@ public sealed class RealtimeNotificationService : IRealtimeNotificationService
                 fromUserId,
                 message ?? string.Empty,
                 DateTime.Now,
-                true);
+                true,
+                messageId);
 
             await _hubContext.Clients
                 .Group(NotificationHub.UserGroup(toUserId))

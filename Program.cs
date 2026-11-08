@@ -120,6 +120,13 @@ builder.Services.AddSelfHttpClient<PetShop.Interfaces.INotificationClient, PetSh
 builder.Services.AddTransient<PetShop.Services.SpaAuthHeaderHandler>();
 builder.Services.AddSelfHttpClientWithAuth<PetShop.Interfaces.ISpaBookingClient, PetShop.Services.SpaBookingClient>();
 builder.Services.AddSelfHttpClientWithAuth<PetShop.Interfaces.IPetsClient, PetShop.Services.PetsClient>();
+// Q21 — widget chat 1-1 khách ↔ nhân viên: client gọi `api/chat/*`.
+// Client tự gắn header phiên đăng nhập (X-User-Id / X-User-Role) từ UserSessionService
+// vì endpoint chat lấy danh tính từ claims — xem ChatClient.cs.
+builder.Services.AddSelfHttpClient<PetShop.Interfaces.IChatClient, PetShop.Services.ChatClient>();
+// Q21 — 3-layer chat: Repository → Service. Controller/Razor không inject DbContext.
+builder.Services.AddScoped<PetShop.Interfaces.IChatRepository, PetShop.Repositories.ChatRepository>();
+builder.Services.AddScoped<PetShop.Interfaces.IChatService, PetShop.Services.ChatService>();
 builder.Services.AddScoped<PetShop.Services.UserSessionService>();
 builder.Services.AddScoped<PetShop.Services.CartStateService>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
