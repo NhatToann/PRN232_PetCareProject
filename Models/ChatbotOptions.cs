@@ -5,7 +5,7 @@ namespace PetShop.Models
         public const string SectionName = "Chatbot";
         public const string DefaultProvider = "gemini";
 
-        public string DefaultModel { get; set; } = "gemini-flash-latest";
+        public string DefaultModel { get; set; } = "gemini-3.5-flash";
         public string DefaultProviderName { get; set; } = DefaultProvider;
         public double Temperature { get; set; } = 0.7;
         public int MaxTokens { get; set; } = 1000;

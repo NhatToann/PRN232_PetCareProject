@@ -51,7 +51,7 @@ namespace PetShop.Services
 
             var providerConfig = _options.Providers.GetValueOrDefault("gemini") ?? new AiProviderConfig();
             var requestModel = string.IsNullOrEmpty(model) || model == "default"
-                ? (string.IsNullOrEmpty(providerConfig.DefaultModel) ? "gemini-flash-latest" : providerConfig.DefaultModel)
+                ? (string.IsNullOrEmpty(providerConfig.DefaultModel) ? "gemini-3.5-flash" : providerConfig.DefaultModel)
                 : model;
 
             var requestTemp = temperature > 0 && temperature <= 2 ? temperature : providerConfig.Temperature;
