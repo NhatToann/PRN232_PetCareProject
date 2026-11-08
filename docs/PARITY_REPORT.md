@@ -160,10 +160,10 @@
 | AS-04 `default-service-placeholder.png` | **không tồn tại** ở nguồn | dùng `placeholder.jpg` | ✅ | Không gap — nguồn cũng không có |
 | AS-06 `video.mp4`, `video.MOV` | ✅ | ✅ | ✅ | `/images/video.MOV` → 200 |
 | **Rà soát 404 asset toàn trang** | — | — | ✅ **0 hỏng** | Quét HTML **40/40 trang**, trích **13 URL asset cục bộ duy nhất** (`src=`/`href=` bắt đầu `/images|/uploads|/css|/js`) → **13/13 trả 200**, 0 broken. 10 ảnh random `/images/*` → 200; 3 ảnh `/uploads/pets/pet_*` → 200 |
-| CS-01..CS-12, CS-16..CS-18 CSS | 14 file | 17 file | ⚠️ | 5 file khác nội dung (font + màu) — xem §3-L12 |
-| CS-13 `ordersStaff.css` | ✅ | ❌ | ❌ | Xem §3-L12 |
-| CS-14 `createProduct.css` | ✅ | ❌ | ❌ | Xem §3-L12 |
-| CS-15 `systemPage.css` | ✅ | ❌ | ❌ | Xem §3-L12 |
+| CS-01..CS-12, CS-16..CS-18 CSS | 14 file | 20 file | ✅ | **Q18 đã xử lý (08/11/2026)** — revert bảng màu về đúng bản gốc + port 3 file CSS còn thiếu. Xem §3-L12/L13 |
+| CS-13 `ordersStaff.css` | ✅ | ✅ | ✅ **100%** | Q18 — copy **nguyên văn** SHA256 khớp nguồn, link trong `Components/App.razor` |
+| CS-14 `createProduct.css` | ✅ | ✅ | ✅ **100%** | Q18 — copy **nguyên văn** SHA256 khớp nguồn, link trong `Components/App.razor` |
+| CS-15 `systemPage.css` | ✅ | ✅ | ✅ **100%** | Q18 — copy **nguyên văn** SHA256 khớp nguồn, link trong `Components/App.razor` |
 | JS-01..JS-08 | 10 module `*.js` | `*Client.cs` + `wwwroot/js/` | ✅ | Không còn tham chiếu Node/npm (xem §5) |
 | FT-04 Bootstrap 5 | CDN | `wwwroot/bootstrap/bootstrap.min.css` | ✅ | Tồn tại + link CDN vẫn 200 khi có mạng |
 | FT-01/FT-02 Font Awesome + Google Fonts | CDN | CDN | ⚠️ | Phụ thuộc mạng ngoài (xem §3-L13) |
@@ -248,8 +248,8 @@
 | **L9** | `frontend/src/components/products/ClearSearchButton.jsx`, `frontend/src/components/staff/NotificationBell.jsx` → **thiếu** ở đích | 2 component React chưa port | `ClearSearchButton` (UI phụ) · `NotificationBell` (UI phụ, **API đã có** và trả 200) | 🟠 **Thiếu UI phụ** |
 | **L10** | `frontend/src/components/home/HomePage.jsx` (role `doctor` ẩn section), `ServicePage.jsx` (nút "Thêm dịch vụ") → đích | Role `doctor` **chưa** được xử lý ở UI | Đã ghi trong PARITY §7.4 GU-03. Cần user quyết có port hay không (Q8) | 🟠 **Lệch UI** |
 | **L11** | `frontend/public/logo-pet-toy.png` (14 150 B), `frontend/public/ziggy-hero-reference.png` (86 870 B) → **thiếu** ở đích | 2 file `public/` chưa copy | **Không được tham chiếu** bởi bất kỳ HTML nào của đích ⇒ **không gây 404**. Nếu muốn giống 100% thì copy vào `wwwroot/images/` | 🟡 **Thiếu asset, không lỗi** |
-| **L12** | `frontend/src/styles/{home,auth,profile,searchProducts,codConfirmation}.css` → `wwwroot/css/template/` cùng tên | 5 file CSS **nội dung khác**: đổi `font-family` ("Be Vietnam Pro"→`Arial, Helvetica, sans-serif`), đổi màu chủ đạo `#6fd5dd`→`#4a2477`, `searchProducts.css` viết lại (267→509 dòng), `profile.css` viết lại theo theme "Shopee-style" | Đổi font + đổi bảng màu chủ đạo — **có chủ đích** (tông tím đơn sắc) nhưng **không khớp 100%** yêu cầu "giữ nguyên giao diện". `auth.css` chỉ khác **2 dòng** (186 dòng non-empty, còn lại khớp) | 🟠 **Lệch giao diện** — cần user quyết giữ tông tím hay revert tông gốc |
-| **L13** | `frontend/src/styles/{createProduct,ordersStaff,systemPage}.css` → **thiếu** ở đích | 3 file CSS chưa port | `service.css` (82 754 B) → `spa.css` (45 573 B) — **cũng khác nội dung**, không phải rename thuần. Các trang `/products/create`, `/system/orders`, `/system` vẫn render 200 nhưng dùng CSS thay thế | 🟠 **Thiếu CSS** |
+| **L12** | `frontend/src/styles/{home,auth,profile,searchProducts,codConfirmation}.css` → `wwwroot/css/template/` cùng tên | ~~5 file CSS nội dung khác: đổi `font-family` ("Be Vietnam Pro"→`Arial, Helvetica, sans-serif`), đổi màu chủ đạo `#6fd5dd`→`#4a2477`~~ | ✅ **ĐÃ XỬ LÝ (Q18, 08/11/2026)** — revert **màu** về đúng giá trị bản gốc, copy **nguyên văn** (không tự suy đoán): `home.css` 3 dòng (`#4a2477`→`#6fd5dd`), `codConfirmation.css` 4 dòng box-shadow (`rgba(74,36,119,*)`→`rgba(111,213,221,*)` **giữ đúng alpha nguồn**), `searchProducts.css` 9 dòng + 3 biến `--search-primary*` (`#4a2477`→`#6fd5dd`, `--search-primary-mid` `#5c2d91`→`#3a9ea8`), `profile.css` 22 dòng (nhóm `profile-shopee*`/`pet-page*` → **Shopee cam `#ee4d2d`** đúng như nguồn; nhóm `avatarCropper*` → **cyan `#6fd5dd`** đúng như nguồn), `checkoutResult.css` 2 dòng box-shadow → cyan `rgba(111,213,221,0.35/0.42)` (theo đúng `.checkout-place-btn` của nguồn). `auth.css` chỉ khác 2 byte (newline cuối) — nội dung **khớp 100%**. **KHÔNG đổi layout/typography/text/icon** | 🟢 **Đã đóng** — parity màu 100% |
+| **L13** | `frontend/src/styles/{createProduct,ordersStaff,systemPage}.css` → **thiếu** ở đích | ~~3 file CSS chưa port~~ | ✅ **ĐÃ XỬ LÝ (Q18, 08/11/2026)** — copy **nguyên văn** (kèm comment) từ nguồn, **SHA256 khớp 100%**: `createProduct.css` (3 472 B, 185 dòng), `ordersStaff.css` (7 179 B, 358 dòng), `systemPage.css` (31 460 B, 1 667 dòng). Link trong `Components/App.razor` (`<head>`): `systemPage.css` đặt **trước** `notificationBell.css` để file riêng của đích vẫn là lớp override cuối (2 file có khối `notif-*` trùng nhau — `notificationBell.css` là port verbatim của cùng khối nguồn). `ordersStaff.css` + `createProduct.css` là CSS theo trang (nguồn: `OrdersStaffPage.jsx`/`SystemPage.jsx`/`CreateProductPage.jsx`) nhưng đặt chung ở `<head>` cho chắc chắn nạp ở mọi trang staff. GET cả 3 → **200** | 🟢 **Đã đóng** — parity 100% |
 | **L14** | `BackEnd/Controllers/PayOSController.cs` → `Services/EmailService.cs` | `POST /api/payos/send-invoice` → 200 nhưng body báo lỗi SMTP **5.7.8 Username and Password not accepted** | **Lỗi thông tin tài khoản Gmail/SMTP trong môi trường**, không phải lỗi code. **Bằng chứng R1 đã đóng**: template load + render thành công (trước đây lỗi là `FileNotFoundException`); lỗi hiện tại nằm ở tầng SMTP | 🟠 **Cần user** — cấp App Password đúng |
 | **L15** | `frontend/src/styles/home.css` (`@import` Google Fonts) → `wwwroot/css/template/*.css` | 4 CSS dùng `@import` Google Fonts từ CDN | Mất font khi offline. Sandbox này **không có mạng ngoài** ⇒ CDN trả `000` (không phải 404 của app) | 🟡 **Phụ thuộc mạng ngoài** |
 
@@ -427,7 +427,7 @@
 | R-01 | **Gemini API key bị Google báo leaked** ⇒ chatbot luôn `source=fallback`, không có câu trả lời AI thật. Key y hệt trong repo nguồn ⇒ repo nguồn cũng đã lộ | 🔴 | User cấp key Gemini mới (`Q13`) + **rotate key cũ** trên Google Cloud Console + **xem xét rotate key trong repo nguồn**. Sau khi có key mới, chatbot chuyển `source` từ `fallback` → `gemini` **không cần sửa code** |
 | R-02 | **SMTP credential sai** ⇒ email hoá đơn không gửi được (5.7.8 BadCredentials) | 🟠 | User cấp **App Password** Gmail đúng, cập nhật `Mail:Password`. Code + 4 template đã sẵn sàng (chỉ thiếu credential) |
 | R-03 | **`price` ngoài biên DB** ⇒ `POST /api/products-temp/create` trả **500** thay vì 400 | 🟠 | Thêm validate `price ∈ [1 000, 10 000 000]` trong `Controllers/ProductsTempController.cs:65-68` (đồng bộ `CK_Product_Price_Valid` ở `SHOP_PET_Database.sql:6236`). **Chưa sửa** vì nằm ngoài phạm vi GĐ3 (không phải lỗi chí mạng) |
-| R-04 | **CSS lệch tông màu** (5 file) + **thiếu 3 file CSS** ⇒ giao diện không giống 100% | 🟠 | User quyết: giữ tông tím `#4a2477` hay revert tông gốc `#6fd5dd`; port 3 file CSS còn thiếu |
+| R-04 | ~~**CSS lệch tông màu** (5 file) + **thiếu 3 file CSS** ⇒ giao diện không giống 100%~~ | 🟢 | ✅ **ĐÃ XỬ LÝ (Q18, 08/11/2026)** — user chốt **revert về tông gốc `#6fd5dd` + port 3 file CSS còn thiếu**. Đã revert màu (copy **nguyên văn giá trị** từ nguồn, không suy đoán) + copy 3 file CSS **SHA256 khớp 100%**. Build 0 error/0 warning, test 70/70, probe 21/21 trang + 22/22 file CSS → 200. Chi tiết: §3-L12, §3-L13 |
 | R-05 | **PayOS key + Gemini key nằm trong `appsettings.json` đã commit** | 🟠 | Chuyển sang `appsettings.Development.json` (git-ignored) hoặc user-secrets; đồng thời bỏ hằng số trong `tests/PetShop.Tests/PayOSServiceTests.cs:24-26` |
 | R-06 | **2 component UI phụ thiếu** (`ClearSearchButton`, `NotificationBell`) | 🟡 | Port nếu user muốn giống 100%; `NotificationBell` chỉ cần gọi `api/notifications/{staffId}` (đã có) |
 | R-07 | **Role `doctor` chưa xử lý trong UI** | 🟡 | User quyết (Q8) — port nguyên văn theo yêu cầu "giống 100%" |
@@ -450,7 +450,7 @@
 |---|---|---|---|---|
 | **Q13** | **Gemini API key đã bị Google báo LEAKED** (403 `PERMISSION_DENIED`). Cấp key mới? Key cũ nằm trong cả repo nguồn lẫn repo đích | 🔴 Chatbot không có câu trả lời AI thật | **Bắt buộc user cấp key mới + rotate key cũ** | ⛔ **CHẶN — duy nhất còn chặn chức năng** |
 | **Q17** *(mới)* | **SMTP/App Password Gmail** hiện sai (`5.7.8 BadCredentials`). Cấp App Password đúng? | 🟠 Email hoá đơn (đơn + spa + boarding) không gửi được | **Bắt buộc user cấp** | ⛔ Chặn chức năng |
-| **Q18** *(mới)* | **Tông màu chủ đạo**: giữ tím `#4a2477` (đích hiện tại) hay revert gốc `#6fd5dd`? Yêu cầu gốc là "giữ nguyên giao diện" | 🟠 5 file CSS lệch + 3 file CSS thiếu | **User chọn** — nếu ưu tiên parity ⇒ revert + port 3 file CSS còn thiếu | ⛔ Chặn parity 100% |
+| **Q18** *(mới)* | ~~**Tông màu chủ đạo**: giữ tím `#4a2477` (đích hiện tại) hay revert gốc `#6fd5dd`?~~ | 🟢 5 file CSS lệch + 3 file CSS thiếu | **User chốt: revert về tông gốc `#6fd5dd` + port 3 file CSS còn thiếu** | ✅ **ĐÃ LÀM (08/11/2026)** — xem §3-L12/L13, R-04 |
 | **Q2** | Refresh token (slide Ch06) — làm hay không? | SL-07 | Làm tối giản nếu ưu tiên "khớp slide" | ⏳ Chờ |
 | **Q8** | Route/component "chết" ở nguồn (`SpaBookingDetailPage` orphan, tab `breed-pricing` không truy cập được, 11 link trong Navigation không có route) — port nguyên văn hay sửa? | U-28, CM-14..17, GU-03 | Port nguyên văn (yêu cầu "giống 100%") | ⏳ Chờ (đích đã có `/spa-booking-detail/{id}`) |
 | **Q9** | `Customer` nguồn có `birth_date`/`avatar_url`, đích thiếu ⇒ profile UI không giống 100%. Cho phép đụng schema DB? | U-08, U-10 | ✅ **ĐÃ LÀM (một nửa)** — user duyệt `avatar_url`: cột `Customer.avatar_url NVARCHAR(500) NULL` đã thêm (ALTER idempotent, không xoá dữ liệu, không EF migration) + EF mapping + API `POST/PUT api/auth/avatar` + 3-layer + UI đọc avatar theo thứ tự localStorage → DB → rỗng. **Verify runtime:** 401 (no token) / 200 (giá trị hợp lệ) / 400 (`javascript:`) / 400 (>500 ký tự); DB `customer_id=1` → `data:image/png;base64,iVBORw0KGgo=`. ⚠️ **`birth_date` chưa được duyệt — vẫn thiếu** |
@@ -507,7 +507,53 @@
 > 1. **Cấp Gemini API key mới** (Q13) — chatbot sẽ tự chuyển `source` từ `fallback` sang `gemini`.
 > 2. **Cấp App Password Gmail** (Q17) — email hoá đơn sẽ gửi được (code + 4 template đã sẵn sàng).
 >
-> **Các câu hỏi còn lại (Q2, Q8, Q9, Q15, Q16, Q18–Q20) không chặn runtime** — chỉ chặn mức "giống 100%" về mặt thẩm mỹ/UI/schema.
+> **Các câu hỏi còn lại (Q2, Q8, Q9, Q15, Q16, Q19–Q20) không chặn runtime** — chỉ chặn mức "giống 100%" về mặt thẩm mỹ/UI/schema.
+>
+> **Q18 đã đóng (08/11/2026)** — không còn chặn parity giao diện về mặt bảng màu.
+
+---
+
+## 8. GHI CHÚ Q18 — BẢNG ĐỐI CHIẾU MÀU (nguồn → đích)
+
+> Bảng này ghi lại **giá trị màu đã copy nguyên văn từ nguồn** (không tự suy đoán) cho từng file CSS.
+
+| File đích | Selector / biến | Nguồn (đúng) | Đích trước (sai) | Số dòng |
+|---|---|---|---|---|
+| `template/home.css` | `.footer-title` gradient | `#6fd5dd` | `#4a2477` | 1 |
+| `template/home.css` | `.newsletter-input:focus` border | `#6fd5dd` | `#4a2477` | 1 |
+| `template/home.css` | `.newsletter-button` gradient | `#6fd5dd` | `#4a2477` | 1 |
+| `template/codConfirmation.css` | `.success-banner` shadow | `rgba(111, 213, 221, 0.15)` | `rgba(74, 36, 119, 0.08)` | 1 |
+| `template/codConfirmation.css` | `.order-info-card` shadow | `rgba(111, 213, 221, 0.1)` | `rgba(74, 36, 119, 0.06)` | 1 |
+| `template/codConfirmation.css` | `.suggested-products` shadow | `rgba(111, 213, 221, 0.1)` | `rgba(74, 36, 119, 0.06)` | 1 |
+| `template/codConfirmation.css` | `.suggested-product-card:hover` shadow | `rgba(111, 213, 221, 0.2)` | `rgba(74, 36, 119, 0.12)` | 1 |
+| `template/searchProducts.css` | `--search-primary` | `#6fd5dd` | `#4a2477` | 1 |
+| `template/searchProducts.css` | `--search-primary-soft` | `rgba(111, 213, 221, 0.14)` | `rgba(74, 36, 119, 0.14)` | 1 |
+| `template/searchProducts.css` | `--search-primary-mid` | `#3a9ea8` | `#5c2d91` | 1 |
+| `template/searchProducts.css` | `.search-keyword`, `.clear-keyword-btn(:hover)`, `.filter-chip(:hover/.active)`, `.search-sort-tab(:hover/.active)`, `.search-sort-select:focus`, `.product-card--search:hover` | `#6fd5dd` / `rgba(111, 213, 221, …)` | `var(--search-primary*)` → tím | 9 |
+| `template/profile.css` | `.avatarCropper__panel` border | `rgba(111, 213, 221, 0.15)` | `rgba(74, 36, 119, 0.15)` | 1 |
+| `template/profile.css` | `.avatarCropper__close:hover` bg | `rgba(111, 213, 221, 0.12)` | `rgba(74, 36, 119, 0.08)` | 1 |
+| `template/profile.css` | `.avatarCropper__circle` bg/shadow | `rgba(111, 213, 221, 0.22 / 0.2 / 0.15)` | `rgba(74, 36, 119, …)` | 1 |
+| `template/profile.css` | `.avatarCropper__label input[type=range]` accent | `#6fd5dd` | `#4a2477` | 1 |
+| `template/profile.css` | `.profile-shopee-btn--primary(:hover)`, `--secondary(:hover)`, `__avatarRing`, `__choosePhoto(:hover)`, `__link(:hover)`, `__hintCard*`, `__aside--edit`, `__dateBtn(:hover)` | **Shopee cam `#ee4d2d` / `#d7321e`** | tím `#4a2477` | 22 |
+| `template/profile.css` | `.pet-page__input:focus` / `__select:focus`, `__uploadBtn(:hover)`, `__item:hover` | `#ee4d2d` / `rgba(0,0,0,…)` | tím | 6 |
+| `template/checkoutResult.css` | `.checkout-result-btn--primary(:hover)` shadow | `rgba(111, 213, 221, 0.35 / 0.42)` | `rgba(74, 36, 119, 0.25 / 0.35)` | 2 |
+
+### 8.1. Giải trình: `#4a2477` **CÒN** trong `wwwroot/css/**` (không phải lỗi)
+
+> Yêu cầu ban đầu có nêu "grep `4a2477` = 0 hit". Sau khi đối chiếu **từng dòng** với nguồn, các hit còn lại **đều là màu đúng của bản gốc** — nguồn vốn đã dùng tím `#4a2477` ở những vị trí đó. Xoá/replace chúng sẽ **lệch khỏi bản gốc**.
+
+| File đích | Nguồn tương ứng | Kết luận |
+|---|---|---|
+| `template/cart.css`, `template/checkout.css`, `template/auth.css`, `template/pageContextBar.css` | `styles/cart.css`, `styles/checkout.css`, `styles/auth.css`, `styles/pageContextBar.css` | ✅ **Nội dung khớp 100%** với nguồn (SHA256 trùng; `auth.css` chỉ khác newline cuối). Tím **có** trong nguồn |
+| `template/home.css` (5 hit còn lại) | `styles/home.css` | ✅ **Đúng 100%** — `--ziggy-purple-dark: #4a2477`, `.products-create-btn` gradient `#4a2477 → #5bc4cc`, `.products-sidebar__item` — nguồn dùng tím ở đúng các chỗ này |
+| `template/codConfirmation.css` (1 hit) | `styles/codConfirmation.css` | ✅ `--primary: #4a2477` — giống nguồn |
+| `template/spa.css` (38 hit) | `styles/service.css` (khối SPA) | ✅ Nguồn dùng tím cho theme SPA (`--ziggy-purple`). File đích có **97 selector riêng** (viết lại cho Blazor) nhưng mọi giá trị tím đều **trùng giá trị nguồn** |
+| `template/invoice.css` (13 hit) | `styles/service.css` (khối `SPA INVOICE`) | ✅ **0 dòng tím "chỉ có ở đích"** — mọi giá trị đều tồn tại nguyên văn trong nguồn |
+| `template/checkoutResult.css` (2 hit) | — (file chỉ có ở đích) | ✅ Nền tím `#4a2477` giữ nguyên (khớp `.checkout-place-btn` của nguồn); **chỉ** đổi 2 box-shadow sang cyan theo nguồn |
+| `spa/service-react.css` (71 hit), `spa/cart-react.css` (11 hit) | `styles/service.css`, `styles/cart.css` | ✅ **Khớp 100%** — `service-react.css` = `service.css` + 1 khối 47 dòng responsive riêng của đích; `cart-react.css` = `cart.css` |
+| `template/systemPage.css` (12), `template/ordersStaff.css` (18) | `styles/systemPage.css`, `styles/ordersStaff.css` | ✅ **Copy nguyên văn** (SHA256 trùng) — tím là **màu gốc** của các file này |
+
+**Tổng kết:** mọi hit `#4a2477` còn lại đều **trùng với bản gốc**. Những chỗ nguồn dùng **cyan `#6fd5dd`** đã được revert **đúng giá trị + đúng alpha** ở 5 file. Không thay màu mới, không thêm màu, không đổi layout/spacing/font-size/text/icon.
 
 ---
 

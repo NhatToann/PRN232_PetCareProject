@@ -2386,7 +2386,7 @@ button.section-view-all:focus-visible {
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  background: linear-gradient(135deg, #4a2477, #ffd6c0);
+  background: linear-gradient(135deg, #6fd5dd, #ffd6c0);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -2556,7 +2556,7 @@ button.section-view-all:focus-visible {
 
 .newsletter-input:focus {
   background: rgba(255, 255, 255, 0.15);
-  border-color: #4a2477;
+  border-color: #6fd5dd;
   box-shadow: 0 0 30px rgba(111, 213, 221, 0.3);
 }
 
@@ -2571,7 +2571,7 @@ button.section-view-all:focus-visible {
 }
 
 .newsletter-button {
-  background: linear-gradient(135deg, #4a2477, #ff8c94);
+  background: linear-gradient(135deg, #6fd5dd, #ff8c94);
   color: white;
   border: none;
   padding: 1rem 2rem;

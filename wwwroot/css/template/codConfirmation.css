@@ -36,7 +36,7 @@
     border-radius: 16px;
     padding: 48px 24px;
     margin-bottom: 24px;
-    box-shadow: 0 4px 20px rgba(74, 36, 119, 0.08);
+    box-shadow: 0 4px 20px rgba(111, 213, 221, 0.15);
 }
 
 .success-icon {
@@ -76,7 +76,7 @@
     border-radius: 16px;
     padding: 24px;
     margin-bottom: 24px;
-    box-shadow: 0 4px 20px rgba(74, 36, 119, 0.06);
+    box-shadow: 0 4px 20px rgba(111, 213, 221, 0.1);
 }
 
 .order-info-title {
@@ -172,7 +172,7 @@
     background: var(--bg-white);
     border-radius: 16px;
     padding: 32px;
-    box-shadow: 0 4px 20px rgba(74, 36, 119, 0.06);
+    box-shadow: 0 4px 20px rgba(111, 213, 221, 0.1);
 }
 
 .suggested-title {
@@ -198,7 +198,7 @@
 }
 
 .suggested-product-card:hover {
-    box-shadow: 0 8px 24px rgba(74, 36, 119, 0.12);
+    box-shadow: 0 8px 24px rgba(111, 213, 221, 0.2);
 }
 
 .suggested-product-image {

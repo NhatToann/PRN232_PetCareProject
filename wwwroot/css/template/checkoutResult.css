@@ -148,12 +148,12 @@
 .checkout-result-btn--primary {
     background: #4a2477;
     color: #fff;
-    box-shadow: 0 4px 16px rgba(74, 36, 119, 0.25);
+    box-shadow: 0 4px 16px rgba(111, 213, 221, 0.35);
 }
 
 .checkout-result-btn--primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 22px rgba(74, 36, 119, 0.35);
+    box-shadow: 0 6px 22px rgba(111, 213, 221, 0.42);
     filter: brightness(1.06);
 }
 

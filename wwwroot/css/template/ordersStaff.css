@@ -1,0 +1,358 @@
+/* ══════════════════════════════════════
+   ORDERS STAFF PANEL — Shopee-style
+   Primary: #4a2477
+══════════════════════════════════════ */
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap");
+
+.osp-wrap {
+  font-family: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  color: #1e293b;
+}
+
+/* — Page header — */
+.osp-page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+}
+
+.osp-page-title {
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.osp-page-sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  color: #64748b;
+}
+
+/* — Tabs (Shopee-style pills) — */
+.osp-tabs {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin-bottom: 0;
+}
+
+.osp-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #475569;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.osp-tab:hover:not(.osp-tab--active) {
+  border-color: #4a2477;
+  color: #4a2477;
+  background: rgba(74, 36, 119, 0.04);
+}
+
+.osp-tab--active {
+  box-shadow: 0 4px 14px rgba(74, 36, 119, 0.28);
+  transform: translateY(-1px);
+}
+
+.osp-tab-icon {
+  display: inline-flex;
+  font-size: 0.82rem;
+}
+
+/* — Accent color bar under tabs — */
+.osp-accent-bar {
+  height: 3px;
+  border-radius: 2px;
+  margin: 0.6rem 0 1.2rem;
+  transition: background 0.3s ease;
+}
+
+/* — Empty / loading states — */
+.osp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 3rem 1.5rem;
+  border-radius: 20px;
+  border: 1.5px dashed rgba(148, 163, 184, 0.35);
+  background: #fafafa;
+  color: #64748b;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.osp-empty p { margin: 0; }
+
+.osp-empty-icon {
+  font-size: 2.2rem;
+  opacity: 0.5;
+}
+
+.osp-error {
+  border-color: rgba(220, 38, 38, 0.3);
+  color: #dc2626;
+  background: #fff5f5;
+}
+
+.osp-loading {
+  flex-direction: row;
+  justify-content: center;
+  border-style: solid;
+  border-color: rgba(74, 36, 119, 0.2);
+  background: rgba(74, 36, 119, 0.03);
+  color: #4a2477;
+  font-weight: 700;
+}
+
+.osp-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(74, 36, 119, 0.2);
+  border-top-color: #4a2477;
+  border-radius: 50%;
+  animation: osp-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes osp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* — Order cards list — */
+.osp-list {
+  display: grid;
+  gap: 0.9rem;
+}
+
+/* — Single order card — */
+.osp-card {
+  background: #fff;
+  border: 1.5px solid #e8eaf0;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.osp-card:hover {
+  box-shadow: 0 6px 24px rgba(74, 36, 119, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Card top strip: order id + date */
+.osp-card-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 1.1rem;
+  background: linear-gradient(135deg, rgba(74, 36, 119, 0.04), rgba(74, 36, 119, 0.01));
+  border-bottom: 1px solid #f1f0f7;
+}
+
+.osp-card-id {
+  font-size: 0.78rem;
+  font-weight: 900;
+  color: #4a2477;
+  letter-spacing: 0.04em;
+}
+
+.osp-card-date {
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+/* Card main row: product | amount + action */
+.osp-card-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1.1rem;
+}
+
+/* Left: thumbnail + product info */
+.osp-card-product {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.osp-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 12px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid #e8eaf0;
+  background: #f8fafc;
+}
+
+.osp-thumb--placeholder {
+  background: linear-gradient(135deg, #f1f5f9, #e9eef5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.osp-card-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.osp-card-name {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.osp-card-more {
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.osp-card-method {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+.osp-meta-icon {
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+/* Right: amount + action */
+.osp-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.55rem;
+  flex-shrink: 0;
+}
+
+.osp-card-amount {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #4a2477;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* Confirm button */
+.osp-btn-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.52rem 1rem;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #4a2477, #6b3fa0);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 10px rgba(74, 36, 119, 0.3);
+}
+
+.osp-btn-confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #371860, #4a2477);
+  box-shadow: 0 5px 16px rgba(74, 36, 119, 0.4);
+  transform: translateY(-1px);
+}
+
+.osp-btn-confirm:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.osp-btn-confirm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.osp-btn-icon {
+  font-size: 0.78rem;
+}
+
+/* Status display (non-pending) */
+.osp-card-status {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.osp-card-status svg {
+  font-size: 0.78rem;
+}
+
+/* Address row */
+.osp-card-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border-top: 1px solid #f1f0f7;
+  background: #fafafa;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.osp-addr-icon {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .osp-card-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .osp-card-right {
+    align-items: flex-start;
+    width: 100%;
+    flex-direction: row-reverse;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+  }
+
+  .osp-thumb {
+    width: 50px;
+    height: 50px;
+  }
+}
