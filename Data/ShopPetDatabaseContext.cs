@@ -767,6 +767,9 @@ namespace PetShop.Data
                     .HasColumnName("created_at");
                 entity.Property(e => e.Description).HasColumnName("description");
                 entity.Property(e => e.Duration).HasColumnName("duration");
+                entity.Property(e => e.ImageUrl)
+                    .HasMaxLength(500)
+                    .HasColumnName("image_url");
                 entity.Property(e => e.Name)
                     .HasMaxLength(200)
                     .HasColumnName("name");

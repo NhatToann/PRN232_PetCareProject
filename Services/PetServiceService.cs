@@ -21,5 +21,10 @@ namespace PetShop.Services
         {
             return _repo.GetDetailAsync(serviceId, ct);
         }
+
+        public Task<PetServiceDto?> CreateAsync(PetServiceCreateRequest request, CancellationToken ct = default)
+        {
+            return _repo.CreateAsync(request, ct);
+        }
     }
 }

@@ -5,6 +5,19 @@ using PetShop.Models;
 
 namespace PetShop.Controllers
 {
+    /// <summary>
+    /// Giỏ hàng MVC theo session (port nguyên văn từ OJT: <c>Projectojt\BackEnd\Controllers\CartController.cs</c>).
+    ///
+    /// Lưu ý về route:
+    /// - Bản gốc OJT có <c>GET /cart</c> (MVC) trả <c>View(items)</c> nhưng project gốc **không có thư mục Views**
+    ///   ⇒ request này luôn lỗi "No view found". Giao diện giỏ hàng thật của bản gốc là React SPA
+    ///   tại route <c>/cart</c> (file <c>frontend/src/pages/CartPage.jsx</c>).
+    /// - Ở đích, route <c>/cart</c> đã do Blazor <c>Components/Pages/Cart.razor</c> phục vụ (port 1:1 React SPA),
+    ///   nên MVC controller dùng route <c>/cart/session</c> để tránh trùng route (AmbiguousMatchException)
+    ///   và để tái sử dụng đúng cấu trúc MVC mà slide yêu cầu.
+    /// - Các action POST giữ nguyên hành vi nguồn: sau khi cập nhật session sẽ redirect về
+    ///   <c>Index</c> (tức <c>/cart/session</c>), tương đương <c>RedirectToAction(nameof(Index))</c> của bản gốc.
+    /// </summary>
     public sealed class CartController : Controller
     {
         private const string SessionKey = "cart";
@@ -13,6 +26,16 @@ namespace PetShop.Controllers
         public CartController(ShopPetDatabaseContext db)
         {
             _db = db;
+        }
+
+        /// <summary>
+        /// GET /cart/session — hiển thị giỏ hàng lưu trong session (tương đương GET /cart của bản gốc).
+        /// </summary>
+        [HttpGet("/cart/session")]
+        public IActionResult Index()
+        {
+            var items = HttpContext.Session.GetJson<List<CartItem>>(SessionKey) ?? new List<CartItem>();
+            return View(items);
         }
 
         [HttpPost("/cart/dec/{id:int}")]
@@ -28,7 +51,7 @@ namespace PetShop.Controllers
                 else items[idx] = current with { Quantity = nextQty };
                 HttpContext.Session.SetJson(SessionKey, items);
             }
-            return RedirectToAction(nameof(Index));
+            return RedirectToCartIndex();
         }
 
         [HttpPost("/cart/remove/{id:int}")]
@@ -41,7 +64,7 @@ namespace PetShop.Controllers
                 items.RemoveAt(idx);
                 HttpContext.Session.SetJson(SessionKey, items);
             }
-            return RedirectToAction(nameof(Index));
+            return RedirectToCartIndex();
         }
 
         [HttpPost("/cart/add/{id:int}")]
@@ -78,13 +101,20 @@ namespace PetShop.Controllers
 
             HttpContext.Session.SetJson(SessionKey, items);
 
-            if (goCart) return RedirectToAction(nameof(Index));
+            if (goCart) return RedirectToCartIndex();
 
             if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
                 return Redirect(returnUrl);
 
-            return RedirectToAction(nameof(Index));
+            return RedirectToCartIndex();
         }
-    }
 
+        /// <summary>
+        /// Redirect tới action Index của chính controller này.
+        /// Bản gốc dùng <c>RedirectToAction(nameof(Index))</c> nhưng thiếu action Index nên nhận HTTP 500
+        /// (InvalidOperationException: No route matches). Ở đích đã bổ sung action Index nên
+        /// <c>RedirectToAction</c> hoạt động đúng — dùng URL tường minh để không phụ thuộc route convention.
+        /// </summary>
+        private IActionResult RedirectToCartIndex() => Redirect("/cart/session");
+    }
 }

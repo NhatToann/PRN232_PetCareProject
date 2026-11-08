@@ -1,0 +1,72 @@
+@model PetShop.Models.ProductDto
+@{
+    ViewData["Title"] = Model.Name;
+}
+
+<div class="pd-wrap">
+    <div class="pd-bc-bar">
+        <nav class="pd-breadcrumb" aria-label="Breadcrumb">
+            <a href="/">Trang chủ</a>
+            <span class="pd-bc-sep">›</span>
+            <a href="/products">Sản phẩm</a>
+            @if (!string.IsNullOrWhiteSpace(Model.CategoryName))
+            {
+                <span class="pd-bc-sep">›</span>
+                <span>@Model.CategoryName</span>
+            }
+            <span class="pd-bc-sep">›</span>
+            <span class="pd-bc-current">@Model.Name</span>
+        </nav>
+    </div>
+
+    <div class="pd-layout-card">
+        <div class="pd-two-col">
+            <div class="pd-media">
+                <div class="pd-main-img">
+                    <img src="@Model.ImageUrl" alt="@Model.Name" />
+                </div>
+            </div>
+
+            <div class="pd-info">
+                <div class="pd-info-head">
+                    @if (Model.StockQuantity > 0)
+                    {
+                        <span class="pd-stock-pill">Còn hàng</span>
+                    }
+                    else
+                    {
+                        <span class="pd-stock-pill pd-stock-pill--out">Hết hàng</span>
+                    }
+                    <h1 class="pd-title">@Model.Name</h1>
+                    <p class="pd-sku">
+                        SKU: PET-@($"{Model.ProductId:D6}")
+                    </p>
+                </div>
+
+                <div class="pd-price-hero">@FormatPrice(Model.Price)</div>
+
+                @if (!string.IsNullOrWhiteSpace(Model.Description))
+                {
+                    <div class="pd-desc-block pd-desc-lead">
+                        <div class="pd-desc-body">@Model.Description</div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(Model.CategoryName))
+                {
+                    <div class="pd-meta-footer">
+                        <p>
+                            <span class="pd-meta-label">Danh mục:</span>
+                            <span class="pd-meta-value">@Model.CategoryName</span>
+                        </p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private static string FormatPrice(decimal value) =>
+        string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:C0}");
+}

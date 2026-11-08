@@ -403,3 +403,25 @@ có header `Authorization: Bearer` → `JwtBearer`, ngược lại → `Session`
 4. **Báo cáo bằng tiếng Việt**, nêu rõ file + dòng đã thay đổi và phần nào *chưa* làm.
 5. **Không** push / commit / force-push nếu chưa được yêu cầu rõ ràng.
 6. **Không** đề xuất thêm biện pháp bảo mật trừ khi chủ dự án hỏi.
+
+---
+
+## 7. Tối ưu RAM cho agent (bắt buộc)
+
+Chi tiết đầy đủ ở [`docs/agent.md`](docs/agent.md) §1. Tóm tắt:
+
+1. **Không bao giờ `Read` file lớn toàn bộ vào context.** File > 300 dày ⇒ dùng `Grep` (pattern + `head_limit`) rồi mới `Read` với `offset`/`limit`.
+2. File > 1500 dòng hoặc > 60 KB ⇒ **chỉ `Grep`**, không `Read`.
+3. Cấm đọc: `node_modules/`, `bin/`, `obj/`, `.git/`, SQL dump 866 KB, `database_script.txt`.
+4. Mỗi subagent chỉ đọc đúng phạm vi được giao; trả về **tóm tắt + đường dẫn + số dòng**, không dán lại code dài.
+5. Kết quả kiểm kê lớn **ghi ra `docs/_inventory/*.md`** thay vì giữ trong context.
+6. Tối đa **3 subagent đọc đồng thời**; agent nặng (quét asset, đọc CSS lớn) chạy **tuần tự**.
+7. Build dùng `dotnet build --nologo -v q` để không đổ ngữ cảnh log.
+8. `dotnet run` phải chạy **nền** (`Start-Process`), không chặn terminal.
+9. Dọn biến tạm sau mỗi lát cắt; không giữ 2 bản sao cùng nội dung trong bộ nhớ.
+10. Báo cáo cho user ≤ 40 dòng, không dán lại nội dung file.
+
+## 8. Quy trình báo cáo (bắt buộc)
+
+Mỗi lần báo cáo phải có đủ 4 phần: **1) ĐÃ LÀM** (file/số lượng/commit) · **2) CÒN LẠI** (checklist chưa tick + lý do) · **3) RỦI RO** (🔴/🟠/🟡 + biện pháp) · **4) CẦN USER QUYẾT** (Q1, Q2...).
+Báo cáo bằng **tiếng Việt**. Không nói "xong" khi chưa tick đủ checklist.

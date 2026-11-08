@@ -173,6 +173,20 @@ builder.Services.AddScoped<PetShop.Interfaces.IPayrollService, PetShop.Services.
 builder.Services.AddScoped<PetShop.Interfaces.IBoardingRepository, PetShop.Repositories.BoardingRepository>();
 builder.Services.AddScoped<PetShop.Interfaces.IBoardingService, PetShop.Services.BoardingService>();
 
+// ---------------------------------------------------------------------------
+// Chatbot AI (slide LS-08 — port từ OJT):
+//   - ChatbotOptions: đọc khối "Chatbot" trong appsettings.json.
+//   - IAiProviderService: chỉ Gemini (quyết định của chủ dự án, không port Ollama).
+//     Dùng AddHttpClient để có timeout lấy từ Chatbot:Providers:gemini:TimeoutSeconds.
+//   - IChatbotService: logic intent → context → system prompt → Gemini.
+//   - Truy vấn DB của chatbot đi qua IChatbotRepository (3-layer, không truy vấn trực tiếp trong service).
+// ---------------------------------------------------------------------------
+builder.Services.Configure<PetShop.Models.ChatbotOptions>(
+    builder.Configuration.GetSection(PetShop.Models.ChatbotOptions.SectionName));
+builder.Services.AddScoped<PetShop.Interfaces.IChatbotRepository, PetShop.Repositories.ChatbotRepository>();
+builder.Services.AddHttpClient<PetShop.Interfaces.IAiProviderService, PetShop.Services.GeminiProviderService>();
+builder.Services.AddScoped<PetShop.Interfaces.IChatbotService, PetShop.Services.ChatbotService>();
+
 builder.Services.Configure<PetShop.Models.PayOSOptions>(
     builder.Configuration.GetSection(PetShop.Models.PayOSOptions.SectionName));
 builder.Services.AddHttpClient<PetShop.Interfaces.IPayOSService, PetShop.Services.PayOSService>()

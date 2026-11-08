@@ -1,0 +1,113 @@
+@model List<CartItem>
+@using PetShop.Models
+@{
+    ViewData["Title"] = "Giỏ hàng";
+}
+
+<div class="cart-page-wrapper">
+    <div class="cart-page">
+        <div class="container">
+            @if (Model == null || Model.Count == 0)
+            {
+                <div class="cart-empty">
+                    <div class="cart-empty-icon">
+                        <svg viewBox="0 0 24 24" width="60" height="60" fill="currentColor" aria-hidden="true">
+                            <path d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM1 2h3l2.68 12.39A2 2 0 0 0 8.64 16h9.72a2 2 0 0 0 1.96-1.61L22 6H6" />
+                        </svg>
+                    </div>
+                    <h2>Giỏ hàng trống</h2>
+                    <p>Hãy thêm sản phẩm vào giỏ hàng của bạn</p>
+                    <a href="/#featured-products" class="cart-empty-btn">Mua sắm ngay</a>
+                </div>
+            }
+            else
+            {
+                var totalItems = Model.Sum(it => it.Quantity);
+                var totalPrice = Model.Sum(it => it.Quantity * it.Price);
+
+                <div class="cart-items-section">
+                    <div class="cart-items-header">
+                        <div class="cart-header-left">
+                            <span class="cart-select-all">
+                                <span> Chọn tất cả (@totalItems sản phẩm)</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="cart-items-list">
+                        @foreach (var item in Model)
+                        {
+                            <div class="cart-item selected">
+                                <div class="cart-item-checkbox">
+                                    <input type="checkbox" checked="checked" />
+                                </div>
+                                <div class="cart-item-image">
+                                    @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                    {
+                                        <img src="@item.ImageUrl" alt="@item.Name" />
+                                    }
+                                    else
+                                    {
+                                        <div class="cart-item-no-image"></div>
+                                    }
+                                </div>
+                                <div class="cart-item-info">
+                                    <div class="cart-item-name">@item.Name</div>
+                                    <div class="cart-item-price">@FormatPrice(item.Price)</div>
+                                </div>
+                                <div class="cart-item-actions">
+                                    <div class="quantity-control">
+                                        <button type="button" class="quantity-btn" disabled="@(item.Quantity <= 1)" aria-label="Giảm số lượng">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 13H5v-2h14v2z" /></svg>
+                                        </button>
+                                        <span class="quantity-value">@item.Quantity</span>
+                                        <button type="button" class="quantity-btn" aria-label="Tăng số lượng">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
+                                        </button>
+                                    </div>
+                                    <form method="post" action="/cart/remove/@item.ProductId" class="cart-item-remove-form">
+                                        <button type="submit" class="cart-item-remove">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
+                                            Xóa
+                                        </button>
+                                    </form>
+                                </div>
+                                <div class="cart-item-total">
+                                    <div class="cart-item-total-price">@FormatPrice(item.Price * item.Quantity)</div>
+                                    <div class="cart-item-total-note">/ sản phẩm</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="cart-summary-inline">
+                        <div class="cart-summary-row">
+                            <span class="cart-summary-label">Tổng sản phẩm</span>
+                            <span class="cart-summary-value">@totalItems / @totalItems sản phẩm</span>
+                        </div>
+                        <div class="cart-summary-row">
+                            <span class="cart-summary-label">Tạm tính</span>
+                            <span class="cart-summary-value">@FormatPrice(totalPrice)</span>
+                        </div>
+                        <div class="cart-summary-row">
+                            <span class="cart-summary-label">Phí vận chuyển</span>
+                            <span class="cart-summary-value">Miễn phí</span>
+                        </div>
+                        <div class="cart-summary-total">
+                            <span class="cart-summary-label">Tổng cộng </span>
+                            <span class="cart-summary-value">@FormatPrice(totalPrice)</span>
+                        </div>
+                        <a href="/cart/checkout" class="cart-checkout-btn">
+                            Thanh toán (@totalItems sản phẩm)
+                        </a>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@functions {
+    private static string FormatPrice(decimal value) =>
+        string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:C0}");
+}

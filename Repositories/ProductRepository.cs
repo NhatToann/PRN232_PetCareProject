@@ -173,5 +173,165 @@ namespace PetShop.Repositories
                 ReviewCount = stats.ReviewCount
             };
         }
+
+        // ---------------------------------------------------------------
+        // LS-04: các method write/search cho api/products-temp/*
+        // ---------------------------------------------------------------
+
+        public async Task<IReadOnlyList<ProductDto>> SearchAsync(string? keyword, int? categoryId, CancellationToken ct = default)
+        {
+            return await GetAllAsync(keyword, categoryId, ct);
+        }
+
+        public async Task<ProductDto?> CreateAsync(ProductCreateRequest request, CancellationToken ct = default)
+        {
+            var supplierId = await ResolveSupplierIdAsync(request.SupplierName, ct);
+
+            var product = new Product
+            {
+                Name = request.Name,
+                Price = request.Price,
+                StockQuantity = request.StockQuantity,
+                Description = request.Description,
+                ImageUrl = request.ImageUrl,
+                CategoryId = request.CategoryId,
+                SupplierId = supplierId,
+                IsDeleted = false
+            };
+
+            _db.Products.Add(product);
+            await _db.SaveChangesAsync(ct);
+
+            return await GetByIdAsync(product.ProductId, ct);
+        }
+
+        public async Task<ProductDto?> UpdateAsync(ProductUpdateRequest request, CancellationToken ct = default)
+        {
+            var product = await _db.Products
+                .Where(p => p.ProductId == request.ProductId)
+                .FirstOrDefaultAsync(ct);
+
+            if (product is null)
+            {
+                return null;
+            }
+
+            product.Name = request.Name;
+            product.Price = request.Price;
+            product.StockQuantity = request.StockQuantity;
+            product.Description = request.Description;
+            product.CategoryId = request.CategoryId;
+            product.ImageUrl = request.ImageUrl;
+
+            var supplierId = await ResolveSupplierIdAsync(request.SupplierName, ct);
+            product.SupplierId = supplierId;
+
+            await _db.SaveChangesAsync(ct);
+
+            return await GetByIdAsync(product.ProductId, ct);
+        }
+
+        public async Task<bool> SoftDeleteAsync(int productId, CancellationToken ct = default)
+        {
+            var product = await _db.Products
+                .Where(p => p.ProductId == productId)
+                .FirstOrDefaultAsync(ct);
+
+            if (product is null)
+            {
+                return false;
+            }
+
+            product.IsDeleted = true;
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        public async Task<IReadOnlyList<ProductDto>> GetDeletedAsync(CancellationToken ct = default)
+        {
+            var products = await _db.Products
+                .AsNoTracking()
+                .Include(p => p.Category)
+                .Include(p => p.Supplier)
+                .Where(p => p.IsDeleted)
+                .OrderBy(p => p.ProductId)
+                .ToListAsync(ct);
+
+            return products
+                .Select(p => new ProductDto(
+                    p.ProductId,
+                    p.Name ?? string.Empty,
+                    p.Price,
+                    p.StockQuantity,
+                    p.Description,
+                    p.ImageUrl,
+                    p.CategoryId,
+                    p.Category?.Name,
+                    p.SupplierId,
+                    p.Supplier?.NameCompany,
+                    0d,
+                    0
+                ))
+                .ToList();
+        }
+
+        public async Task<bool> RestoreAsync(int productId, CancellationToken ct = default)
+        {
+            var product = await _db.Products
+                .Where(p => p.ProductId == productId)
+                .FirstOrDefaultAsync(ct);
+
+            if (product is null)
+            {
+                return false;
+            }
+
+            product.IsDeleted = false;
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        public async Task<bool> PermanentDeleteAsync(int productId, CancellationToken ct = default)
+        {
+            var product = await _db.Products
+                .Where(p => p.ProductId == productId)
+                .FirstOrDefaultAsync(ct);
+
+            if (product is null)
+            {
+                return false;
+            }
+
+            _db.Products.Remove(product);
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        /// <summary>
+        /// Tìm supplier theo tên công ty; nếu chưa có thì tạo mới để không mất dữ liệu khi update.
+        /// </summary>
+        private async Task<int?> ResolveSupplierIdAsync(string? supplierName, CancellationToken ct)
+        {
+            var name = supplierName?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return null;
+            }
+
+            var existing = await _db.Suppliers
+                .Where(s => s.NameCompany == name)
+                .Select(s => (int?)s.SupplierId)
+                .FirstOrDefaultAsync(ct);
+
+            if (existing.HasValue)
+            {
+                return existing.Value;
+            }
+
+            var supplier = new Supplier { NameCompany = name };
+            _db.Suppliers.Add(supplier);
+            await _db.SaveChangesAsync(ct);
+            return supplier.SupplierId;
+        }
     }
 }

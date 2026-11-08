@@ -1,0 +1,183 @@
+@page "/about"
+
+<PageTitle>Giới thiệu về Pet Toy Shop</PageTitle>
+
+<div class="home-page about-page">
+    <TopBar />
+    <Header />
+    <Navigation />
+
+    <main class="about-main">
+        <section class="about-hero">
+            <div class="container">
+                <div class="about-hero__card">
+                    <p class="about-hero__kicker">Giới thiệu về Pet Toy Shop</p>
+                    <h1>
+                        Không chỉ là nơi mua sắm, đây là hệ sinh thái chăm sóc thú cưng nơi mỗi bé luôn
+                        được yêu thương, lắng nghe và chăm sóc như một thành viên trong gia đình.
+                    </h1>
+                    <p>
+                        Pet Toy Shop được xây dựng với mong muốn mang lại trải nghiệm chăm sóc thú cưng
+                        hiện đại, thuận tiện và đầy cảm xúc cho mọi gia đình. Từ sản phẩm thiết yếu mỗi
+                        ngày đến các dịch vụ spa chuyên sâu, chúng tôi luôn đặt sự an toàn, thoải mái và
+                        sức khỏe lâu dài của thú cưng lên hàng đầu. Mỗi lần bạn ghé thăm, đội ngũ không chỉ
+                        phục vụ một dịch vụ, mà còn đồng hành để hiểu rõ tính cách, thói quen và nhu cầu
+                        riêng của từng bé.
+                    </p>
+                    <p>
+                        Tại Pet Toy Shop, công nghệ được sử dụng để hỗ trợ trải nghiệm xuyên suốt: xem
+                        dịch vụ, đặt lịch, theo dõi lịch sử chăm sóc, gửi đánh giá và nhận tư vấn phù hợp.
+                        Điều này giúp quá trình chăm sóc trở nên minh bạch, chủ động và nhất quán hơn theo
+                        thời gian. Chúng tôi tin rằng sự phát triển bền vững của một thương hiệu thú cưng
+                        không đến từ lời hứa ngắn hạn, mà đến từ sự tử tế trong từng chi tiết nhỏ và chất
+                        lượng được duy trì mỗi ngày.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="about-section">
+            <div class="container">
+                <h2 class="about-title">Giá trị cốt lõi chúng tôi theo đuổi</h2>
+                <div class="about-grid about-grid--three">
+                    @foreach (var item in Highlights)
+                    {
+                        <article class="about-card">
+                            <h3>@item.Title</h3>
+                            <p>@item.Text</p>
+                        </article>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section class="about-section about-section--alt">
+            <div class="container">
+                <div class="about-grid about-grid--two">
+                    <article class="about-card about-card--list">
+                        <h2>Dịch vụ chăm sóc thú cưng nổi bật</h2>
+                        <p>
+                            Chúng tôi thiết kế danh mục dịch vụ theo hướng thực tế và hiệu quả, tập trung vào
+                            nhu cầu thường gặp của thú cưng trong môi trường sống đô thị hiện đại.
+                        </p>
+                        <ul>
+                            @foreach (var point in ServicePoints)
+                            {
+                                <li>@point</li>
+                            }
+                        </ul>
+                    </article>
+
+                    <article class="about-card">
+                        <h2>Cam kết chất lượng dịch vụ</h2>
+                        <p>
+                            Mỗi dịch vụ đều được thực hiện theo chuẩn quy trình nội bộ, có bước kiểm tra trước
+                            - trong - sau khi chăm sóc để đảm bảo chất lượng ổn định. Chúng tôi ưu tiên giao
+                            tiếp minh bạch, luôn giải thích rõ các hạng mục trước khi thực hiện và sẵn sàng
+                            tiếp nhận phản hồi để cải thiện.
+                        </p>
+                        <p>
+                            Với chúng tôi, một trải nghiệm tốt là khi thú cưng thoải mái, khách hàng yên tâm
+                            và kết quả chăm sóc có thể cảm nhận rõ sau từng lần ghé thăm.
+                        </p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="about-section">
+            <div class="container">
+                <h2 class="about-title">Quy trình phục vụ tại Pet Toy Shop</h2>
+                <div class="about-steps">
+                    @foreach (var step in Steps)
+                    {
+                        <article class="about-step">
+                            <h3>@step.Title</h3>
+                            <p>@step.Text</p>
+                        </article>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section class="about-section about-section--alt">
+            <div class="container">
+                <article class="about-card about-card--faq">
+                    <h2>Vì sao khách hàng lựa chọn chúng tôi lâu dài?</h2>
+                    <p>
+                        Bởi vì Pet Toy Shop luôn duy trì sự cân bằng giữa chuyên môn và cảm xúc. Chúng tôi
+                        hiểu mỗi thú cưng đều có tính cách riêng, nên không áp dụng một công thức cứng nhắc.
+                        Thay vào đó, đội ngũ quan sát kỹ phản ứng của từng bé để điều chỉnh nhịp độ chăm sóc
+                        phù hợp, giúp quá trình diễn ra nhẹ nhàng và tích cực hơn.
+                    </p>
+                    <p>
+                        Đồng thời, hệ thống trang web được tối ưu để bạn dễ dàng theo dõi dịch vụ, lịch sử
+                        sử dụng và phản hồi chất lượng. Mọi đánh giá từ khách hàng đều được ghi nhận nghiêm
+                        túc, trở thành dữ liệu quan trọng giúp chúng tôi cải tiến liên tục.
+                    </p>
+                </article>
+            </div>
+        </section>
+
+        <section class="about-cta">
+            <div class="container">
+                <div class="about-cta__inner">
+                    <h2>Pet Toy Shop - nơi mỗi buổi chăm sóc là một trải nghiệm hạnh phúc</h2>
+                    <p>
+                        Cảm ơn bạn đã tin tưởng lựa chọn chúng tôi. Dù bạn cần tư vấn nhanh, đặt dịch vụ spa
+                        hay tìm sản phẩm phù hợp cho thú cưng, Pet Toy Shop luôn sẵn sàng đồng hành để hành
+                        trình chăm sóc thú cưng của bạn trở nên nhẹ nhàng, chủ động và trọn vẹn hơn mỗi ngày.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <Footer />
+</div>
+
+@code {
+    private static readonly IReadOnlyList<(string Title, string Text)> Highlights = new[]
+    {
+        (
+            "Chăm sóc toàn diện",
+            "Từ tắm gội, cắt tỉa lông, vệ sinh tai - móng đến tư vấn dinh dưỡng và lịch chăm sóc định kỳ, mọi bước đều được chuẩn hóa để thú cưng luôn khỏe đẹp."
+        ),
+        (
+            "Đội ngũ tận tâm",
+            "Nhân sự được đào tạo về hành vi thú cưng, xử lý nhẹ nhàng và theo dõi sát phản ứng trong suốt quá trình chăm sóc, giúp các bé bớt căng thẳng."
+        ),
+        (
+            "Không gian an toàn",
+            "Khu vực vệ sinh, dụng cụ và quy trình khử khuẩn được kiểm soát mỗi ngày, ưu tiên sự an toàn và thoải mái của từng bé khi đến cửa hàng."
+        )
+    };
+
+    private static readonly IReadOnlyList<string> ServicePoints = new[]
+    {
+        "Spa tắm gội theo tình trạng da - lông, phù hợp từng giống và từng độ tuổi.",
+        "Cắt tỉa tạo kiểu gọn gàng, giữ form tự nhiên, hạn chế rối và gãy lông.",
+        "Vệ sinh chuyên sâu: tai, mắt, răng miệng, tuyến mồ hôi và cắt mài móng.",
+        "Theo dõi lịch sử booking - đánh giá để cải thiện chất lượng phục vụ liên tục."
+    };
+
+    private static readonly IReadOnlyList<(string Title, string Text)> Steps = new[]
+    {
+        (
+            "1. Lắng nghe và tiếp nhận",
+            "Đội ngũ trao đổi kỹ về tình trạng hiện tại, thói quen sinh hoạt và mong muốn của bạn trước khi bắt đầu chăm sóc."
+        ),
+        (
+            "2. Đề xuất gói phù hợp",
+            "Dựa trên giống, độ tuổi, đặc điểm da - lông và lịch sử dịch vụ, chúng tôi đề xuất giải pháp tối ưu để đạt hiệu quả tốt nhất."
+        ),
+        (
+            "3. Chăm sóc theo quy trình chuẩn",
+            "Mỗi công đoạn đều có checklist rõ ràng, đảm bảo vệ sinh, an toàn và cảm xúc tích cực cho thú cưng trong suốt buổi dịch vụ."
+        ),
+        (
+            "4. Bàn giao và tư vấn sau dịch vụ",
+            "Sau khi hoàn tất, khách hàng nhận thông tin tổng quan, khuyến nghị chăm sóc tại nhà và lịch phù hợp cho lần tiếp theo."
+        )
+    };
+}

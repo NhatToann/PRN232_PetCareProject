@@ -23,6 +23,8 @@ namespace PetShop.Models
 
         public DateTime? UpdatedAt { get; set; }
 
+        public string? ImageUrl { get; set; }
+
         public virtual ICollection<BookingService> BookingServices { get; set; } = new List<BookingService>();
     }
 }
