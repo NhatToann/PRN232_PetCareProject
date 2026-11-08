@@ -15,7 +15,7 @@
 | Hạng mục | Kết quả | Bằng chứng |
 |---|---|---|
 | `dotnet build PetShop_PRN222.csproj --nologo "-v:q"` | ✅ **0 Error / 0 Warning** (9,72 s) | Build succeeded. 0 Warning(s), 0 Error(s) |
-| `dotnet test --nologo` | ✅ **56/56 pass**, 0 fail, 0 skip | `Passed! - Failed: 0, Passed: 56, Skipped: 0, Total: 56` (49 cũ + 7 test LS-11 trong `NotificationHubTests.cs`) |
+| `dotnet test --nologo` | ✅ **70/70 pass**, 0 fail, 0 skip | `Passed! - Failed: 0, Passed: 70, Skipped: 0, Total: 70` (49 gốc + 7 test LS-11 `NotificationHubTests.cs` + 14 test Q9 `AuthServiceAvatarTests.cs`) |
 | `dotnet run --no-build --launch-profile http` | ✅ Chạy nền thành công | `Now listening on: http://[::]:5286` + `http://[::]:5287` (gRPC h2c) |
 | DB `SHOP_PET_Database` | ✅ Kết nối OK, **32 bảng** | `sa`/`123`; bảng: `admin`…`WorkSchedule` |
 | Docker image | ✅ `petshop-prn232:latest` tồn tại (470 MB) | `docker images` |
@@ -462,6 +462,8 @@
 | **Q19** *(mới)* | `tests/PetShop.Tests/PayOSServiceTests.cs:24-26` chứa hằng số trùng `appsettings.json`. Cho phép chuyển sang user-secrets/environment? | 🟠 Vệ sinh secret | Nên chuyển (không ảnh hưởng chức năng) | ⏳ Chờ |
 | **Q20** *(mới)* | `POST /api/products-temp/create` nên trả **400** khi `price` ngoài `[1000, 10 000 000]` (đồng bộ `CK_Product_Price_Valid`) thay vì 500? | 🟠 UX lỗi | Nên sửa (1 dòng validate trong `Controllers/ProductsTempController.cs`) | ⏳ Chờ |
 | **Q21** *(mới — LS-11)* | **Có cần UI chat widget cho khách/nhân viên không?** Hiện `NotificationBell` đã nhận event `ChatReceived` qua SignalR nhưng **chỉ ghi log**, chưa hiển thị hộp thoại chat. Cần làm widget chat 1-1 (khung chat nhỏ trong topbar/trang chat) không? | 🟡 UX | Cần user quyết — hạ tầng SignalR + lưu `ChatMessages` đã sẵn sàng | ⏳ Chờ |
+| **Q22** *(mới — Q9)* | **`Customer.birth_date`** — user mới chỉ duyệt thêm cột `avatar_url`. Nguồn có ô "Ngày sinh" (`ProfileEditPage.jsx`) nhưng lưu localStorage; đích hiện cũng lưu localStorage. Có thêm cột `birth_date` vào DB không? | 🟡 Parity | Nên thêm nếu muốn profile bền vững giống `avatar_url` (ALTER idempotent, không xoá dữ liệu) | ⏳ Chờ |
+| **Q23** *(mới — Q9)* | **Nút "Xoá ảnh"** trong UI profile — API đã hỗ trợ `avatarUrl: null` nhưng chưa có nút (vì markup phải giữ 100% bản gốc). Thêm nút hay không? | 🟡 UX | Nguồn **không có** nút này ⇒ theo yêu cầu parity ⇒ **không thêm** | ⏳ Chờ |
 
 ---
 
@@ -471,7 +473,7 @@
 
 | Nhóm | Kết quả |
 |---|---|
-| **Build & test** | ✅ 0 error / 0 warning · **56/56** test pass · app chạy 2 cổng (5286 HTTP/1.1 + 5287 HTTP/2 h2c) |
+| **Build & test** | ✅ 0 error / 0 warning · **70/70** test pass · app chạy 2 cổng (5286 HTTP/1.1 + 5287 HTTP/2 h2c) |
 | **Route UI** | ✅ **40/40** trả 200 — gồm mọi route nguồn + `/about` + `/contact` + `/profile` + `/spa-booking-detail/{id}` |
 | **API lõi (18 nhóm)** | ✅ `api/products`, `api/pet-services`, `api/pets/*`, `api/spa-booking/*`, `api/shift-exchange/*`, `api/attendance/*`, `api/payroll/*`, `api/notifications/*`, `api/breed-pricing`, `api/reviews/*`, `api/orders/*`, `api/auth/*`, `api/config/*`, `api/boarding-rooms`, `api/validation-demo/*` |
 | **API mới LS-04 (X-01..X-10)** | ✅ **10/10 route tồn tại**; vòng đời create→read→update→soft-delete→restore→permanent-delete đã chạy thật và **dọn sạch DB** |
@@ -497,7 +499,7 @@
 
 ### 8.3. Nhận định cuối
 
-> **Migration OJT → PRN232 đã đạt parity 100% ở tầng *hành vi quan sát được***: 40/40 route, 18/19 nhóm API lõi, 10/10 API LS-04, 16/16 OData, 159/159 asset MD5 khớp, 0 ảnh hỏng, 0 tham chiếu Node/npm, build sạch, test **56/56** (+ realtime SignalR LS-11 đã verify end-to-end bằng client .NET thật).
+> **Migration OJT → PRN232 đã đạt parity 100% ở tầng *hành vi quan sát được***: 40/40 route, 18/19 nhóm API lõi, 10/10 API LS-04, 16/16 OData, 159/159 asset MD5 khớp, 0 ảnh hỏng, 0 tham chiếu Node/npm, build sạch, test **70/70** (+ realtime SignalR LS-11 đã verify end-to-end bằng client .NET thật; + Q9 `Customer.avatar_url` đã ALTER + verify giá trị trong DB).
 >
 > **Không còn lỗi chí mạng nào** (build fail / route 500 / ảnh 404 hàng loạt) ⇒ **GĐ3 không phải sửa code**. Toàn bộ mục còn lại là **lệch chức năng phụ do credential môi trường** (Gemini key, SMTP) hoặc **quyết định nội dung cần user chốt** (tông màu CSS, port component UI phụ, role `doctor`, schema `Customer`).
 >
