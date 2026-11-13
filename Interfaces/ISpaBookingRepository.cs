@@ -16,6 +16,7 @@ namespace PetShop.Interfaces
         Task<IReadOnlyList<SpaBookingDto>> GetAllSpaBookingsAsync(CancellationToken ct = default);
         Task<SpaBookingInvoiceDto?> GetSpaBookingInvoiceAsync(int bookingId, CancellationToken ct = default);
         Task<bool> UpdateBookingStatusAsync(int bookingId, string status, CancellationToken ct = default);
+        Task<bool> IsBookingOwnedByCustomerAsync(int bookingId, int customerId, CancellationToken ct = default);
         Task<bool> HasCompletedBookingAsync(int customerId, int bookingId, int serviceId, CancellationToken ct = default);
         Task<int?> GetReviewIdAsync(int customerId, int bookingId, int serviceId, CancellationToken ct = default);
         Task AddReviewAsync(Review review, CancellationToken ct = default);

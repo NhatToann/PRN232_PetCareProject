@@ -11,10 +11,11 @@
 <PageTitle>Hóa đơn đơn hàng – Pet Toy Shop</PageTitle>
 
 <div class="home-page spa-invoice-page order-invoice-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Invoice" />
+<TopBar />
     <PageContextBar Title="Hóa đơn đơn hàng" />
 
-    <AuthGuard>
+    <RouteGuard>
     <main class="spa-invoice-page__main">
         @if (isLoading)
         {
@@ -216,7 +217,7 @@
             </article>
         }
     </main>
-    </AuthGuard>
+    </RouteGuard>
 
     <Footer />
 </div>

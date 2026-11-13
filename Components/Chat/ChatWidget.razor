@@ -1,137 +1,275 @@
-@using PetShop.Models
+@using PetShop.Components.Shared
 
 @* ------------------------------------------------------------------
-   ChatWidget — widget chat 1-1 khách ↔ nhân viên (Q21).
+   ChatWidget — HỘP THOẠI HỢP NHẤT (AI + nhân viên trong MỘT luồng).
 
-   Bổ sung MỚI theo quyết định của user (Q21 — "Có"), KHÔNG thay đổi
-   markup / nội dung / màu của bất kỳ trang nào đã port.
+   REDESIGN 12/11/2026:
+     - Bỏ thanh tab `chat-mode-switch` chia "Tin nhắn" / "Trợ lý AI".
+       Trước đây có 2 widget riêng biệt ⇒ người dùng phải chuyển qua lại
+       giữa 2 mục. Nay chỉ còn MỘT panel, MỘT danh sách tin nhắn.
+     - Mọi tin nhắn đều có AVATAR:
+         · người dùng   ⇒ ảnh thật từ Customer.avatar_url (fallback initials)
+         · trợ lý AI    ⇒ icon robot vector
+         · nhân viên    ⇒ initials + màu theo vai trò
+     - Chọn đích đến (AI hay nhân viên) nằm ở CHIP trong ô nhập, không
+       phải ở tab chia cả panel.
+     - `AiChatWidget` đã bị gỡ khỏi layout; logic AI gộp vào đây.
 
-   Giao diện:
-     - Nút tròn nhỏ góc phải dưới (fixed) để mở/đóng khung chat.
-     - Panel gồm: danh sách đối tác (dropdown) + khung tin nhắn
-       (lịch sử + ô nhập + nút gửi).
-
-   Dữ liệu: qua `IChatClient` (self-HTTP tới `api/chat/*`) — không inject
+   Dữ liệu: qua `IChatClient` (self-HTTP tới `api/chat/*`) và
+   `IChatbotClient` (self-HTTP tới `api/chatbot/*`) — KHÔNG inject
    DbContext trong component (3-layer).
-
-   Realtime: SignalR tới `/hubs/notification` (dùng chung `NotificationHub`),
-   join group `user:{userId}` để nhận event `ChatReceived`. Nếu kết nối
-   realtime thất bại ⇒ vẫn gửi được tin qua HTTP fallback.
    ------------------------------------------------------------------ *@
-
-@* Gốc widget luôn có mặt trong DOM (để layout fixed ổn định), nhưng phần
-   nút mở chat + panel CHỈ hiển thị khi đã đăng nhập (UserSessionService). *@
-<div class="@($"chat-widget{((IsVisible) ? string.Empty : " chat-widget--hidden")}")">
-    @if (IsVisible)
+<div class="chat-widget">
+    @if (IsOpen)
     {
-        @if (IsOpen)
-        {
-            <div class="chat-panel" role="dialog" aria-label="Hộp thoại chat">
-                <div class="chat-panel-header">
-                    <div class="chat-panel-title">
-                        <span class="chat-panel-title-text">Trò chuyện</span>
-                        @if (RealtimeConnected)
-                        {
-                            <span class="chat-panel-status" title="Đang kết nối realtime">● trực tuyến</span>
-                        }
-                        else
-                        {
-                            <span class="chat-panel-status chat-panel-status--offline" title="Không có realtime — vẫn gửi tin qua HTTP">● ngoại tuyến</span>
-                        }
-                    </div>
-                    <button type="button" class="chat-panel-close" @onclick="TogglePanel" aria-label="Đóng chat">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                             stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
-                            <path d="M18 6L6 18M6 6l12 12"></path>
+        <div class="chat-panel" role="dialog" aria-label="Hộp thoại PetCare">
+            <div class="chat-panel-header">
+                @if (TargetIsStaff && IsStaffSide && SelectedPeer is not null)
+                {
+                    <ChatAvatar Kind="user"
+                                Name="@SelectedPeer.DisplayName"
+                                AvatarUrl="@SelectedPeer.AvatarUrl"
+                                Size="46" />
+                }
+                else if (TargetIsStaff)
+                {
+                    <span class="chat-panel-logo chat-panel-logo--staff" aria-hidden="true">
+                        <svg class="chat-avatar__pool" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="9" cy="8" r="3.2"></circle>
+                            <path d="M3.2 19.2c0-3.2 2.6-5.2 5.8-5.2s5.8 2 5.8 5.2"></path>
+                            <path d="M16.5 5.4a3 3 0 010 5.4"></path>
+                            <path d="M17.6 14.4c2.1.5 3.4 2.2 3.4 4.8"></path>
                         </svg>
-                    </button>
+                    </span>
+                }
+                else
+                {
+                    <span class="chat-panel-logo" aria-hidden="true">
+                        <svg class="chat-bot-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 6.2V3.8"></path>
+                            <circle cx="16" cy="2.9" r="1.7" fill="currentColor" stroke="none"></circle>
+                            <rect x="3" y="6.2" width="26" height="20" rx="7"></rect>
+                            <circle cx="11.4" cy="15" r="2" fill="currentColor" stroke="none"></circle>
+                            <circle cx="20.6" cy="15" r="2" fill="currentColor" stroke="none"></circle>
+                            <path d="M12 20.6h8"></path>
+                            <path d="M1.7 12.4v5.6M30.3 12.4v5.6"></path>
+                        </svg>
+                    </span>
+                }
+                <div class="chat-panel-title">
+                    <span class="chat-panel-title-text">@HeaderTitle</span>
+                    <span class="chat-panel-status">
+                        @(RealtimeConnected ? "● trực tuyến" : "● ngoại tuyến")
+                    </span>
                 </div>
+                <button type="button" class="chat-panel-close" @onclick="TogglePanel" aria-label="Đóng hộp thoại">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                        <path d="M18 6L6 18M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
 
-                <div class="chat-peer-picker">
-                    <label class="chat-peer-label" for="chat-peer-select">Đối tác</label>
-                    <select id="chat-peer-select"
-                            class="chat-peer-select"
-                            value="@SelectedPeerId"
-                            @onchange="OnPeerChangedAsync">
-                        <option value="0">— Chọn người trò chuyện —</option>
+            @if (CanChatWithStaff)
+            {
+                <div class="chat-target-bar" role="tablist" aria-label="Chọn người nhận">
+                    <button type="button"
+                            class="chat-target-bar__item @(TargetIsStaff ? "" : "chat-target-bar__item--active")"
+                            @onclick="SelectAiTarget"
+                            title="@($"Trợ lý AI · {AiStatusText}")"
+                            aria-label="Trợ lý AI"
+                            aria-selected="@(!TargetIsStaff)">
+                        <ChatAvatar Kind="ai" Size="34" />
+                        <span class="chat-target-bar__label">AI</span>
+                    </button>
+
+                    @if (IsStaffSide)
+                    {
+                        @* Nhân viên: chọn KHÁCH (hộp thư chung) để xem/trả lời. *@
                         @foreach (var peer in Peers)
                         {
-                            <option value="@peer.PeerId">@peer.DisplayName (@peer.PeerRole)</option>
+                            <button type="button"
+                                    class="chat-target-bar__item @((TargetIsStaff && IsSelectedPeer(peer)) ? "chat-target-bar__item--active" : "")"
+                                    @onclick="() => SelectStaffTargetAsync(peer)"
+                                    title="@($"{peer.DisplayName} · {RoleLabel(peer.PeerRole)}")"
+                                    aria-label="@($"{peer.DisplayName} ({RoleLabel(peer.PeerRole)})")"
+                                    aria-selected="@(TargetIsStaff && IsSelectedPeer(peer))">
+                                <ChatAvatar Kind="user"
+                                            Name="@peer.DisplayName"
+                                            AvatarUrl="@peer.AvatarUrl"
+                                            Size="34" />
+                                <span class="chat-target-bar__label">@ShortName(peer.DisplayName)</span>
+                            </button>
                         }
-                    </select>
-                </div>
-
-                <div class="chat-messages" id="chatMessagesBox">
-                    @if (Loading)
-                    {
-                        <div class="chat-empty">Đang tải…</div>
-                    }
-                    else if (!string.IsNullOrWhiteSpace(Error))
-                    {
-                        <div class="chat-empty chat-empty--error">@Error</div>
-                    }
-                    else if (SelectedPeer is null)
-                    {
-                        <div class="chat-empty">Chọn một đối tác để bắt đầu trò chuyện.</div>
-                    }
-                    else if (Messages.Count == 0)
-                    {
-                        <div class="chat-empty">Chưa có tin nhắn nào với @SelectedPeer.DisplayName.</div>
                     }
                     else
                     {
-                        @foreach (var message in Messages)
-                        {
-                            <div class="@($"chat-row {(message.IsMine ? "chat-row--mine" : "chat-row--theirs")}")">
-                                <div class="chat-bubble">@message.Message</div>
-                                <div class="chat-time">@FormatTime(message.CreatedAt)</div>
-                            </div>
-                        }
+                        @* Khách: hộp thư CHUNG của nhân viên (mọi nhân viên đều thấy). *@
+                        <button type="button"
+                                class="chat-target-bar__item @(TargetIsStaff ? "chat-target-bar__item--active" : "")"
+                                @onclick="() => SelectStaffTargetAsync()"
+                                title="Trò chuyện với nhân viên Pet Toy Shop"
+                                aria-label="Trò chuyện với nhân viên"
+                                aria-selected="@TargetIsStaff">
+                            <span class="chat-avatar chat-avatar--pool" style="--chat-avatar-size: 34px;" aria-hidden="true">
+                                <svg class="chat-avatar__pool" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="9" cy="8" r="3.2"></circle>
+                                    <path d="M3.2 19.2c0-3.2 2.6-5.2 5.8-5.2s5.8 2 5.8 5.2"></path>
+                                    <path d="M16.5 5.4a3 3 0 010 5.4"></path>
+                                    <path d="M17.6 14.4c2.1.5 3.4 2.2 3.4 4.8"></path>
+                                </svg>
+                            </span>
+                            <span class="chat-target-bar__label">Nhân viên</span>
+                        </button>
                     }
                 </div>
+            }
 
-                <div class="chat-composer">
-                    <input type="text"
-                           class="chat-input"
-                           placeholder="@InputPlaceholder"
-                           value="@Draft"
-                           @oninput="OnInputChanged"
-                           @onkeydown="OnKeyDownAsync"
-                           disabled="@(SelectedPeer is null || Sending)" />
-                    <button type="button"
-                            class="chat-send-btn"
-                            @onclick="SendAsync"
-                            disabled="@(SelectedPeer is null || Sending || string.IsNullOrWhiteSpace(Draft))"
-                            aria-label="Gửi tin nhắn">
-                        @if (Sending)
+            <div class="chat-messages" id="@MessagesBoxId">
+                @if (Loading)
+                {
+                    <div class="chat-empty">Đang tải…</div>
+                }
+                else if (!string.IsNullOrWhiteSpace(Error))
+                {
+                    <div class="chat-empty chat-empty--error">@Error</div>
+                }
+                else if (Messages.Count == 0)
+                {
+                    <div class="chat-empty">
+                        @if (TargetIsStaff && IsStaffSide && SelectedPeer is not null)
                         {
-                            <span>…</span>
+                            @* Nhân viên mở hộp thư của 1 khách. *@
+                            <ChatAvatar Kind="user"
+                                        Name="@SelectedPeer.DisplayName"
+                                        AvatarUrl="@SelectedPeer.AvatarUrl"
+                                        Size="56" />
+                            <strong>@SelectedPeer.DisplayName</strong>
+                            <span>Hộp thư chung — mọi nhân viên đều thấy và trả lời được khách này.</span>
+                        }
+                        else if (TargetIsStaff)
+                        {
+                            @* Khách mở hộp thư nhân viên. *@
+                            <span class="chat-avatar chat-avatar--pool" style="--chat-avatar-size: 56px;" aria-hidden="true">
+                                <svg class="chat-avatar__pool" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="9" cy="8" r="3.2"></circle>
+                                    <path d="M3.2 19.2c0-3.2 2.6-5.2 5.8-5.2s5.8 2 5.8 5.2"></path>
+                                    <path d="M16.5 5.4a3 3 0 010 5.4"></path>
+                                    <path d="M17.6 14.4c2.1.5 3.4 2.2 3.4 4.8"></path>
+                                </svg>
+                            </span>
+                            <strong>Nhân viên Pet Toy Shop</strong>
+                            <span>Gửi tin nhắn bên dưới — mọi nhân viên đều nhận được và trả lời bạn!</span>
                         }
                         else
                         {
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M22 2L11 13"></path>
-                                <path d="M22 2l-7 20-4-9-9-4 20-7z"></path>
-                            </svg>
+                            <ChatAvatar Kind="ai" Size="56" />
+                            <strong>Xin chào! 👋</strong>
+                            <span>Mình tư vấn sản phẩm, dịch vụ spa, lịch đặt hẹn và thủ tục thanh toán.</span>
+                            <div class="chat-suggestions">
+                                @foreach (var suggestion in Suggestions)
+                                {
+                                    <button type="button" class="chat-suggestion" @onclick="() => UseSuggestionAsync(suggestion)">@suggestion</button>
+                                }
+                            </div>
                         }
-                    </button>
-                </div>
-            </div>
-        }
+                    </div>
+                }
+                else
+                {
+                    @foreach (var item in Messages)
+                    {
+                        var rowClass = item.Author switch
+                        {
+                            ChatAuthor.User => "chat-row chat-row--mine",
+                            ChatAuthor.Staff => "chat-row chat-row--theirs chat-row--staff",
+                            _ => "chat-row chat-row--theirs chat-row--ai"
+                        };
 
+                        <div class="@rowClass">
+                            <ChatAvatar Kind="@AvatarKind(item)"
+                                        Role="@item.AuthorRole"
+                                        Name="@item.AuthorName"
+                                        AvatarUrl="@item.AuthorAvatarUrl"
+                                        Size="32" />
+                            <div class="chat-row__body">
+                                @if (item.Author != ChatAuthor.User)
+                                {
+                                    <div class="chat-row__meta">
+                                        <span class="chat-row__author">@item.AuthorName</span>
+                                        <span class="chat-row__role">@AuthorRoleLabel(item)</span>
+                                    </div>
+                                }
+                                <div class="chat-bubble">@item.Content</div>
+                                @if (item.Timestamp.HasValue)
+                                {
+                                    <div class="chat-time">@FormatTime(item.Timestamp.Value)</div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    @if (Sending)
+                    {
+                        <div class="chat-row chat-row--theirs chat-row--ai">
+                            <ChatAvatar Kind="ai" Size="32" />
+                            <div class="chat-row__body">
+                                <div class="chat-bubble chat-bubble--typing">Đang suy nghĩ…</div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="chat-composer">
+                <input type="text"
+                       class="chat-input"
+                       placeholder="@InputPlaceholder"
+                       value="@Draft"
+                       @oninput="OnInputChanged"
+                       @onkeydown="OnKeyDownAsync"
+                       maxlength="2000"
+                       disabled="@Sending" />
+                <button type="button"
+                        class="chat-send-btn"
+                        @onclick="SendAsync"
+                        disabled="@(Sending || !CanSend || string.IsNullOrWhiteSpace(Draft))"
+                        aria-label="Gửi tin nhắn">
+                    @if (Sending)
+                    {
+                        <span>…</span>
+                    }
+                    else
+                    {
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M22 2L11 13"></path>
+                            <path d="M22 2l-7 20-4-9-9-4 20-7z"></path>
+                        </svg>
+                    }
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
         <button type="button"
-                class="@($"chat-fab {(IsOpen ? "chat-fab--active" : string.Empty)}")"
+                class="chat-fab"
                 @onclick="TogglePanel"
-                aria-label="Mở hộp thoại chat"
-                title="Trò chuyện">
+                aria-label="Mở hộp thoại PetCare"
+                title="Trợ lý PetCare">
             @if (UnreadCount > 0)
             {
                 <span class="chat-fab-badge">@(UnreadCount > 99 ? "99+" : UnreadCount.ToString())</span>
             }
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                <path d="M12 2l1.9 4.6L18.5 8l-4.6 1.9L12 14.5l-1.9-4.6L5.5 8l4.6-1.4L12 2z"></path>
+                <path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14z"></path>
             </svg>
         </button>
     }

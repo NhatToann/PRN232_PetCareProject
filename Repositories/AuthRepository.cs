@@ -70,6 +70,7 @@ namespace PetShop.Repositories
             }
 
             var customer = await _db.Customers
+                .AsTracking()
                 .FirstOrDefaultAsync(x => x.CustomerId == customerId, ct);
             if (customer is null)
             {
@@ -105,6 +106,7 @@ namespace PetShop.Repositories
             }
 
             var customer = await _db.Customers
+                .AsTracking()
                 .FirstOrDefaultAsync(x => x.CustomerId == customerId, ct);
             if (customer is null)
             {
@@ -132,6 +134,80 @@ namespace PetShop.Repositories
             return birthDate;
         }
 
+        /// <inheritdoc />
+        public async Task<bool> UpdateCustomerAddressAsync(int customerId, string? address, CancellationToken ct = default)
+        {
+            if (customerId <= 0)
+            {
+                return false;
+            }
+
+            var customer = await _db.Customers
+                .AsTracking()
+                .FirstOrDefaultAsync(x => x.CustomerId == customerId, ct);
+            if (customer is null)
+            {
+                return false;
+            }
+
+            customer.AddressCustomer = address;
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<string?> GetCustomerAddressAsync(int customerId, CancellationToken ct = default)
+        {
+            if (customerId <= 0)
+            {
+                return null;
+            }
+
+            var address = await _db.Customers
+                .Where(x => x.CustomerId == customerId)
+                .Select(x => x.AddressCustomer)
+                .FirstOrDefaultAsync(ct);
+
+            return address;
+        }
+
+        /// <inheritdoc />
+        public async Task<bool> UpdateCustomerPhoneAsync(int customerId, string? phone, CancellationToken ct = default)
+        {
+            if (customerId <= 0)
+            {
+                return false;
+            }
+
+            var customer = await _db.Customers
+                .AsTracking()
+                .FirstOrDefaultAsync(x => x.CustomerId == customerId, ct);
+            if (customer is null)
+            {
+                return false;
+            }
+
+            customer.Phone = phone;
+            await _db.SaveChangesAsync(ct);
+            return true;
+        }
+
+        /// <inheritdoc />
+        public async Task<string?> GetCustomerPhoneAsync(int customerId, CancellationToken ct = default)
+        {
+            if (customerId <= 0)
+            {
+                return null;
+            }
+
+            var phone = await _db.Customers
+                .Where(x => x.CustomerId == customerId)
+                .Select(x => x.Phone)
+                .FirstOrDefaultAsync(ct);
+
+            return phone;
+        }
+
         public async Task<bool> EmailExistsInAnyRoleAsync(string email, CancellationToken ct = default)
         {
             var normalizedEmail = NormalizeEmail(email);
@@ -148,7 +224,9 @@ namespace PetShop.Repositories
             var normalizedEmail = NormalizeEmail(email);
             var upgraded = 0;
 
-            var customer = await _db.Customers.FirstOrDefaultAsync(
+            var customer = await _db.Customers
+                .AsTracking()
+                .FirstOrDefaultAsync(
                 x => (x.Email ?? string.Empty).Trim().ToLower() == normalizedEmail, ct);
             if (customer is not null)
             {
@@ -156,7 +234,9 @@ namespace PetShop.Repositories
                 upgraded++;
             }
 
-            var staff = await _db.Staff.FirstOrDefaultAsync(
+            var staff = await _db.Staff
+                .AsTracking()
+                .FirstOrDefaultAsync(
                 x => (x.Email ?? string.Empty).Trim().ToLower() == normalizedEmail, ct);
             if (staff is not null)
             {
@@ -164,7 +244,9 @@ namespace PetShop.Repositories
                 upgraded++;
             }
 
-            var doctor = await _db.Doctors.FirstOrDefaultAsync(
+            var doctor = await _db.Doctors
+                .AsTracking()
+                .FirstOrDefaultAsync(
                 x => (x.Email ?? string.Empty).Trim().ToLower() == normalizedEmail, ct);
             if (doctor is not null)
             {

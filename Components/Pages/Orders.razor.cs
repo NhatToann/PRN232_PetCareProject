@@ -138,7 +138,8 @@ namespace PetShop_PRN222.Components.Pages
         var customerId = UserSession.CurrentUser?.UserId ?? 0;
         if (customerId <= 0)
         {
-            Navigation.NavigateTo("/login", forceLoad: true);
+            // Điều hướng NỘI BỘ ⇒ replace (không forceLoad) để giữ circuit Blazor.
+            Navigation.NavigateTo("/login", replace: true);
             return;
         }
 
@@ -216,7 +217,8 @@ namespace PetShop_PRN222.Components.Pages
 
         if (customerId <= 0)
         {
-            Navigation.NavigateTo("/login", forceLoad: true);
+            // Điều hướng NỘI BỘ ⇒ replace (không forceLoad) để giữ circuit Blazor.
+            Navigation.NavigateTo("/login", replace: true);
             return;
         }
 
@@ -348,7 +350,7 @@ namespace PetShop_PRN222.Components.Pages
     private static string FormatDate(DateTime value) => value.ToString("g", new CultureInfo("vi-VN"));
 
     private static string Vnd(decimal amount) =>
-        string.Format(new CultureInfo("vi-VN"), "{0:N0} ₫", amount);
+        PetShop.Components.Shared.Format.Vnd(amount);
 
     private static string NormalizeVietnamese(string? value)
     {

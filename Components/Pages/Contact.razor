@@ -1,9 +1,12 @@
 @page "/contact"
 
+@inject PetShop.Services.ShopContactService ShopContact
+
 <PageTitle>Liên hệ</PageTitle>
 
 <div class="home-page about-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.About" />
+<TopBar />
     <Header />
     <Navigation />
 
@@ -29,15 +32,19 @@
                         <ul class="about-contact__list">
                             <li>
                                 <i class="fas fa-map-marker-alt contact-icon" aria-hidden="true"></i>
-                                <span>123 Đường ABC, Quận 1, TP.HCM</span>
+                                <span>@Address</span>
                             </li>
                             <li>
                                 <i class="fas fa-phone contact-icon" aria-hidden="true"></i>
-                                <span>0123 456 789</span>
+                                <span>@Hotline</span>
                             </li>
                             <li>
                                 <i class="fas fa-envelope contact-icon" aria-hidden="true"></i>
-                                <span>contact@pettoy.com</span>
+                                <span>@Email</span>
+                            </li>
+                            <li>
+                                <i class="fas fa-clock contact-icon" aria-hidden="true"></i>
+                                <span>@WorkingHours</span>
                             </li>
                         </ul>
                     </article>
@@ -55,3 +62,32 @@
 
     <Footer />
 </div>
+
+@code {
+    /// <summary>
+    /// Thông tin liên hệ THẬT (đọc từ bảng <c>SystemSettings</c>) — không hardcode.
+    /// </summary>
+    private string Address { get; set; } = string.Empty;
+
+    private string Hotline { get; set; } = string.Empty;
+
+    private string Email { get; set; } = string.Empty;
+
+    private string WorkingHours { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var contact = await ShopContact.GetAsync();
+            Address = contact.Address;
+            Hotline = contact.Hotline;
+            Email = contact.Email;
+            WorkingHours = contact.WorkingHours;
+        }
+        catch
+        {
+            // DB lỗi ⇒ để trống, không crash trang.
+        }
+    }
+}

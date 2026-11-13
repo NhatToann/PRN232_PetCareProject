@@ -25,6 +25,13 @@ namespace PetShop.Interfaces
 
         Task<IReadOnlyList<Booking>> GetAllBookingsAsync(CancellationToken ct = default);
 
+        /// <summary>
+        /// Các giao dịch thanh toán dịch vụ spa đã thu tiền.
+        /// Dùng để tính doanh thu spa theo SỐ TIỀN THẬT thay vì nhân với
+        /// một mức giá cố định hardcode (250.000đ).
+        /// </summary>
+        Task<IReadOnlyList<Payment>> GetPaidSpaPaymentsAsync(CancellationToken ct = default);
+
         Task<bool> UpdateBookingStatusAsync(int bookingId, string status, CancellationToken ct = default);
 
         // ----- Báo cáo sản phẩm / khách hàng -----

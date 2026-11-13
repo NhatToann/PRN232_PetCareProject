@@ -1,6 +1,7 @@
 @page "/products/{ProductId:int}"
 @inject PetShop.Interfaces.IProductCatalogClient ProductCatalog
 @inject PetShop.Services.CartStateService CartState
+@inject PetShop.Services.CartDrawerStateService DrawerState
 @inject PetShop.Services.UserSessionService UserSession
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -9,8 +10,9 @@
 <PageTitle>@(product?.Name ?? "Chi tiết sản phẩm")</PageTitle>
 
 <div class="home-page pd-page">
-    <TopBar />
-    <Header OnOpenCart="OpenCart" />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.ProductDetail" />
+<TopBar />
+    <Header />
     <Navigation />
 
     <main>
@@ -48,7 +50,7 @@
                     <div class="pd-two-col">
                         <div class="pd-media">
                             <div class="pd-main-img">
-                                <img src="@ImageUrl" alt="@product.Name" />
+                                <img src="@ImageUrl" alt="@product.Name" fetchpriority="high" decoding="async" />
                             </div>
 
                             <div class="pd-thumbs-row">
@@ -61,7 +63,7 @@
                                                 class="pd-thumb @(idx == selectedImageIndex ? "is-active" : null)"
                                                 @onclick="() => SelectThumb(idx)"
                                                 aria-label="@($"Xem ảnh {idx + 1}")">
-                                            <img src="@productImages[idx]" alt="" />
+                                            <img src="@productImages[idx]" alt="" loading="lazy" decoding="async" />
                                         </button>
                                     }
                                 </div>
@@ -197,7 +199,6 @@
     </main>
 
     <Footer />
-    <CartDrawer Open="cartDrawerOpen" OnClose="CloseCart" />
 </div>
 
 @code {
@@ -210,11 +211,10 @@
     private string? error;
     private int Quantity = 1;
     private int selectedImageIndex;
-    private bool cartDrawerOpen;
 
     private IReadOnlyList<string> productImages => product is null
         ? Array.Empty<string>()
-        : new[] { string.IsNullOrWhiteSpace(product.ImageUrl) ? FallbackImage : product.ImageUrl! };
+        : new[] { string.IsNullOrWhiteSpace(product.ImageUrl) ? FallbackImage : PetShop.Components.Shared.ImageUrl.Safe(product.ImageUrl) };
 
     private string ImageUrl => productImages.Count == 0
         ? FallbackImage
@@ -311,7 +311,9 @@
         {
             await CartState.AddAsync(product, 1);
         }
-        cartDrawerOpen = true;
+
+        // Drawer giỏ hàng dùng chung nằm trong MainLayout ⇒ mở qua service.
+        DrawerState.Open();
     }
 
     private async Task BuyNowAsync()
@@ -350,23 +352,11 @@
 
     private sealed record CheckoutStorageItem(int ProductId, string Name, decimal Price, string? ImageUrl, int Quantity);
 
-    private Task OpenCart()
-    {
-        cartDrawerOpen = true;
-        return Task.CompletedTask;
-    }
-
-    private Task CloseCart()
-    {
-        cartDrawerOpen = false;
-        return Task.CompletedTask;
-    }
-
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
     private void HandleSessionChanged() => InvokeAsync(StateHasChanged);
 
     private static string FormatPrice(decimal value) =>
-        string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:C0}");
+        PetShop.Components.Shared.Format.Vnd(value);
 
     public void Dispose()
     {

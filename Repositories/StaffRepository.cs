@@ -16,12 +16,16 @@ namespace PetShop.Repositories
 
         public async Task<IEnumerable<Staff>> GetAllAsync()
         {
-            return await _context.Staff.ToListAsync();
+            // AsNoTracking: DbContext mặc định NoTracking (tối ưu RAM) — nhưng
+            // ghi rõ ở đây để tài liệu hoá ý định cho các truy vấn chỉ-đọc.
+            return await _context.Staff.AsNoTracking().ToListAsync();
         }
 
         public async Task<Staff?> GetByIdAsync(int id)
         {
-            return await _context.Staff.FindAsync(id);
+            return await _context.Staff
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.StaffId == id);
         }
 
         public async Task<Staff> AddAsync(Staff staff)

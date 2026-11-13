@@ -8,19 +8,36 @@ namespace PetShop.Repositories
     /// <summary>
     /// Lớp truy cập dữ liệu cho màn hình quản lý sản phẩm.
     /// Mọi truy vấn EF đều nằm ở đây — Razor không được chạm trực tiếp DbContext.
+    ///
+    /// <para>
+    /// <b>VÌ SAO DÙNG IDbContextFactory:</b> các màn hình quản lý sản phẩm nằm
+    /// trong <c>StaffWorkspaceLayout</c> — layout và page được render SONG SONG
+    /// trong cùng một circuit Blazor Server. Nếu dùng chung một
+    /// <c>DbContext</c> scoped, hai lệnh EF chạy đồng thời sẽ kích hoạt
+    /// concurrency detector ⇒ EF Core ném
+    /// <c>"A second operation was started on this context instance before a
+    /// previous operation completed"</c> ⇒ trang crash.
+    /// </para>
+    ///
+    /// <para>
+    /// Nay mỗi thao tác tạo context RIÊNG ⇒ an toàn khi truy vấn chạy song song,
+    /// đúng pattern đã dùng ở <c>BoardingRepository</c> / <c>StaffReportsRepository</c>.
+    /// </para>
     /// </summary>
     public sealed class ProductManagementRepository : IProductManagementRepository
     {
-        private readonly ShopPetDatabaseContext _context;
+        private readonly IDbContextFactory<ShopPetDatabaseContext> _factory;
 
-        public ProductManagementRepository(ShopPetDatabaseContext context)
+        public ProductManagementRepository(IDbContextFactory<ShopPetDatabaseContext> factory)
         {
-            _context = context;
+            _factory = factory;
         }
 
         public async Task<IReadOnlyList<Product>> GetActiveProductsAsync(CancellationToken ct = default)
         {
-            return await _context.Products
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            return await context.Products
                 .AsNoTracking()
                 .Where(p => !p.IsDeleted)
                 .OrderByDescending(p => p.ProductId)
@@ -29,7 +46,9 @@ namespace PetShop.Repositories
 
         public async Task<IReadOnlyList<Product>> GetDeletedProductsAsync(CancellationToken ct = default)
         {
-            return await _context.Products
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            return await context.Products
                 .AsNoTracking()
                 .Where(p => p.IsDeleted)
                 .ToListAsync(ct);
@@ -37,27 +56,36 @@ namespace PetShop.Repositories
 
         public async Task<Product?> GetByIdAsync(int productId, CancellationToken ct = default)
         {
-            return await _context.Products
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            return await context.Products
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
         }
 
         public async Task<Product> CreateAsync(Product product, CancellationToken ct = default)
         {
-            _context.Products.Add(product);
-            await _context.SaveChangesAsync(ct);
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            context.Products.Add(product);
+            await context.SaveChangesAsync(ct);
             return product;
         }
 
         public async Task UpdateAsync(Product product, CancellationToken ct = default)
         {
-            _context.Products.Update(product);
-            await _context.SaveChangesAsync(ct);
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            context.Products.Update(product);
+            await context.SaveChangesAsync(ct);
         }
 
         public async Task<bool> SoftDeleteAsync(int productId, CancellationToken ct = default)
         {
-            var product = await _context.Products
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            var product = await context.Products
+                .AsTracking()
                 .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
             if (product is null)
@@ -66,13 +94,16 @@ namespace PetShop.Repositories
             }
 
             product.IsDeleted = true;
-            await _context.SaveChangesAsync(ct);
+            await context.SaveChangesAsync(ct);
             return true;
         }
 
         public async Task<bool> RestoreAsync(int productId, CancellationToken ct = default)
         {
-            var product = await _context.Products
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            var product = await context.Products
+                .AsTracking()
                 .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
             if (product is null)
@@ -81,13 +112,16 @@ namespace PetShop.Repositories
             }
 
             product.IsDeleted = false;
-            await _context.SaveChangesAsync(ct);
+            await context.SaveChangesAsync(ct);
             return true;
         }
 
         public async Task<bool> PermanentDeleteAsync(int productId, CancellationToken ct = default)
         {
-            var product = await _context.Products
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            var product = await context.Products
+                .AsTracking()
                 .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
             if (product is null)
@@ -95,14 +129,17 @@ namespace PetShop.Repositories
                 return false;
             }
 
-            _context.Products.Remove(product);
-            await _context.SaveChangesAsync(ct);
+            context.Products.Remove(product);
+            await context.SaveChangesAsync(ct);
             return true;
         }
 
         public async Task<bool> IncreaseStockAsync(int productId, int quantity, CancellationToken ct = default)
         {
-            var product = await _context.Products
+            await using var context = await _factory.CreateDbContextAsync(ct);
+
+            var product = await context.Products
+                .AsTracking()
                 .FirstOrDefaultAsync(p => p.ProductId == productId, ct);
 
             if (product is null)
@@ -111,7 +148,7 @@ namespace PetShop.Repositories
             }
 
             product.StockQuantity += quantity;
-            await _context.SaveChangesAsync(ct);
+            await context.SaveChangesAsync(ct);
             return true;
         }
     }

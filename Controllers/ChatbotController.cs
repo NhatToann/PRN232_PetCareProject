@@ -62,6 +62,31 @@ namespace PetShop.Controllers
                     Details = "No AI provider is configured. Please contact the administrator."
                 });
             }
+            catch (AiProviderException ex)
+            {
+                // Lỗi có phân loại từ nhà cung cấp AI (quota / rate limit / timeout /
+                // model không tồn tại / API key sai) ⇒ trả mã HTTP tương ứng + thông
+                // điệp tiếng Việt thân thiện (KHÔNG lộ chi tiết nội bộ).
+                _logger.LogWarning(ex, "Chatbot AI provider error: {Kind}", ex.Kind);
+
+                var status = ex.Kind switch
+                {
+                    AiProviderErrorKind.QuotaExceeded => StatusCodes.Status503ServiceUnavailable,
+                    AiProviderErrorKind.RateLimited => StatusCodes.Status503ServiceUnavailable,
+                    AiProviderErrorKind.Timeout => StatusCodes.Status504GatewayTimeout,
+                    AiProviderErrorKind.ModelNotFound => StatusCodes.Status502BadGateway,
+                    AiProviderErrorKind.AuthenticationFailed => StatusCodes.Status502BadGateway,
+                    _ => StatusCodes.Status502BadGateway
+                };
+
+                return StatusCode(status, new ApiErrorDto
+                {
+                    Error = ex.UserMessage,
+                    Details = ex.RetryAfterUtc is not null
+                        ? $"Thử lại sau {(ex.RetryAfterUtc.Value - DateTime.UtcNow).TotalMinutes:F0} phút."
+                        : null
+                });
+            }
             catch (HttpRequestException ex)
             {
                 _logger.LogError(ex, "AI provider HTTP error");
@@ -99,6 +124,14 @@ namespace PetShop.Controllers
             {
                 var intent = await _chatbotService.AnalyzeIntentWithAi(request.Message, ct);
                 return Ok(intent);
+            }
+            catch (AiProviderException ex)
+            {
+                // Hết quota / rate limit / timeout ở bước phân tích intent.
+                // KHÔNG trả 500 (gây lỗi UI) ⇒ trả intent "unknown" để client
+                // biết là chưa phân định được, không phải lỗi hệ thống.
+                _logger.LogWarning(ex, "Chatbot intent detection failed (provider): {Kind}", ex.Kind);
+                return Ok(new AiIntentResult { Intent = "unknown" });
             }
             catch (Exception ex)
             {

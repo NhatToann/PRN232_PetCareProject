@@ -78,9 +78,12 @@ public sealed class ChatService : IChatService
 
         var kind = IChatService.NormalizeKind(currentRole);
 
-        // Khách hàng ⇒ chat với nhân viên; nhân viên ⇒ chat với khách hàng.
+        // ⚠️ HỘP THƯ CHUNG (13/11/2026):
+        //   Khách hàng KHÔNG cần danh sách nhân viên nữa (chỉ chọn "AI" hoặc
+        //   "Nhân viên") ⇒ trả về danh sách RỖNG cho khách (widget tự dựng 2 nút).
+        //   Nhân viên ⇒ danh sách KHÁCH có hộp thư (mới nhất lên đầu).
         return kind == ChatRepositoryKind.Customer
-            ? await _repository.GetStaffPeersAsync(ct)
+            ? Array.Empty<ChatPeerDto>()
             : await _repository.GetCustomerPeersAsync(ct);
     }
 
@@ -113,27 +116,51 @@ public sealed class ChatService : IChatService
             throw new ArgumentException("Nội dung tin nhắn quá dài (tối đa 2000 ký tự).", nameof(request));
         }
 
-        if (request.ReceiverId <= 0)
+        var currentKind = IChatService.NormalizeKind(currentRole);
+        var receiverKind = ResolvePeerKind(request.ReceiverKind, currentKind);
+
+        // Khách gửi vào HỘP THƯ CHUNG của nhân viên (không chọn người nhận).
+        var isCustomer = currentKind == ChatRepositoryKind.Customer;
+        var goesToPool = isCustomer && IsPoolTarget(request.ReceiverId, request.ReceiverKind);
+
+        // Khách hàng không được gửi vào hộp thư của khách khác.
+        if (!isCustomer && !goesToPool && !ChatRepository.IsCustomerKind(receiverKind))
         {
             throw new ArgumentException("Người nhận không hợp lệ.", nameof(request));
         }
 
-        var currentKind = IChatService.NormalizeKind(currentRole);
-        var receiverKind = ResolvePeerKind(request.ReceiverKind, currentKind);
-
-        // Kiểm tra đối tác có thật không (và lấy tên hiển thị).
-        var peer = await GetPeerAsync(request.ReceiverId, receiverKind, ct);
-        if (peer is null)
+        if (goesToPool)
         {
-            throw new KeyNotFoundException("Không tìm thấy người nhận.");
+            // Khách gửi ⇒ luồng thuộc về chính khách, không gắn StaffID.
+            return await SendToPoolAsync(currentUserId, currentKind, message, ct);
         }
 
-        var (customerId, staffId) = ChatRepository.ResolveThread(
-            currentUserId,
-            currentKind,
-            request.ReceiverId,
-            receiverKind);
+        // Nhân viên gửi cho 1 khách ⇒ hộp thư chung của khách đó.
+        var customerId = ChatRepository.ResolvePoolCustomerId(currentUserId, currentKind, request.ReceiverId, receiverKind);
 
+        if (customerId <= 0)
+        {
+            throw new ArgumentException("Người nhận không hợp lệ.", nameof(request));
+        }
+
+        // Tra cứu thông tin khách (tên + avatar) để dựng bubble cho khách.
+        var peer = await GetPeerAsync(customerId, ChatRepositoryKind.Customer, ct)
+            ?? new ChatPeerDto(customerId, $"Khách #{customerId}", ChatRepositoryKind.Customer, ChatRepositoryKind.Customer);
+
+        var senderName = await ResolveSenderNameAsync(currentUserId, currentKind, ct);
+
+        // Nhãn LOẠI người gửi thật (sửa bug 12/11/2026).
+        //
+        // ⚠️ Trước đây ghi "staff" cho MỌI người dùng không phải khách ⇒ admin
+        // và doctor đều bị ghi chung là "staff" ⇒ không tách được các đối tác
+        // có cùng id (staff_id = admin_id = doctor_id = 1). Nay ghi đúng loại
+        // (`staff` / `admin` / `doctor` / `customer`) ⇒ lọc lịch sử theo cặp
+        // nhãn là duy nhất.
+        //
+        // ⚠️ NHƯNG cột `SenderType` bị CHECK constraint giới hạn CHỈ cho phép
+        // 'Staff' / 'Customer' ⇒ nếu ghi "admin"/"doctor" sẽ bị DB từ chối.
+        // ⇒ Cột này chỉ ghi "staff" | "customer"; nhãn đầy đủ nằm ở cột
+        // `SenderKind` (thêm mới) — xem `AddMessageAsync`.
         var senderType = currentKind == ChatRepositoryKind.Customer
             ? ChatRepositoryKind.Customer
             : ChatRepositoryKind.Staff;
@@ -141,15 +168,32 @@ public sealed class ChatService : IChatService
         // 1) Ghi DB trước ⇒ tin chắc chắn được lưu kể cả khi realtime lỗi.
         var row = await _repository.AddMessageAsync(
             customerId,
-            staffId,
+            currentUserId,
             senderType,
             message,
+            senderName,
+            currentKind,
             ct);
 
         // 2) Đẩy realtime tới người nhận (lỗi bị nuốt ở tầng realtime).
+        //
+        // ⚠️ Truyền kèm `fromKind` + `toKind` (12/11/2026): id các bảng người
+        // dùng TRÙNG NHAU (staff_id = 1, admin_id = 1, doctor_id = 1 đều tồn
+        // tại) ⇒ client chỉ nhận id sẽ không biết tin đến từ ai ⇒ mở nhầm
+        // hộp thoại. Kèm loại người dùng ⇒ client ghép đúng (id + kind).
         try
         {
-            await _realtime.SendChatAsync(request.ReceiverId, currentUserId, message, ct, row.MessageId);
+            await _realtime.SendChatAsync(
+                customerId,
+                currentUserId,
+                message,
+                ct,
+                row.MessageId,
+                currentKind,
+                ChatRepositoryKind.Customer,
+                customerId,
+                senderName,
+                currentKind);
         }
         catch (OperationCanceledException)
         {
@@ -157,18 +201,135 @@ public sealed class ChatService : IChatService
         }
         catch (Exception ex)
         {
-            _logger.LineWarning($"[ChatService] Không đẩy được realtime chat tới {request.ReceiverId}: {ex.GetType().Name} — {ex.Message}");
+            _logger.LineWarning($"[ChatService] Không đẩy được realtime chat tới {customerId}: {ex.GetType().Name} — {ex.Message}");
         }
 
         var dto = new ChatMessageDto(
             row.MessageId,
             currentUserId,
-            request.ReceiverId,
+            customerId,
             message,
             row.SentAt ?? DateTime.Now,
-            IsMine: true);
+            IsMine: true,
+            senderName,
+            currentKind,
+            currentKind);
 
         return new ChatSendResultDto(dto, peer);
+    }
+
+    /// <summary>
+    /// Khách gửi tin vào HỘP THƯ CHUNG của nhân viên.
+    ///
+    /// <para>
+    /// <b>VÌ SAO Tách riêng (13/11/2026):</b> khách không chọn người nhận ⇒
+    /// không có "peer" cụ thể ⇒ tin được ghi với <c>CustomerID</c> = chính khách
+    /// và <c>StaffID</c> = <c>null</c> ⇒ MỌI nhân viên đều thấy tin này khi mở
+    /// hộp thư của khách.
+    /// </para>
+    /// </summary>
+    private async Task<ChatSendResultDto> SendToPoolAsync(
+        int currentUserId,
+        string currentKind,
+        string message,
+        CancellationToken ct)
+    {
+        var customerId = currentUserId;
+        var senderName = await ResolveSenderNameAsync(currentUserId, currentKind, ct);
+
+        var row = await _repository.AddMessageAsync(
+            customerId,
+            null,
+            ChatRepositoryKind.Customer,
+            message,
+            senderName,
+            currentKind,
+            ct);
+
+        // Đẩy realtime tới KHÁCH (để khách thấy tin của mình qua SignalR)
+        // + tới NHÓM NHÂN VIÊN (để mọi nhân viên thấy ngay).
+        try
+        {
+            await _realtime.SendChatAsync(
+                customerId,
+                currentUserId,
+                message,
+                ct,
+                row.MessageId,
+                currentKind,
+                ChatRepositoryKind.Customer,
+                customerId,
+                senderName,
+                currentKind);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LineWarning($"[ChatService] Không đẩy được realtime chat của khách {customerId}: {ex.GetType().Name} — {ex.Message}");
+        }
+
+        var peer = await GetPeerAsync(customerId, ChatRepositoryKind.Customer, ct)
+            ?? new ChatPeerDto(customerId, $"Khách #{customerId}", ChatRepositoryKind.Customer, ChatRepositoryKind.Customer);
+
+        var dto = new ChatMessageDto(
+            row.MessageId,
+            currentUserId,
+            0,
+            message,
+            row.SentAt ?? DateTime.Now,
+            IsMine: true,
+            senderName,
+            currentKind,
+            currentKind);
+
+        return new ChatSendResultDto(dto, peer);
+    }
+
+    /// <summary>
+    /// Tra tên hiển thị của người gửi theo loại tài khoản.
+    ///
+    /// <para>
+    /// Cần cho hộp thư chung: tin của mỗi nhân viên phải hiện TÊN người gửi
+    /// (khách không biết "Nguyễn Văn A" là staff hay admin).
+    /// </para>
+    /// </summary>
+    private async Task<string> ResolveSenderNameAsync(int userId, string kind, CancellationToken ct)
+    {
+        try
+        {
+            return kind switch
+            {
+                ChatRepositoryKind.Admin => await _repository.GetAdminNameAsync(userId, ct) ?? "Nhân viên",
+                ChatRepositoryKind.Doctor => await _repository.GetDoctorNameAsync(userId, ct) ?? "Bác sĩ",
+                ChatRepositoryKind.Staff => await _repository.GetStaffNameAsync(userId, ct) ?? "Nhân viên",
+                _ => await _repository.GetCustomerNameAsync(userId, ct) ?? "Khách hàng"
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LineWarning($"[ChatService] Không lấy được tên người gửi (id={userId}, kind={kind}): {ex.GetType().Name}");
+            return kind == ChatRepositoryKind.Customer ? "Khách hàng" : "Nhân viên";
+        }
+    }
+
+    /// <summary>
+    /// Kiểm tra khách có đang gửi vào hộp thư chung của nhân viên hay không.
+    ///
+    /// <para>
+    /// Nhận diện qua <c>receiverKind = "pool"</c> ⇒ không cần chọn người nhận.
+    /// </para>
+    /// </summary>
+    private static bool IsPoolTarget(int receiverId, string? receiverKind)
+    {
+        var kind = (receiverKind ?? string.Empty).Trim().ToLowerInvariant();
+        return kind == ChatRepositoryKind.Pool;
     }
 
     /// <inheritdoc />
@@ -190,7 +351,7 @@ public sealed class ChatService : IChatService
 
     /// <summary>
     /// Suy ra loại của đối tác khi client không chỉ định rõ.
-    /// </summary>
+    ///
     /// <param name="peerKind">Loại do client truyền (có thể rỗng).</param>
     /// <param name="currentKind">Loại của người đang đăng nhập.</param>
     /// <returns>Loại của đối tác.</returns>
@@ -202,7 +363,8 @@ public sealed class ChatService : IChatService
             && requested is ChatRepositoryKind.Staff
                 or ChatRepositoryKind.Admin
                 or ChatRepositoryKind.Doctor
-                or ChatRepositoryKind.Customer)
+                or ChatRepositoryKind.Customer
+                or ChatRepositoryKind.Pool)
         {
             return requested;
         }

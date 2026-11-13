@@ -183,6 +183,7 @@ namespace PetShop.Services
             }
 
             var todayRecord = await _db.AttendanceRecords
+                .AsTracking()
                 .Where(a => a.StaffId == staffId && DateOnly.FromDateTime(a.CheckIn) == today)
                 .OrderByDescending(a => a.CheckIn)
                 .FirstOrDefaultAsync(ct);

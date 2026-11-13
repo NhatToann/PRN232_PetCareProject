@@ -25,7 +25,8 @@
    ------------------------------------------------------------------ *@
 
 <div class="spa-bd-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Spa" />
+<TopBar />
     <PageContextBar Title="Chi tiết dịch vụ spa" />
 
     <main class="spa-bd-main">
@@ -47,7 +48,7 @@
             {
                 <article class="spa-bd-card">
                     <div class="spa-bd-card__media">
-                        <img src="@GetSpaServiceThumb(booking.ServiceName)" alt="@(string.IsNullOrWhiteSpace(booking.ServiceName) ? "Dịch vụ spa" : booking.ServiceName)" />
+                        <img src="@GetSpaServiceThumb(booking.ServiceName)" alt="@(string.IsNullOrWhiteSpace(booking.ServiceName) ? "Dịch vụ spa" : booking.ServiceName)" loading="lazy" decoding="async" />
                     </div>
 
                     <div class="spa-bd-card__body">
@@ -110,7 +111,9 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        await LoadBookingAsync();
+        // KHÔNG đọc localStorage ở đây — giai đoạn prerender chưa cho phép JS interop.
+        // Việc đọc thật thực hiện ở OnAfterRenderAsync (xem LoadBookingAsync).
+        await Task.CompletedTask;
     }
 
     /// <summary>
@@ -137,6 +140,13 @@
                 }
             }
         }
+        catch (InvalidOperationException ex)
+        {
+            // Giai đoạn PRERENDER: JS interop chưa được phép ⇒ bỏ qua,
+            // sẽ đọc lại ở OnAfterRenderAsync (circuit đã interactive).
+            Logger.LogDebug("[SpaBookingDetail] Bỏ qua đọc localStorage ở prerender: {Error}", ex.Message);
+            return;
+        }
         catch (Exception ex)
         {
             Logger.LineWarning($"[SpaBookingDetail] Không đọc được localStorage.spaBookingHistory: {ex.GetType().Name} {ex.Message}");
@@ -146,9 +156,28 @@
         StateHasChanged();
     }
 
+    /// <summary>
+    /// Đọc dữ liệu từ localStorage — chỉ chạy khi circuit đã interactive.
+    ///
+    /// <para>
+    /// Giai đoạn prerender gọi JS interop sẽ bị chặn ⇒ log warning mỗi lần mở
+    /// trang. Nay phần prerender chỉ render skeleton, phần đọc thật chuyển sang
+    /// <see cref="OnAfterRenderAsync"/>.
+    /// </para>
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || loaded)
+        {
+            return;
+        }
+
+        await LoadBookingAsync();
+    }
+
     /// <summary>Định dạng số tiền — port <c>formatCurrency</c> của nguồn.</summary>
     private static string FormatCurrency(decimal value) =>
-        value.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN")) + "₫";
+        PetShop.Components.Shared.Format.Vnd(value);
 
     /// <summary>Định dạng ngày giờ — port <c>formatDateTime</c> của nguồn.</summary>
     private static string FormatDateTime(string? date, string? time)

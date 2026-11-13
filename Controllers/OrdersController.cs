@@ -1,12 +1,40 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PetShop.Data;
 using PetShop.Models;
+using PetShop.Services;
 
 namespace PetShop.Controllers
 {
+    /// <summary>
+    /// API đơn hàng.
+    ///
+    /// <para>
+    /// <b>Sửa trong đợt fix luồng mua hàng:</b>
+    /// </para>
+    /// <list type="bullet">
+    /// <item>
+    /// Gắn <c>[Authorize]</c> cho các endpoint của khách ⇒ chặn IDOR
+    /// (trước đây ai cũng xem/hủy được đơn của người khác chỉ bằng cách đổi
+    /// <c>customerId</c> trên URL).
+    /// </item>
+    /// <item>
+    /// <c>CustomerId</c> lấy từ CLAIM; nếu client gửi <c>customerId</c> khác
+    /// thì bị từ chối (chống việc đọc đơn người khác bằng cách đổi query string).
+    /// </item>
+    /// <item>
+    /// <b>Chống trừ kho 2 lần:</b> trước đây cả webhook PayOS
+    /// (<c>UpdateOrderStatusAsync</c>) lẫn staff xác nhận đơn
+    /// (<c>StaffConfirm</c>) đều trừ tồn kho ⇒ đơn PayOS bị trừ 2 lần.
+    /// Nay chỉ trừ kho ở đúng một chỗ: <b>staff xác nhận đơn</b> (đơn COD lẫn
+    /// đơn PayOS đã quét QR đều đi qua bước này). Webhook chỉ cập nhật trạng thái.
+    /// </item>
+    /// </list>
+    /// </summary>
     [ApiController]
     [Route("api/orders")]
+    [Authorize]
     public sealed class OrdersController : ControllerBase
     {
         private readonly ShopPetDatabaseContext _db;
@@ -37,13 +65,41 @@ namespace PetShop.Controllers
                     .FirstOrDefault(),
                 o.OrderDetails.Count(od => od.ProductId != null)));
 
+        /// <summary>
+        /// Lấy CustomerId của người đang đăng nhập.
+        /// Nếu client gửi <c>customerId</c> khác ⇒ từ chối (IDOR).
+        /// </summary>
+        private bool TryResolveCustomerId(int requestedCustomerId, out int customerId)
+        {
+            customerId = 0;
+
+            var claimId = User.ResolveCustomerId();
+            if (!claimId.HasValue)
+            {
+                return false;
+            }
+
+            if (requestedCustomerId > 0 && requestedCustomerId != claimId.Value)
+            {
+                return false;
+            }
+
+            customerId = claimId.Value;
+            return true;
+        }
+
         [HttpGet("history")]
         public async Task<ActionResult<IReadOnlyList<OrderSummaryDto>>> History([FromQuery] int customerId, CancellationToken ct)
         {
+            if (!TryResolveCustomerId(customerId, out var resolvedId))
+            {
+                return Forbid();
+            }
+
             var orders = await ProjectOrderSummary(
                     _db.Orders
                         .AsNoTracking()
-                        .Where(o => o.CustomerId == customerId)
+                        .Where(o => o.CustomerId == resolvedId)
                         .OrderByDescending(o => o.OrderDate))
                 .ToListAsync(ct);
 
@@ -53,11 +109,16 @@ namespace PetShop.Controllers
         [HttpGet("{orderId:int}")]
         public async Task<ActionResult<OrderDetailDto>> Detail(int orderId, [FromQuery] int customerId, CancellationToken ct)
         {
+            if (!TryResolveCustomerId(customerId, out var resolvedId))
+            {
+                return Forbid();
+            }
+
             var order = await _db.Orders
                 .AsNoTracking()
                 .Include(o => o.OrderDetails)
                 .ThenInclude(od => od.Product)
-                .FirstOrDefaultAsync(o => o.OrderId == orderId && o.CustomerId == customerId, ct);
+                .FirstOrDefaultAsync(o => o.OrderId == orderId && o.CustomerId == resolvedId, ct);
 
             if (order is null)
             {
@@ -83,6 +144,7 @@ namespace PetShop.Controllers
 
         // Danh sách đơn chờ nhân viên xác nhận (COD).
         [HttpGet("staff/pending")]
+        [Authorize(Policy = AuthPolicies.StaffOrAdmin)]
         public async Task<ActionResult<IReadOnlyList<OrderSummaryDto>>> StaffPending(CancellationToken ct)
         {
             var orders = await ProjectOrderSummary(
@@ -98,6 +160,7 @@ namespace PetShop.Controllers
         // Staff xem đơn theo trạng thái (dùng cho UI tab).
         // status: "Chờ xác nhận" | "Chờ giao hàng" | "Hoàn thành"
         [HttpGet("staff")]
+        [Authorize(Policy = AuthPolicies.StaffOrAdmin)]
         public async Task<ActionResult<IReadOnlyList<OrderSummaryDto>>> StaffByStatus([FromQuery] string? status, CancellationToken ct)
         {
             var query = _db.Orders
@@ -115,10 +178,15 @@ namespace PetShop.Controllers
         }
 
         // Nhân viên xác nhận đơn -> chuyển sang "Chờ giao hàng" và trừ stock sản phẩm.
+        //
+        // ĐÂY LÀ NƠI DUY NHẤT trừ kho (xem ghi chú ở đầu file):
+        // webhook PayOS KHÔNG trừ kho nữa ⇒ không còn trừ 2 lần.
         [HttpPatch("staff/{orderId:int}/confirm")]
+        [Authorize(Policy = AuthPolicies.StaffOrAdmin)]
         public async Task<ActionResult<OrderSummaryDto>> StaffConfirm(int orderId, CancellationToken ct)
         {
             var order = await _db.Orders
+                .AsTracking()
                 .Include(o => o.OrderDetails)
                 .FirstOrDefaultAsync(o => o.OrderId == orderId, ct);
             if (order is null)
@@ -131,15 +199,15 @@ namespace PetShop.Controllers
                 return BadRequest(new { message = $"Không thể xác nhận đơn ở trạng thái: {order.Status}" });
             }
 
-            // Trừ stock cho từng sản phẩm trong đơn hàng
+            // Trừ stock cho từng sản phẩm trong đơn hàng.
+            // Dùng ExecuteUpdateAsync để 1 câu lệnh cho mọi sản phẩm (nhanh hơn N round-trip).
             foreach (var detail in order.OrderDetails.Where(d => d.ProductId != null))
             {
-                var product = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == detail.ProductId, ct);
-                if (product != null && product.StockQuantity > 0)
-                {
-                    var qty = detail.Quantity ?? 1;
-                    product.StockQuantity = Math.Max(0, product.StockQuantity - qty);
-                }
+                var qty = detail.Quantity ?? 1;
+
+                await _db.Products
+                    .Where(p => p.ProductId == detail.ProductId && p.StockQuantity >= qty)
+                    .ExecuteUpdateAsync(s => s.SetProperty(p => p.StockQuantity, p => p.StockQuantity - qty), ct);
             }
 
             order.Status = "Chờ giao hàng";
@@ -159,7 +227,14 @@ namespace PetShop.Controllers
             [FromQuery] int customerId,
             CancellationToken ct)
         {
-            var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderId == orderId && o.CustomerId == customerId, ct);
+            if (!TryResolveCustomerId(customerId, out var resolvedId))
+            {
+                return Forbid();
+            }
+
+            var order = await _db.Orders
+                .AsTracking()
+                .FirstOrDefaultAsync(o => o.OrderId == orderId && o.CustomerId == resolvedId, ct);
             if (order is null)
             {
                 return NotFound(new { message = "Không tìm thấy đơn hàng." });
@@ -198,7 +273,7 @@ namespace PetShop.Controllers
         string ProductName,
         int Quantity,
         decimal UnitPrice,
-        string? ImageUrl);
+        string? ProductImageUrl);
 
     public sealed record OrderDetailDto(
         int OrderId,
@@ -209,5 +284,4 @@ namespace PetShop.Controllers
         decimal TotalAmount,
         string? ShippingAddress,
         IReadOnlyList<OrderDetailItemDto> Items);
-
 }

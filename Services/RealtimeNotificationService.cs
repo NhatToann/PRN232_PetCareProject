@@ -82,7 +82,12 @@ public sealed class RealtimeNotificationService : IRealtimeNotificationService
         int fromUserId,
         string message,
         CancellationToken cancellationToken = default,
-        int messageId = 0)
+        int messageId = 0,
+        string fromKind = "",
+        string toKind = "",
+        int toCustomerId = 0,
+        string senderName = "",
+        string senderRole = "")
     {
         if (toUserId <= 0)
         {
@@ -98,7 +103,12 @@ public sealed class RealtimeNotificationService : IRealtimeNotificationService
                 message ?? string.Empty,
                 DateTime.Now,
                 true,
-                messageId);
+                messageId,
+                fromKind,
+                toKind,
+                toCustomerId,
+                senderName,
+                senderRole);
 
             await _hubContext.Clients
                 .Group(NotificationHub.UserGroup(toUserId))
@@ -107,7 +117,20 @@ public sealed class RealtimeNotificationService : IRealtimeNotificationService
                     payload,
                     cancellationToken);
 
-            _logger.Line($"[Realtime] Đã push chat tới user:{toUserId} từ user:{fromUserId}");
+            // ⚠️ HỘP THƯ CHUNG (13/11/2026): đẩy thêm tới group NHÂN VIÊN
+            // ⇒ mọi nhân viên đều nhận tin của khách ngay, không chỉ người
+            // được chọn (nay đã bỏ khái niệm "người được chọn").
+            //
+            // Client nhân viên lọc theo `ToCustomerId` để chỉ hiện tin thuộc hộp
+            // thư đang mở; ai đang ở trang khác thì chỉ tăng badge.
+            await _hubContext.Clients
+                .Group(NotificationHub.StaffGroup)
+                .SendAsync(
+                    NotificationHub.ChatReceivedEvent,
+                    payload,
+                    cancellationToken);
+
+            _logger.Line($"[Realtime] Đã push chat tới user:{toUserId} + nhóm nhân viên từ user:{fromUserId}");
         }
         catch (OperationCanceledException)
         {

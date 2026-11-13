@@ -79,18 +79,38 @@
     private string password = string.Empty;
     private bool loginLoading;
     private bool googleReady;
+    private bool gsiEnabled;
     private string? googleClientId;
     private string? error;
 
+    // Fallback state (Authorization Code flow) — dùng khi GSI bị chặn do origin
+    // chưa được đăng ký trong `javascript_origins` của OAuth client.
+    private DotNetObjectReference<Login>? _googleCodeRef;
+    private bool _usingGoogleFallback;
+
     private bool isBusy => loginLoading;
+
+    /// <summary>
+    /// Origin (scheme + host + port) của trang hiện tại.
+    /// Lấy từ <see cref="NavigationManager.BaseUri"/> thay vì JS interop
+    /// (JS interop không khả dụng trước khi circuit kết nối ⇒ gây lỗi).
+    /// </summary>
+    private string GetCurrentOrigin()
+    {
+        var baseUri = Navigation.BaseUri; // ví dụ: https://localhost:7083/
+        return baseUri.TrimEnd('/');
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
 
+        // Quay lại từ Google OAuth (fallback flow) ⇒ xử lý token/error trước.
+        await HandleOAuthReturnAsync();
+
         // Already logged in → redirect
         try { await UserSession.LoadAsync(); }
-        catch (Exception ex) { Logger.LineWarning($"[Login.razor] OnAfterRenderAsync LoadAsync threw: {ex.GetType().Name}"); }
+        catch (Exception ex) { Logger.LogWarning("[Login.razor] OnAfterRenderAsync LoadAsync threw: {ex.GetType().Name}", ex); }
         if (UserSession.IsAuthenticated)
         {
             Navigation.NavigateTo(UserSession.CurrentUser!.Role == "staff" ? "/system" : "/", replace: true);
@@ -98,11 +118,31 @@
         }
 
         // Fetch Google client ID and initialize GSI
-        var result = await AuthClient.GetGoogleClientIdAsync();
-        if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Data?.Message))
+        //
+        // GSI (One Tap) chỉ chạy được ở origin nằm trong `javascript_origins` của
+        // OAuth client. Nếu origin hiện tại không được đăng ký ⇒ gọi GSI chắc chắn
+        // log 403 "The given origin is not allowed for the given client ID." ⇒ bỏ qua,
+        // dùng luôn luồng Authorization Code flow.
+        var origin = GetCurrentOrigin();
+        var result = await AuthClient.GetGoogleClientInfoAsync(origin);
+        if (result.IsSuccess && result.Data is not null && !string.IsNullOrWhiteSpace(result.Data.ClientId))
         {
-            googleClientId = result.Data!.Message;
-            await InitGoogleAsync(googleClientId);
+            googleClientId = result.Data.ClientId;
+
+            if (result.Data.GsiEnabled)
+            {
+                gsiEnabled = true;
+                await InitGoogleAsync(googleClientId);
+            }
+            else
+            {
+                // Origin chưa được đăng ký ⇒ dùng thẳng Authorization Code flow.
+                Logger.LogInformation(
+                    "[Login.razor] Origin {Origin} chưa nằm trong javascript_origins ⇒ dùng Authorization Code flow.",
+                    origin);
+                googleReady = true;
+                StateHasChanged();
+            }
         }
     }
 
@@ -110,7 +150,9 @@
     {
         try
         {
+            _googleCodeRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("blazorAuth.initGoogle", clientId, DotNetObjectReference.Create(this));
+            await JS.InvokeVoidAsync("blazorAuth.setCodeRef", _googleCodeRef);
             googleReady = true;
             StateHasChanged();
         }
@@ -145,6 +187,95 @@
         await UserSession.SignInAsync(result.Data);
         // No need to set loginLoading=false here — navigation tears down the component.
         Navigation.NavigateTo(result.Data.Role.Equals("staff", StringComparison.OrdinalIgnoreCase) ? "/system" : "/", replace: true);
+    }
+
+    /// <summary>
+    /// GSI không mở popup được ⇒ origin hiện tại chưa được đăng ký trong
+    /// <c>javascript_origins</c> của OAuth client. Chuyển sang Authorization Code flow
+    /// (chỉ phụ thuộc <c>redirect_uris</c> ⇒ hoạt động từ mọi origin/port).
+    /// </summary>
+    [JSInvokable]
+    public async Task OnGoogleFallbackNeeded()
+    {
+        if (loginLoading || _usingGoogleFallback) return;
+
+        _usingGoogleFallback = true;
+        error = null;
+
+        try
+        {
+            var origin = GetCurrentOrigin();
+            var urlResult = await AuthClient.GetGoogleAuthorizeUrlAsync(origin);
+            if (!urlResult.IsSuccess || urlResult.Data is null)
+            {
+                error = urlResult.Error ?? "Không lấy được URL đăng nhập Google.";
+                _usingGoogleFallback = false;
+                StateHasChanged();
+                return;
+            }
+
+            // Redirect toàn trang tới Google. Sau khi Google xác thực xong, server
+            // redirect về lại /login của origin ban đầu kèm ?token=...
+            Navigation.NavigateTo(urlResult.Data.AuthorizeUrl, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning("[Login.razor] OnGoogleFallbackNeeded failed: {Message}", ex.Message);
+            error = "Google Login chưa sẵn sàng. Vui lòng thử lại.";
+            _usingGoogleFallback = false;
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Được gọi khi quay lại trang /login sau khi Google redirect.
+    /// Đọc <c>?token=</c> (đăng nhập thành công) hoặc <c>?googleError=</c> (thất bại).
+    /// </summary>
+    private async Task HandleOAuthReturnAsync()
+    {
+        try
+        {
+            var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+            if (query.TryGetValue("token", out var tokenValues))
+            {
+                var token = tokenValues.ToString();
+                if (!string.IsNullOrWhiteSpace(token))
+                {
+                    var result = await AuthClient.GoogleExchangeAsync(token);
+                    if (result.IsSuccess && result.Data is not null)
+                    {
+                        await UserSession.SignInAsync(result.Data);
+                        Navigation.NavigateTo(
+                            result.Data.Role.Equals("staff", StringComparison.OrdinalIgnoreCase) ? "/system" : "/",
+                            replace: true);
+                        return;
+                    }
+
+                    error = result.Error ?? "Không hoàn tất được đăng nhập Google.";
+                    return;
+                }
+            }
+
+            if (query.TryGetValue("googleError", out var errorValues))
+            {
+                var errCode = errorValues.ToString();
+                error = errCode switch
+                {
+                    "access_denied" => "Bạn đã từ chối quyền truy cập từ Google.",
+                    "missing_code" => "Google không trả về mã đăng nhập.",
+                    "invalid_state" => "Phiên đăng nhập Google không hợp lệ. Vui lòng thử lại.",
+                    _ => "Đăng nhập Google thất bại."
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning("[Login.razor] HandleOAuthReturnAsync failed: {Message}", ex.Message);
+            error = "Đăng nhập Google thất bại.";
+        }
     }
 
     private async Task HandleLoginAsync()
@@ -188,7 +319,16 @@
         error = null;
         try
         {
-            await JS.InvokeVoidAsync("blazorAuth.promptGoogle");
+            if (gsiEnabled)
+            {
+                await JS.InvokeVoidAsync("blazorAuth.promptGoogle");
+            }
+            else
+            {
+                // Origin chưa được đăng ký trong `javascript_origins` ⇒ GSI không dùng
+                // được ⇒ chuyển thẳng sang luồng Authorization Code flow.
+                await OnGoogleFallbackNeeded();
+            }
         }
         catch
         {

@@ -18,7 +18,12 @@ namespace PetShop.Models
         string Email,
 
         [Required(ErrorMessage = "Mật khẩu không được để trống.")]
-        [StringLength(100, MinimumLength = 6, ErrorMessage = "Mật khẩu phải có ít nhất 6 ký tự.")]
+        // TÁCH 2 ràng buộc thành 2 attribute riêng:
+        //   [StringLength(100, MinimumLength = 6, ErrorMessage = "...")] dùng CHUNG 1
+        //   message cho cả min & max ⇒ mật khẩu 150 ký tự cũng báo nhầm
+        //   "phải có ít nhất 6 ký tự" ⇒ thông báo lỗi SAI ⇒ user tưởng mình gõ sai.
+        [MinLength(6, ErrorMessage = "Mật khẩu phải có ít nhất 6 ký tự.")]
+        [StringLength(100, ErrorMessage = "Mật khẩu không được vượt quá 100 ký tự.")]
         string Password,
 
         [Phone(ErrorMessage = "Số điện thoại không hợp lệ.")]
@@ -38,12 +43,77 @@ namespace PetShop.Models
         string Password
     );
 
+    public sealed record GoogleAuthorizeUrlDto(
+        string AuthorizeUrl,
+        string RedirectUri,
+        string State,
+        string? Origin);
+
+    /// <summary>
+    /// Thông tin client của Google OAuth client.
+    /// </summary>
+    /// <param name="ClientId">Client ID (dùng để init Google Identity Services).</param>
+    /// <param name="GsiEnabled">
+    /// <c>true</c> nếu origin hiện tại nằm trong <c>javascript_origins</c> của OAuth client
+    /// ⇒ GSI (One Tap) dùng được. <c>false</c> ⇒ GSI chắc chắn trả 403
+    /// <c>"The given origin is not allowed for the given client ID."</c>
+    /// ⇒ phải dùng luồng Authorization Code flow.
+    /// </param>
+    /// <param name="AllowedOrigins">Danh sách origin đã đăng ký trong Google Cloud Console.</param>
+    public sealed record GoogleClientInfoDto(
+        string ClientId,
+        bool GsiEnabled,
+        string[] AllowedOrigins);
+
+    /// <summary>
+    /// Đổi one-time token (do <c>/api/auth/google-callback</c> sinh) lấy thông tin user.
+    /// </summary>
+    public sealed record GoogleExchangeRequestDto(
+        [Required(ErrorMessage = "Token không được để trống.")]
+        [StringLength(200, ErrorMessage = "Token không hợp lệ.")]
+        string? Token);
+
     public sealed record GoogleLoginRequestDto(
         [StringLength(4000, ErrorMessage = "IdToken không hợp lệ.")]
         string? IdToken,
 
         [StringLength(4000, ErrorMessage = "AccessToken không hợp lệ.")]
         string? AccessToken
+    );
+
+    /// <summary>
+    /// Đăng nhập Google bằng authorization code (OAuth 2.0 Authorization Code flow).
+    ///
+    /// <para>
+    /// Dùng khi Google Identity Services (GSI) bị chặn vì origin hiện tại chưa được
+    /// đăng ký trong <c>javascript_origins</c> của OAuth client trên Google Cloud Console
+    /// (ví dụ mở app ở <c>https://localhost:7083</c> trong khi client chỉ đăng ký
+    /// <c>http://localhost:5286</c>). Khi đó GSI trả 403
+    /// <c>"The given origin is not allowed for the given client ID."</c>.
+    /// </para>
+    ///
+    /// <para>
+    /// Flow này chỉ phụ thuộc <c>redirect_uris</c> (đã đăng ký sẵn) nên hoạt động từ
+    /// mọi origin/port của ứng dụng.
+    /// </para>
+    /// </summary>
+    public sealed record GoogleCodeLoginRequestDto(
+        [Required(ErrorMessage = "Authorization code không được để trống.")]
+        [StringLength(2000, ErrorMessage = "Authorization code không hợp lệ.")]
+        string Code,
+
+        /// <summary>
+        /// Origin của trang đang gọi (vd <c>http://localhost:5286</c>). Dùng làm
+        /// <c>redirect_uri</c> khi đổi code lấy token và làm <c>state</c> để chống CSRF.
+        /// </summary>
+        [StringLength(200, ErrorMessage = "Origin không hợp lệ.")]
+        string? Origin,
+
+        /// <summary>
+        /// <c>state</c> do client sinh ra, gửi lại để server đối chiếu với cookie.
+        /// </summary>
+        [StringLength(200, ErrorMessage = "State không hợp lệ.")]
+        string? State
     );
 
     public sealed record SendEmailOtpRequestDto(
@@ -62,6 +132,25 @@ namespace PetShop.Models
         string OtpCode
     );
 
+    /// <summary>
+    /// Yêu cầu đặt lại mật khẩu.
+    ///
+    /// <para>
+    /// <b>LƯU Ý QUAN TRỌNG — vì sao KHÔNG dùng <c>[Compare("NewPassword")]</c>:</b>
+    /// <c>[Compare]</c> phải được gắn vào <b>property</b>, không phải vào tham số
+    /// của primary constructor của record. Khi gắn sai chỗ, ASP.NET Core ném
+    /// <c>InvalidOperationException</c> ("Record type ... has validation metadata
+    /// defined on property 'ConfirmPassword' that will be ignored") ⇒ endpoint
+    /// <c>POST /api/auth/reset-password</c> trả <b>409</b> với body rác thay vì
+    /// xử lý yêu cầu ⇒ <b>luồng quên mật khẩu không bao giờ chạy được</b>.
+    /// </para>
+    ///
+    /// <para>
+    /// Vì vậy: so khớp <c>NewPassword</c> / <c>ConfirmPassword</c> được kiểm tra
+    /// thủ công trong <c>AuthService.ResetPasswordAsync</c> (đã có sẵn) và trả về
+    /// lỗi 400 với message tiếng Việt cho client.
+    /// </para>
+    /// </summary>
     public sealed record ResetPasswordRequestDto(
         [Required(ErrorMessage = "Email không được để trống.")]
         [EmailAddress(ErrorMessage = "Email không hợp lệ.")]
@@ -74,11 +163,13 @@ namespace PetShop.Models
         string? OtpCode,
 
         [Required(ErrorMessage = "Mật khẩu mới không được để trống.")]
-        [StringLength(100, MinimumLength = 6, ErrorMessage = "Mật khẩu phải có ít nhất 6 ký tự.")]
+        [MinLength(6, ErrorMessage = "Mật khẩu mới phải có ít nhất 6 ký tự.")]
+        [StringLength(100, ErrorMessage = "Mật khẩu mới không được vượt quá 100 ký tự.")]
         string NewPassword,
 
         [Required(ErrorMessage = "Xác nhận mật khẩu không được để trống.")]
-        [property: Compare("NewPassword", ErrorMessage = "Xác nhận mật khẩu không khớp.")]
+        [MinLength(6, ErrorMessage = "Xác nhận mật khẩu phải có ít nhất 6 ký tự.")]
+        [StringLength(100, ErrorMessage = "Xác nhận mật khẩu không được vượt quá 100 ký tự.")]
         string ConfirmPassword
     );
 
@@ -144,7 +235,23 @@ namespace PetShop.Models
         string Email,
         string Role,
         string? AvatarUrl = null,
-        DateTime? BirthDate = null);
+        DateTime? BirthDate = null,
+        string? Address = null,
+        string? Phone = null);
+
+    /// <summary>
+    /// Địa chỉ giao hàng + số điện thoại liên hệ của khách hàng.
+    ///
+    /// <para>
+    /// <b>VÌ SAO CẦN CẢ PHONE:</b> cột <c>Customer.address_Customer</c> chỉ chứa
+    /// chuỗi địa chỉ, không chứa số điện thoại. Nếu chỉ đọc địa chỉ từ DB thì
+    /// form thanh toán sẽ thiếu số điện thoại ⇒ <c>hasAddress</c> = false ⇒
+    /// giao diện hiện "Chưa có địa chỉ giao hàng" dù DB có địa chỉ.
+    /// </para>
+    /// </summary>
+    public sealed record CustomerAddressDto(
+        string? Address,
+        string? Phone);
 
     /// <summary>
     /// Body cho endpoint cập nhật ảnh đại diện.
@@ -159,4 +266,26 @@ namespace PetShop.Models
     /// </summary>
     public sealed record UpdateBirthDateRequestDto(
         DateTime? BirthDate);
+
+    /// <summary>
+    /// Body cho endpoint cập nhật địa chỉ giao hàng (cột <c>Customer.address_Customer</c>).
+    /// <see cref="Address"/> = null/rỗng ⇒ xoá địa chỉ.
+    /// </summary>
+    public sealed record UpdateAddressRequestDto(
+        string? Address);
+
+    /// <summary>
+    /// Body cho endpoint cập nhật địa chỉ giao hàng kèm số điện thoại.
+    ///
+    /// <para>
+    /// <b>VÌ SAO CẦN:</b> địa chỉ trong DB (<c>Customer.address_Customer</c>) không
+    /// chứa số điện thoại. Nếu chỉ lưu chuỗi địa chỉ thì khi đọc lại để điền sẵn
+    /// form, trường "Số điện thoại" sẽ trống ⇒ form không hợp lệ ⇒ checkout bắt
+    /// khách nhập lại từ đầu. Vì vậy số điện thoại được lưu kèm vào cột
+    /// <c>Customer.phone</c> (cột này đã có sẵn trong schema).
+    /// </para>
+    /// </summary>
+    public sealed record UpdateAddressWithPhoneRequestDto(
+        string? Address,
+        string? Phone);
 }

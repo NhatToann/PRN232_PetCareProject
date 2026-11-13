@@ -31,6 +31,32 @@ namespace PetShop.Controllers
             return Ok(items);
         }
 
+        /// <summary>
+        /// Danh sách TÊN sản phẩm — payload nhẹ cho ô tìm kiếm (gợi ý ở Header).
+        ///
+        /// <para>
+        /// <b>Vì sao cần endpoint riêng?</b>
+        /// Header nằm ở MỌI trang và trước đây gọi <c>api/products</c> (toàn bộ bảng
+        /// Products + Category + Supplier + aggregate Reviews) chỉ để lấy ra cột
+        /// <c>Name</c>. Với 100+ sản phẩm đó là hàng trăm KB JSON mỗi lần điều hướng
+        /// ⇒ độ trễ render + giữ nhiều object trong RAM của circuit.
+        /// Endpoint này trả về đúng một mảng string ⇒ nhẹ hơn hàng trăm lần.
+        /// </para>
+        ///
+        /// <para>
+        /// Kết quả được cache phía server (TTL ngắn) trong
+        /// <see cref="ProductService"/>/<see cref="IProductCache"/> để mọi circuit
+        /// dùng chung ⇒ không phải query DB mỗi lần điều hướng.
+        /// </para>
+        /// </summary>
+        [HttpGet("names")]
+        [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status200OK)]
+        public async Task<ActionResult<IReadOnlyList<string>>> GetNames(CancellationToken ct)
+        {
+            var names = await _service.GetProductNamesAsync(ct);
+            return Ok(names);
+        }
+
         [HttpGet("{id:int}")]
         [ProducesResponseType(typeof(ProductDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]

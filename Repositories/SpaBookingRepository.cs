@@ -8,17 +8,38 @@ namespace PetShop.Repositories
     public sealed class SpaBookingRepository : ISpaBookingRepository
     {
         // Trạng thái được tính là đang chiếm slot vận hành spa.
+        //
+        // VÌ SAO DANH SÁCH NÀY PHẢI KHỚP VỀI UI:
+        //   Booking được tạo với status "Chưa thanh toán" (tiền mặt) hoặc
+        //   "Chờ thanh toán PayOS" (PayOS). Nhân viên chuyển sang
+        //   "Chờ xác nhận" → "Đang tiến hành" → "Hoàn thành".
+        //   (xem StaffBookings.razor — các nút bấm đều dùng đúng chuỗi này)
+        //
+        // BẢN CŨ BỎ SÓT "chờ xác nhận", "chưa thanh toán", "đang tiến hành"
+        // ⇒ các booking đang thực sự chiếm slot KHÔNG được tính vào công suất
+        // ⇒ hệ thống cho đặt vượt quá 2 slot/đồng thời ⇒ "đặt spa không ổn".
         private static bool IsOccupyingSlotStatus(string? status)
         {
             var s = (status ?? string.Empty).Trim().ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(s)) return false;
 
+            // Trạng thái đã kết thúc / bị hủy ⇒ KHÔNG chiếm slot.
+            if (s.Contains("đã hủy") || s.Contains("hủy")
+                || s.Contains("cancelled") || s.Contains("canceled")
+                || s == "hủy")
+            {
+                return false;
+            }
+
             return s.Contains("đã chấp nhận")
                 || s.Contains("đã xác nhận")
+                || s.Contains("chờ xác nhận")
+                || s.Contains("đang tiến hành")
                 || s.Contains("đang xử lý")
                 || s.Contains("hoàn thành")
                 || s.Contains("đã thanh toán")
-                || s.Contains("chờ thanh toán payos")
+                || s.Contains("chờ thanh toán")
+                || s.Contains("chưa thanh toán")
                 || s == "accepted"
                 || s == "confirmed"
                 || s == "processing"
@@ -383,7 +404,9 @@ namespace PetShop.Repositories
 
         public async Task<bool> UpdateBookingStatusAsync(int bookingId, string status, CancellationToken ct = default)
         {
-            var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
+            var booking = await _db.Bookings
+                .AsTracking()
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
             if (booking == null)
             {
                 return false;
@@ -392,6 +415,17 @@ namespace PetShop.Repositories
             booking.Status = status;
             await _db.SaveChangesAsync(ct);
             return true;
+        }
+
+        /// <summary>
+        /// Kiểm tra booking có thuộc về khách hàng hay không — dùng để chặn IDOR
+        /// khi khách tự huỷ lịch của chính mình.
+        /// </summary>
+        public async Task<bool> IsBookingOwnedByCustomerAsync(int bookingId, int customerId, CancellationToken ct = default)
+        {
+            return await _db.Bookings
+                .AsNoTracking()
+                .AnyAsync(b => b.BookingId == bookingId && b.CustomerId == customerId, ct);
         }
 
         public async Task<bool> HasCompletedBookingAsync(int customerId, int bookingId, int serviceId, CancellationToken ct = default)

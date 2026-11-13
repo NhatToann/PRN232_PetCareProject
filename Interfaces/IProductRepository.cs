@@ -5,6 +5,10 @@ namespace PetShop.Interfaces
     public interface IProductRepository
     {
         Task<IReadOnlyList<ProductDto>> GetAllAsync(string? keyword = null, int? categoryId = null, CancellationToken ct = default);
+
+        /// <summary>Chỉ lấy danh sách TÊN sản phẩm (payload nhẹ cho ô tìm kiếm).</summary>
+        Task<IReadOnlyList<string>> GetProductNamesAsync(CancellationToken ct = default);
+
         Task<IReadOnlyList<ProductCategoryFilterDto>> GetCategoriesAsync(string? keyword = null, CancellationToken ct = default);
         Task<ProductDto?> GetByIdAsync(int productId, CancellationToken ct = default);
 

@@ -15,6 +15,34 @@ namespace PetShop_PRN222.Components.Pages
     public partial class SpaCart
     {    private static readonly System.Globalization.CultureInfo Vi = new("vi-VN");
 
+    /// <summary>
+    /// Key localStorage lưu booking đang thanh toán PayOS (dự phòng khi mất query string).
+    /// </summary>
+    internal const string PendingSpaBookingKey = "pendingSpaBooking";
+
+    /// <summary>
+    /// Thông tin booking spa đang thanh toán, lưu tạm ở localStorage để khôi phục
+    /// khi PayOS redirect về mà URL bị rút gọn mất query string.
+    /// </summary>
+    ///
+    /// <para>
+    /// <b>LƯU Ý:</b> <c>[JsonPropertyName]</c> là BẮT BUỘC — <c>System.Text.Json</c>
+    /// mặc định PHÂN BIỆT hoa thường khi đọc. Dữ liệu trong localStorage do JS ghi
+    /// theo camelCase (<c>bookingId</c>) ⇒ nếu khai báo thuần <c>BookingId</c> thì
+    /// deserialize sẽ ném <c>JsonException</c> ⇒ mất toàn bộ dữ liệu dự phòng.
+    /// </para>
+    internal sealed record PendingSpaBooking(
+        [property: System.Text.Json.Serialization.JsonPropertyName("bookingId")] int BookingId,
+        [property: System.Text.Json.Serialization.JsonPropertyName("bookingIds")] List<int> BookingIds,
+        [property: System.Text.Json.Serialization.JsonPropertyName("orderCode")] int OrderCode);
+
+    /// <summary>
+    /// Tuỳ chọn deserialize cho <see cref="PendingSpaBooking"/>: chấp nhận CẢ camelCase
+    /// (do JS ghi) lẫn PascalCase (do .NET ghi) ⇒ không phụ thuộc cách ghi.
+    /// </summary>
+    internal static readonly System.Text.Json.JsonSerializerOptions PendingSpaBookingJsonOptions =
+        new() { PropertyNameCaseInsensitive = true };
+
     [SupplyParameterFromQuery(Name = "serviceId")] private int? InitialServiceId { get; set; }
 
     private bool isLoading = true;
@@ -414,12 +442,34 @@ namespace PetShop_PRN222.Components.Pages
         if (payosSelected && payosIds.Count > 0)
         {
             var firstId = payosIds[0];
-            var returnUrl = Navigation.ToAbsoluteUri($"/spa-invoice?payos=success&bookingId={firstId}&bookingIds={string.Join(',', payosIds)}").ToString();
-            var cancelUrl = Navigation.ToAbsoluteUri($"/spa-invoice?payos=cancel&bookingId={firstId}&bookingIds={string.Join(',', payosIds)}").ToString();
+            // Return URL mang theo CẢ bookingId lẫn orderCode (PayOS tự thêm orderCode
+            // khi redirect) ⇒ nếu query string bị rút gọn, trang hóa đơn vẫn khôi phục
+            // được mã booking từ orderCode (xem SpaInvoice.TryRestoreBookingIdFromOrderCodeAsync).
+            var returnUrl = Navigation.ToAbsoluteUri(
+                $"/spa-invoice?payos=success&bookingId={firstId}&bookingIds={string.Join(',', payosIds)}").ToString();
+            var cancelUrl = Navigation.ToAbsoluteUri(
+                $"/spa-invoice?payos=cancel&bookingId={firstId}&bookingIds={string.Join(',', payosIds)}").ToString();
             var payRes = await SpaClient.CreateSpaPayOSPaymentAsync(firstId, payosIds, returnUrl, cancelUrl);
             isSubmitting = false;
             if (payRes.IsSuccess && payRes.Data is not null && !string.IsNullOrWhiteSpace(payRes.Data.CheckoutUrl))
             {
+                // LƯU DỰ PHÒNG vào localStorage TRƯỚC khi rời trang.
+                //
+                // VÌ SAO CẦN:
+                // PayOS redirect về kèm query string, nhưng trình duyệt / hạ tầng
+                // có thể làm rơi query (vd trước đây `blazorAuth.js` coi mọi `?code=`
+                // là callback Google OAuth rồi `history.replaceState` xoá sạch query).
+                // Lưu sẵn vào localStorage ⇒ trang hóa đơn LUÔN tìm được booking
+                // kể cả khi URL bị rút gọn — đúng pattern luồng đơn hàng đang dùng
+                // với key `pendingPayOSOrder`.
+                await JS.InvokeVoidAsync(
+                    "localStorage.setItem",
+                    PendingSpaBookingKey,
+                    System.Text.Json.JsonSerializer.Serialize(new PendingSpaBooking(
+                        firstId,
+                        payosIds,
+                        payRes.Data.OrderCode)));
+
                 await JS.InvokeVoidAsync("spaCart.clear");
                 Navigation.NavigateTo(payRes.Data.CheckoutUrl, forceLoad: true);
                 return;
@@ -431,7 +481,10 @@ namespace PetShop_PRN222.Components.Pages
 
         await JS.InvokeVoidAsync("spaCart.clear");
         isSubmitting = false;
-        Navigation.NavigateTo("/spa-booking-history", forceLoad: true);
+        // Điều hướng NỘI BỘ ⇒ replace (không forceLoad) để giữ circuit Blazor
+        // và không mất state (tránh hiện tượng "tự đăng nhập tài khoản khác"
+        // do circuit mới đọc lại ProtectedLocalStorage lúc chưa kịp đồng bộ).
+        Navigation.NavigateTo("/spa-booking-history", replace: true);
     }
 
     private void CloseSuggestionModal() => slotSuggestionModal = new(false, null, "", null);

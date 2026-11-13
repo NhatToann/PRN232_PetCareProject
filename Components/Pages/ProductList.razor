@@ -1,4 +1,4 @@
-﻿@page "/products/list"
+@page "/products/list"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
 @using PetShop.Models
@@ -28,7 +28,7 @@
     else if (!displayedProducts.Any())
     {
         <div class="text-center py-5">
-            <img src="https://cdn-icons-png.flaticon.com/512/7486/7486754.png" width="100" class="opacity-50 mb-3" />
+            <img src="images/empty-products.png" width="100" class="opacity-50 mb-3" alt="Không có sản phẩm nào" loading="lazy" decoding="async" />
             <h5 class="text-muted fw-bold">Không có sản phẩm nào</h5>
             <a href="/products/create" class="btn btn-outline-primary rounded-pill px-4 mt-2 fw-bold"><i class="fas fa-plus me-1"></i> Thêm sản phẩm đầu tiên</a>
         </div>
@@ -49,10 +49,10 @@
                 {
                     <tr style="cursor:pointer;">
                         <td class="text-start ps-4 py-3 d-flex align-items-center gap-3" @onclick="() => ShowDetail(p)">
-                            <img src="@(string.IsNullOrEmpty(p.ImageUrl) ? "/img/placeholder.jpg" : p.ImageUrl)" class="rounded-3 shadow-sm border" style="width: 50px; height: 50px; object-fit: cover;" />
+                            <img src="@PetShop.Components.Shared.ImageUrl.Safe(p.ImageUrl)" class="rounded-3 shadow-sm border" style="width: 50px; height: 50px; object-fit: cover;" loading="lazy" decoding="async" />
                             <div><div class="fw-bold text-dark">@p.Name</div><small class="text-muted fw-bold">SKU: #PRD-@(p.ProductId.ToString("D4"))</small></div>
                         </td>
-                        <td class="fw-bold text-success">@p.Price.ToString("N0") đ</td>
+                        <td class="fw-bold text-success">@PetShop.Components.Shared.Format.Vnd(p.Price)</td>
                         <td>
                             @if (p.StockQuantity > 50)
                             {
@@ -89,13 +89,13 @@
             <div class="modal-content rounded-4 border-0">
                 <div class="modal-header border-0 pb-0 justify-content-end"><button class="btn-close" @onclick="() => detailProduct = null"></button></div>
                 <div class="modal-body text-center pt-0 px-5 pb-5">
-                    <img src="@detailProduct.ImageUrl" class="rounded-4 shadow mb-4" style="width: 200px; height: 200px; object-fit: cover;" />
+                    <img src="@PetShop.Components.Shared.ImageUrl.Safe(detailProduct.ImageUrl)" class="rounded-4 shadow mb-4" style="width: 200px; height: 200px; object-fit: cover;" fetchpriority="high" decoding="async" />
                     <h4 class="fw-bold text-dark">@detailProduct.Name</h4>
                     <p class="text-muted fw-bold">SKU: #PRD-@(detailProduct.ProductId.ToString("D4"))</p>
                     <div class="d-flex justify-content-center gap-3 my-3">
                         <div class="p-3 bg-light rounded-4 w-50">
                             <div class="text-muted small fw-bold">GIÁ BÁN</div>
-                            <h4 class="text-primary fw-bold mb-0">@detailProduct.Price.ToString("N0") đ</h4>
+                            <h4 class="text-primary fw-bold mb-0">@PetShop.Components.Shared.Format.Vnd(detailProduct.Price)</h4>
                         </div>
                         <div class="p-3 bg-light rounded-4 w-50">
                             <div class="text-muted small fw-bold">TỒN KHO</div>

@@ -24,19 +24,19 @@ else
         <div class="col-md-4">
             <div class="fox-card p-4 h-100 text-white shadow-sm hover-scale" style="background: linear-gradient(135deg, #3b82f6, #60a5fa); border-radius: 16px;">
                 <h6 class="fw-bold opacity-75 mb-3 text-uppercase"><i class="fas fa-calendar-day me-2"></i>Doanh Thu Hôm Nay</h6>
-                <h2 class="fw-bold mb-0">@revToday.ToString("N0") <span class="fs-5">đ</span></h2>
+                <h2 class="fw-bold mb-0">@PetShop.Components.Shared.Format.Vnd(revToday)</h2>
             </div>
         </div>
         <div class="col-md-4">
             <div class="fox-card p-4 h-100 text-white shadow-sm hover-scale" style="background: linear-gradient(135deg, #10b981, #34d399); border-radius: 16px;">
                 <h6 class="fw-bold opacity-75 mb-3 text-uppercase"><i class="fas fa-calendar-week me-2"></i>Doanh Thu Tuần Này</h6>
-                <h2 class="fw-bold mb-0">@revWeek.ToString("N0") <span class="fs-5">đ</span></h2>
+                <h2 class="fw-bold mb-0">@PetShop.Components.Shared.Format.Vnd(revWeek)</h2>
             </div>
         </div>
         <div class="col-md-4">
             <div class="fox-card p-4 h-100 text-white shadow-sm hover-scale" style="background: linear-gradient(135deg, #8b5cf6, #a78bfa); border-radius: 16px;">
                 <h6 class="fw-bold opacity-75 mb-3 text-uppercase"><i class="fas fa-calendar-alt me-2"></i>Doanh Thu Tháng Này</h6>
-                <h2 class="fw-bold mb-0">@revMonth.ToString("N0") <span class="fs-5">đ</span></h2>
+                <h2 class="fw-bold mb-0">@PetShop.Components.Shared.Format.Vnd(revMonth)</h2>
             </div>
         </div>
     </div>
@@ -74,7 +74,7 @@ else
                     {
                         <li class="list-group-item d-flex justify-content-between align-items-center border-0 px-0 py-3">
                             <div class="d-flex align-items-center">
-                                <img src="@p.ImageUrl" class="rounded-circle object-fit-cover shadow-sm me-3 border" style="width: 45px; height: 45px;" />
+                                <img src="@PetShop.Components.Shared.ImageUrl.Safe(p.ImageUrl)" class="rounded-circle object-fit-cover shadow-sm me-3 border" style="width: 45px; height: 45px;" loading="lazy" decoding="async" />
                                 <div class="fw-bold text-dark fs-6">@p.Name</div>
                             </div>
                             <span class="badge bg-primary-subtle text-primary rounded-pill fs-6 px-3 py-2 fw-bold">Đã bán: @p.Sold</span>
@@ -83,18 +83,30 @@ else
                 </ul>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="fox-card p-4 shadow-sm border-0 bg-white" style="border-radius: 16px;">
-                <h5 class="fw-bold text-dark mb-4 border-bottom pb-3"><i class="fas fa-spa text-info me-2"></i> Tỷ Lệ Dịch Vụ Spa</h5>
-                <div class="p-3 bg-light rounded-4 border">
-                    <p class="mb-2 fw-bold text-dark"><i class="fas fa-bath text-info me-2"></i> Tắm sấy trọn gói <span class="float-end">@(topSpaCount + 5) lượt</span></p>
-                    <div class="progress mb-4" style="height: 8px;"><div class="progress-bar bg-info" style="width: 75%"></div></div>
-
-                    <p class="mb-2 fw-bold text-dark"><i class="fas fa-cut text-warning me-2"></i> Cắt tỉa lông chuyên nghiệp <span class="float-end">@(topSpaCount + 2) lượt</span></p>
-                    <div class="progress" style="height: 8px;"><div class="progress-bar bg-warning" style="width: 45%"></div></div>
+            <div class="col-md-6">
+                <div class="fox-card p-4 shadow-sm border-0 bg-white" style="border-radius: 16px;">
+                    <h5 class="fw-bold text-dark mb-4 border-bottom pb-3"><i class="fas fa-spa text-info me-2"></i> Tỷ Lệ Dịch Vụ Spa</h5>
+                    @if (spaServiceShares.Count == 0)
+                    {
+                        <p class="text-muted mb-0">Chưa có dịch vụ spa nào đã hoàn thành.</p>
+                    }
+                    else
+                    {
+                        <div class="p-3 bg-light rounded-4 border">
+                            @foreach (var share in spaServiceShares)
+                            {
+                                <p class="mb-2 fw-bold text-dark">
+                                    @share.Name
+                                    <span class="float-end">@share.Count lượt (@share.Percent.ToString("0.#")%)</span>
+                                </p>
+                                <div class="progress mb-4" style="height: 8px;">
+                                    <div class="progress-bar bg-info" style="width: @($"{share.Percent:0.#}%")"></div>
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
             </div>
-        </div>
     </div>
 }
 
@@ -102,7 +114,7 @@ else
     window.renderEnterpriseCharts = function (lineLabels, lineData, donutLabels, donutData, bgColors) {
         if (typeof Chart === 'undefined') {
             let script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            script.src = 'js/chart.umd.js';
             script.onload = () => initCharts(lineLabels, lineData, donutLabels, donutData, bgColors);
             document.head.appendChild(script);
         } else {
@@ -150,6 +162,7 @@ else
     private bool isLoading = true;
     private decimal revToday = 0; private decimal revWeek = 0; private decimal revMonth = 0;
     private int topSpaCount = 0;
+    private List<StaffSpaServiceShareDto> spaServiceShares = new();
     private List<string> lineLabels = new();
     private List<decimal> lineData = new();
     private int completedOrders = 0; private int pendingOrders = 0; private int cancelledOrders = 0;
@@ -166,6 +179,7 @@ else
         revWeek = summary.RevenueWeek;
         revMonth = summary.RevenueMonth;
         topSpaCount = summary.TopSpaCount;
+        spaServiceShares = summary.SpaServiceShares;
         lineLabels = summary.LineLabels;
         lineData = summary.LineData;
         completedOrders = summary.CompletedOrders;

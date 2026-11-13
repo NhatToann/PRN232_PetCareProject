@@ -12,11 +12,19 @@ namespace PetShop.Controllers
     {
         private readonly IAuthService _authService;
         private readonly IJwtTokenService _jwtTokenService;
+        private readonly GoogleOAuthStateStore _googleOAuthStateStore;
+        private readonly GoogleOAuthCallbackService _googleOAuthCallbackService;
 
-        public AuthController(IAuthService authService, IJwtTokenService jwtTokenService)
+        public AuthController(
+            IAuthService authService,
+            IJwtTokenService jwtTokenService,
+            GoogleOAuthStateStore googleOAuthStateStore,
+            GoogleOAuthCallbackService googleOAuthCallbackService)
         {
             _authService = authService;
             _jwtTokenService = jwtTokenService;
+            _googleOAuthStateStore = googleOAuthStateStore;
+            _googleOAuthCallbackService = googleOAuthCallbackService;
         }
 
         [HttpPost("register")]
@@ -57,6 +65,28 @@ namespace PetShop.Controllers
             try
             {
                 var result = await _authService.LoginWithGoogleAsync(request, ct);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("google-code-login")]
+        public async Task<ActionResult<AuthResponseDto>> GoogleCodeLogin([FromBody] GoogleCodeLoginRequestDto request, CancellationToken ct)
+        {
+            try
+            {
+                var result = await _authService.LoginWithGoogleCodeAsync(request, ct);
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -143,8 +173,21 @@ namespace PetShop.Controllers
             }
         }
 
+        /// <summary>
+        /// Trả về Client ID của Google OAuth client.
+        ///
+        /// <para>
+        /// Kèm cờ <c>gsiEnabled</c>: GSI (Google Identity Services) chỉ hoạt động từ
+        /// origin nằm trong <c>javascript_origins</c> của OAuth client. Nếu origin
+        /// hiện tại không có trong danh sách ⇒ GSI chắc chắn trả 403
+        /// <c>"The given origin is not allowed for the given client ID."</c>
+        /// ⇒ client nên dùng luôn luồng Authorization Code flow thay vì thử GSI trước.
+        /// </para>
+        /// </summary>
         [HttpGet("google-client-id")]
-        public ActionResult<object> GetGoogleClientId([FromServices] IConfiguration configuration)
+        public ActionResult<object> GetGoogleClientId(
+            [FromQuery] string? origin,
+            [FromServices] IConfiguration configuration)
         {
             var clientId = (configuration["GoogleAuth:ClientId"] ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(clientId))
@@ -152,7 +195,121 @@ namespace PetShop.Controllers
                 return NotFound(new { message = "Google Client ID chưa được cấu hình." });
             }
 
-            return Ok(new { clientId });
+            var allowedOrigins = configuration
+                .GetSection("GoogleAuth:JavascriptOrigins")
+                .Get<string[]>() ?? Array.Empty<string>();
+
+            var currentOrigin = (origin ?? string.Empty).Trim().TrimEnd('/');
+            var gsiEnabled = allowedOrigins.Any(o =>
+                string.Equals(o.TrimEnd('/'), currentOrigin, StringComparison.OrdinalIgnoreCase));
+
+            return Ok(new { clientId, gsiEnabled, allowedOrigins });
+        }
+
+        /// <summary>
+        /// Trả về URL mở màn hình đăng nhập Google (OAuth 2.0 Authorization Code flow).
+        ///
+        /// <para>
+        /// Dùng làm <b>fallback</b> khi Google Identity Services bị chặn vì origin hiện tại
+        /// chưa được đăng ký trong <c>javascript_origins</c> của OAuth client
+        /// (GSI trả 403 <c>"The given origin is not allowed for the given client ID."</c>).
+        /// Flow này chỉ phụ thuộc <c>redirect_uris</c> ⇒ hoạt động từ mọi origin/port.
+        /// </para>
+        ///
+        /// <para>
+        /// <paramref name="origin"/> là origin của trang đang gọi (vd
+        /// <c>https://localhost:7083</c>). Server trả về cả <c>redirectUri</c> và
+        /// <c>state</c> để client dùng khi đổi code lấy token.
+        /// </para>
+        /// </summary>
+        [HttpGet("google-authorize-url")]
+        public ActionResult<object> GetGoogleAuthorizeUrl(
+            [FromQuery] string? origin,
+            [FromServices] IConfiguration configuration)
+        {
+            var clientId = (configuration["GoogleAuth:ClientId"] ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                return NotFound(new { message = "Google Client ID chưa được cấu hình." });
+            }
+
+            var redirectUri = (configuration["GoogleAuth:RedirectUri"] ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(redirectUri))
+            {
+                return BadRequest(new { message = "Google RedirectUri chưa được cấu hình." });
+            }
+
+            var effectiveOrigin = string.IsNullOrWhiteSpace(origin)
+                ? redirectUri
+                : origin.Trim().TrimEnd('/');
+
+            // State chứa origin của trang gọi + nonce dùng 1 lần (chống CSRF).
+            var effectiveState = _googleOAuthStateStore.CreateState(effectiveOrigin);
+
+            var query = new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["redirect_uri"] = redirectUri,
+                ["response_type"] = "code",
+                ["scope"] = "openid email profile",
+                ["state"] = effectiveState,
+                ["prompt"] = "select_account"
+            };
+
+            var authorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth?"
+                            + string.Join("&", query.Select(kv =>
+                                $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value)}"));
+
+            return Ok(new
+            {
+                authorizeUrl,
+                redirectUri,
+                state = effectiveState,
+                origin = effectiveOrigin
+            });
+        }
+
+        /// <summary>
+        /// Callback của Google OAuth (Authorization Code flow).
+        ///
+        /// <para>
+        /// Google redirect về <c>redirect_uri</c> kèm <c>?code=...&amp;state=...</c>.
+        /// Endpoint này đổi code lấy token, đăng nhập khách hàng, sinh <b>one-time token</b>
+        /// rồi chuyển hướng người dùng về origin ban đầu (origin đã lưu trong <c>state</c>).
+        /// </para>
+        ///
+        /// <para>
+        /// Không dùng popup + <c>postMessage</c> vì Google gửi header
+        /// <c>Cross-Origin-Opener-Policy: same-origin</c> ⇒ <c>window.opener</c> bị bỏ null
+        /// ⇒ popup không thể gửi code về tab gối.
+        /// </para>
+        /// </summary>
+        [HttpGet("google-callback")]
+        public async Task<IActionResult> GoogleCallback(
+            [FromQuery] string? code,
+            [FromQuery] string? state,
+            [FromQuery] string? error,
+            CancellationToken ct)
+        {
+            // Logic dùng chung với middleware (redirect_uri đăng ký ở gốc origin).
+            var redirectUrl = await _googleOAuthCallbackService.HandleAsync(code, state, error, ct);
+            return Redirect(redirectUrl);
+        }
+
+        /// <summary>
+        /// Đổi one-time token (do <c>google-callback</c> tạo) lấy thông tin user.
+        /// Client gọi endpoint này sau khi được chuyển hướng về origin ban đầu.
+        /// </summary>
+        [HttpPost("google-exchange")]
+        public ActionResult<AuthResponseDto> GoogleExchange([FromBody] GoogleExchangeRequestDto request)
+        {
+            var user = _googleOAuthStateStore.ConsumeCompletion(request?.Token);
+            if (user is null)
+            {
+                return Unauthorized(new { message = "Phiên đăng nhập Google không hợp lệ hoặc đã hết hạn." });
+            }
+
+            return Ok(user);
         }
 
         /// <summary>
@@ -271,13 +428,23 @@ namespace PetShop.Controllers
                 ? await _authService.GetBirthDateAsync(parsedUserId, ct)
                 : null;
 
+            var address = parsedUserId > 0
+                ? await _authService.GetAddressAsync(parsedUserId, ct)
+                : null;
+
+            var phone = parsedUserId > 0
+                ? await _authService.GetPhoneAsync(parsedUserId, ct)
+                : null;
+
             return Ok(new CurrentUserDto(
                 parsedUserId,
                 user ?? string.Empty,
                 email ?? string.Empty,
                 role ?? string.Empty,
                 avatarUrl,
-                birthDate));
+                birthDate,
+                address,
+                phone));
         }
 
         /// <summary>
@@ -351,6 +518,93 @@ namespace PetShop.Controllers
                 }
 
                 return Ok(new { message = "Đã cập nhật ngày sinh." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Cập nhật địa chỉ giao hàng của khách hàng (cột <c>Customer.address_Customer</c>).
+        ///
+        /// customerId lấy từ claim của request đang xác thực, KHÔNG tin body —
+        /// nhờ vậy mỗi khách hàng chỉ sửa được địa chỉ của chính mình.
+        ///
+        /// Giá trị <c>address</c> hợp lệ: <c>null</c>/rỗng (xoá địa chỉ)
+        /// hoặc chuỗi tối đa 255 ký tự (khớp <c>NVARCHAR(255)</c> của cột DB).
+        /// </summary>
+        [HttpPut("address")]
+        [HttpPost("address")]
+        [Authorize]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult> UpdateAddress([FromBody] UpdateAddressRequestDto request, CancellationToken ct)
+        {
+            var customerId = ResolveCustomerId();
+            if (customerId <= 0)
+            {
+                return Unauthorized(new { message = "Không xác định được khách hàng đang đăng nhập." });
+            }
+
+            try
+            {
+                var updated = await _authService.UpdateAddressAsync(customerId, request?.Address, ct);
+                if (!updated)
+                {
+                    return NotFound(new { message = "Không tìm thấy tài khoản khách hàng." });
+                }
+
+                return Ok(new { message = "Đã cập nhật địa chỉ." });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Cập nhật địa chỉ giao hàng kèm số điện thoại của khách hàng.
+        ///
+        /// <para>
+        /// <b>VÌ SAO CẦN ENDPOINT RIÊNG:</b> cột <c>Customer.address_Customer</c> chỉ
+        /// chứa chuỗi địa chỉ, KHÔNG chứa số điện thoại. Nếu chỉ lưu chuỗi địa chỉ
+        /// thì khi đọc lại để điền sẵn form thanh toán, trường "Số điện thoại" sẽ
+        /// trống ⇒ form không hợp lệ ⇒ khách phải nhập lại địa chỉ ở mỗi đơn hàng.
+        /// </para>
+        ///
+        /// customerId lấy từ claim của request đang xác thực, KHÔNG tin body.
+        /// </summary>
+        [HttpPut("address-with-phone")]
+        [HttpPost("address-with-phone")]
+        [Authorize]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult> UpdateAddressWithPhone(
+            [FromBody] UpdateAddressWithPhoneRequestDto request,
+            CancellationToken ct)
+        {
+            var customerId = ResolveCustomerId();
+            if (customerId <= 0)
+            {
+                return Unauthorized(new { message = "Không xác định được khách hàng đang đăng nhập." });
+            }
+
+            try
+            {
+                var updated = await _authService.UpdateAddressWithPhoneAsync(
+                    customerId,
+                    request?.Address,
+                    request?.Phone,
+                    ct);
+                if (!updated)
+                {
+                    return NotFound(new { message = "Không tìm thấy tài khoản khách hàng." });
+                }
+
+                return Ok(new { message = "Đã cập nhật địa chỉ." });
             }
             catch (ArgumentException ex)
             {

@@ -35,6 +35,33 @@ namespace PetShop.Interfaces
         Task<DateTime?> GetCustomerBirthDateAsync(int customerId, CancellationToken ct = default);
 
         /// <summary>
+        /// Cập nhật riêng cột <c>address_Customer</c> của một khách hàng.
+        /// Trả về <c>false</c> nếu không tồn tại khách hàng tương ứng.
+        /// </summary>
+        Task<bool> UpdateCustomerAddressAsync(int customerId, string? address, CancellationToken ct = default);
+
+        /// <summary>
+        /// Đọc riêng cột <c>address_Customer</c> của một khách hàng (null nếu chưa có địa chỉ).
+        /// </summary>
+        Task<string?> GetCustomerAddressAsync(int customerId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Cập nhật riêng cột <c>phone</c> của một khách hàng.
+        /// Trả về <c>false</c> nếu không tồn tại khách hàng tương ứng.
+        ///
+        /// <para>
+        /// Dùng kèm với <see cref="UpdateCustomerAddressAsync"/>: cột địa chỉ không
+        /// chứa số điện thoại nên cần lưu riêng để điền lại form thanh toán.
+        /// </para>
+        /// </summary>
+        Task<bool> UpdateCustomerPhoneAsync(int customerId, string? phone, CancellationToken ct = default);
+
+        /// <summary>
+        /// Đọc riêng cột <c>phone</c> của một khách hàng (null nếu chưa đặt).
+        /// </summary>
+        Task<string?> GetCustomerPhoneAsync(int customerId, CancellationToken ct = default);
+
+        /// <summary>
         /// Nâng cấp mật khẩu của mọi tài khoản có email tương ứng sang hash BCrypt mới.
         /// Dùng cho migrate-on-login: tài khoản seed cũ đang lưu mật khẩu dạng chữ đơn giản
         /// sẽ được hash lại ngay lần đăng nhập đầu tiên.

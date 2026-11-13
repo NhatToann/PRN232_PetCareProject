@@ -1,5 +1,6 @@
 @inject PetShop.Services.UserSessionService UserSession
 @inject PetShop.Services.CartStateService CartState
+@inject PetShop.Services.ShopContactService ShopContact
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject ILogger<TopBar> Logger
@@ -10,11 +11,11 @@
         <div class="top-bar-left">
             <span class="contact-item">
                 <i class="fas fa-phone-alt icon" aria-hidden="true"></i>
-                <span>0123 456 789</span>
+                <span>@Hotline</span>
             </span>
             <span class="contact-item">
                 <i class="fas fa-envelope icon" aria-hidden="true"></i>
-                <span>hello@petstore.com</span>
+                <span>@Email</span>
             </span>
         </div>
 
@@ -78,6 +79,13 @@
 @code {
     private bool openMenu;
 
+    /// <summary>
+    /// Thông tin liên hệ THẬT (đọc từ bảng <c>SystemSettings</c>) — không hardcode.
+    /// </summary>
+    private string Hotline { get; set; } = string.Empty;
+
+    private string Email { get; set; } = string.Empty;
+
     private string Role => (UserSession.CurrentUser?.Role ?? string.Empty).ToLowerInvariant();
 
     /// <summary>
@@ -117,6 +125,21 @@
         }
     }
 
+    protected override async Task OnInitializedAsync()
+    {
+        // Nạp thông tin liên hệ thật từ SystemSettings (không hardcode).
+        try
+        {
+            var contact = await ShopContact.GetAsync();
+            Hotline = contact.Hotline;
+            Email = contact.Email;
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[TopBar] Không nạp được thông tin liên hệ: {ex.GetType().Name}");
+        }
+    }
+
     private void ToggleMenu() => openMenu = !openMenu;
 
     private void CloseMenu() => openMenu = false;
@@ -127,7 +150,12 @@
         await JS.InvokeVoidAsync("spaCart.clear");
         try { await CartState.ClearAsync(); } catch { /* localStorage write may fail in disconnected state */ }
         openMenu = false;
-        Navigation.NavigateTo("/login");
+
+        // replace: true ⇒ không đẩy "/login" vào history.
+        // Nếu không, bấm "Back" sau khi đăng xuất sẽ quay lại trang đã đăng nhập
+        // và UserSessionService có thể khôi phục phiên cũ ⇒ cảm giác
+        // "tự ý đăng nhập bằng tài khoản khác".
+        Navigation.NavigateTo("/login", replace: true);
     }
 
     private void HandleSessionChanged() => InvokeAsync(StateHasChanged);

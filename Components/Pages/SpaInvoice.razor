@@ -9,10 +9,11 @@
 <PageTitle>Hóa đơn spa – Pet Toy Shop</PageTitle>
 
 <div class="home-page spa-invoice-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.SpaInvoice" />
+<TopBar />
     <PageContextBar Title="Hóa đơn" />
 
-    <CustomerOnlyGuard>
+    <RouteGuard AllowedRoles="customer">
     <main class="spa-invoice-page__main">
 
         @* ===== LOADING ===== *@
@@ -63,8 +64,18 @@
             var apptTime     = invoice.AppointmentStart.ToString("HH:mm");
             var subtotal     = invoice.Items.Sum(i => i.UnitPrice * i.Quantity);
             var displayTotal = invoice.TotalPrice > 0 ? invoice.TotalPrice : subtotal;
-            var vat          = (long)Math.Round(displayTotal * 0.1m);
-            var grandTotal   = displayTotal + vat;
+
+            // VAT ĐÃ BAO GỒM trong giá dịch vụ.
+            //
+            // Số tiền khách trả qua PayOS = tổng giá dịch vụ (không cộng VAT ở
+            // phía server — xem PayOSController.CreateSpaPayment). Trước đây trang
+            // này CỘNG thêm 10% ở client ⇒ "Tổng cộng" hiển thị KHÔNG KHỚP với
+            // số tiền thực thanh toán ⇒ người dùng tưởng bị tính sai.
+            //
+            // Nay: VAT hiển thị là phần VAT đã nằm trong giá (10/110 của tổng),
+            // và TỔNG CỘNG = đúng số tiền đã thanh toán.
+            var vat          = (long)Math.Round(displayTotal * 0.1m / 1.1m);
+            var grandTotal   = displayTotal;
 
             <article class="spa-invoice-card @(payosCancel ? "spa-invoice-card--cancel" : "")">
 
@@ -193,7 +204,7 @@
                         <span>@PetShop.Components.Shared.Format.Vnd(displayTotal)</span>
                     </div>
                     <div class="spa-invoice-card__total-row spa-invoice-card__total-row--muted">
-                        <span>VAT (10%)</span>
+                        <span>VAT (10%, đã bao gồm)</span>
                         <span>@PetShop.Components.Shared.Format.Vnd(vat)</span>
                     </div>
                     <div class="spa-invoice-card__grand-total">
@@ -234,7 +245,7 @@
     </main>
 
     <Footer />
-    </CustomerOnlyGuard>
+    </RouteGuard>
 </div>
 
 @code {
@@ -247,17 +258,37 @@
     private string? error;
     private bool _statusSynced;
 
+    /// <summary>
+    /// Nhãn trạng thái hiển thị trên hóa đơn.
+    ///
+    /// <para>
+    /// <b>KHÔNG</b> dùng query param <c>?payos=success</c> để kết luận "đã thanh toán":
+    /// tham số này do client kiểm soát, ai cũng gõ được vào URL. Chỉ khi
+    /// <c>payos=cancel</c> mới dùng (vì hủy không làm thay đổi tiền).
+    /// Trạng thái "đã thanh toán" phải đến từ DB sau khi server đã hỏi PayOS
+    /// và xác minh (xem <c>ReloadAsync</c> → <c>SyncPaymentAsync</c>).
+    /// </para>
+    /// </summary>
     private string GetStatusLabel(string dbStatus, bool payosSuccess, bool payosCancel)
     {
-        if (payosSuccess) return SpaBookingStatus.Paid;
-        if (payosCancel)  return SpaBookingStatus.Cancelled;
-        return dbStatus ?? "Chưa thanh toán";
+        if (payosCancel) return SpaBookingStatus.Cancelled;
+
+        var normalized = (dbStatus ?? string.Empty).Trim();
+        if (normalized.Equals(SpaBookingStatus.Paid, StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("thanh toán", StringComparison.OrdinalIgnoreCase))
+        {
+            return SpaBookingStatus.Paid;
+        }
+
+        // Nếu PayOS báo thành công nhưng webhook chưa tới, server đã hỏi trực tiếp
+        // rồi ⇒ DB sẽ có "Đã thanh toán". Nếu vẫn chưa, hiển thị trạng thái DB.
+        return string.IsNullOrWhiteSpace(normalized) ? "Chưa thanh toán" : normalized;
     }
 
     private string GetStatusClass(bool payosSuccess, bool payosCancel)
     {
-        if (payosSuccess) return "is-paid";
         if (payosCancel)  return "is-cancel";
+        if (payosSuccess) return "is-paid";
         return "";
     }
 
@@ -278,27 +309,64 @@
         error = null;
         StateHasChanged();
 
-        if (BookingId is null || BookingId <= 0 || CurrentCustomerId <= 0)
+        if (CurrentCustomerId <= 0)
         {
-            error = "Thiếu mã booking.";
+            error = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để xem hóa đơn.";
             isLoading = false;
             StateHasChanged();
             return;
         }
 
-        // Sync booking status from PayOS return (mirrors React's updateBookingStatusFromPayOS)
-        if (!_statusSynced && !string.IsNullOrWhiteSpace(Payos))
+        // THIẾU MÃ BOOKING: khách đã thanh toán PayOS nhưng URL redirect bị mất
+        // query string ⇒ không có bookingId. Khôi phục theo thứ tự:
+        //   1. localStorage (dự phòng — luôn đúng vì do chính app ghi)
+        //   2. orderCode PayOS trên URL (dự phòng thứ hai)
+        //   3. booking spa đang thanh toán gần nhất trên server (dự phòng thứ ba)
+        var restoredFromStorage = false;
+        if (BookingId is null or <= 0)
+        {
+            var restored = await TryRestoreBookingIdFromLocalStorageAsync();
+            restoredFromStorage = restored is not null;
+            restored ??= await TryRestoreBookingIdFromOrderCodeAsync();
+            restored ??= await TryRestoreBookingIdFromLatestPayOSAsync();
+            if (restored is null)
+            {
+                error = "Thiếu mã booking. Vui lòng mở lại từ lịch sử đặt lịch spa.";
+                isLoading = false;
+                StateHasChanged();
+                return;
+            }
+
+            // Gán lại để phần render hiển thị "Mã booking" đúng giá trị.
+            BookingId = restored;
+        }
+
+        var effectiveBookingId = BookingId!.Value;
+
+        // Đồng bộ trạng thái thanh toán từ PayOS (SERVER xác minh).
+        //
+        // Trước đây trang này tự PATCH status theo query param `?payos=success`
+        // — nhưng endpoint đó yêu cầu policy StaffOrAdmin ⇒ khách hàng luôn 403
+        // ⇒ luồng đặt spa không hoạt động. Nay server tự tra payment trong DB
+        // và hỏi PayOS trực tiếp ⇒ không thể giả mạo trạng thái thanh toán.
+        //
+        // Điều kiện gọi: có `?payos=...` trên URL HOẶC vừa khôi phục booking từ
+        // localStorage (trường hợp URL bị rút gọn mất toàn bộ query string).
+        // Nếu không gọi, webhook PayOS (gửi về localhost ⇒ không tới được) sẽ
+        // khiến booking mãi ở trạng thái "Chờ thanh toán PayOS" dù khách đã trả.
+        if (!_statusSynced && (!string.IsNullOrWhiteSpace(Payos) || restoredFromStorage))
         {
             _statusSynced = true;
-            var nextStatus = string.Equals(Payos, "success", StringComparison.OrdinalIgnoreCase)
-                ? SpaBookingStatus.Paid
-                : SpaBookingStatus.Cancelled;
 
-            await SpaClient.UpdateStatusAsync(BookingId.Value, CurrentCustomerId, nextStatus);
+            var syncResult = await SpaClient.SyncPaymentAsync(effectiveBookingId, CurrentCustomerId);
+            if (!syncResult.IsSuccess)
+            {
+                Logger.LineWarning($"[SpaInvoice] SyncPaymentAsync thất bại: {syncResult.Error}");
+            }
         }
 
         // Fetch invoice
-        var res = await SpaClient.GetInvoiceAsync(BookingId.Value, CurrentCustomerId);
+        var res = await SpaClient.GetInvoiceAsync(effectiveBookingId, CurrentCustomerId);
         if (!res.IsSuccess || res.Data is null)
         {
             error = res.StatusCode == 404
@@ -308,10 +376,116 @@
         else
         {
             invoice = res.Data;
+
+            // Đã hiển thị xong hóa đơn ⇒ xoá bản ghi dự phòng trong localStorage
+            // để lần sau không khôi phục nhầm booking cũ.
+            try
+            {
+                await JS.InvokeVoidAsync("localStorage.removeItem", SpaCart.PendingSpaBookingKey);
+            }
+            catch (Exception ex)
+            {
+                Logger.LineWarning($"[SpaInvoice] Không xoá được localStorage spa: {ex.Message}");
+            }
         }
 
         isLoading = false;
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// Khôi phục mã booking từ <c>localStorage</c>.
+    ///
+    /// <para>
+    /// Trước khi rời trang để sang PayOS, <c>SpaCart</c> lưu booking đang thanh
+    /// toán vào <c>localStorage</c> (key <c>pendingSpaBooking</c>). Nhờ vậy, kể cả
+    /// khi PayOS redirect về mà query string bị rút gọn, trang hóa đơn vẫn biết
+    /// chính xác booking nào cần hiển thị — không phụ thuộc URL.
+    /// </para>
+    /// </summary>
+    private async Task<int?> TryRestoreBookingIdFromLocalStorageAsync()
+    {
+        try
+        {
+            var raw = await JS.InvokeAsync<string?>("localStorage.getItem", SpaCart.PendingSpaBookingKey);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            var pending = System.Text.Json.JsonSerializer.Deserialize<SpaCart.PendingSpaBooking>(
+                raw, SpaCart.PendingSpaBookingJsonOptions);
+            if (pending is null || pending.BookingId <= 0)
+            {
+                return null;
+            }
+
+            Logger.Line($"[SpaInvoice] Đã khôi phục booking #{pending.BookingId} từ localStorage.");
+            return pending.BookingId;
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[SpaInvoice] Không đọc được localStorage spa: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Khôi phục mã booking từ mã đơn PayOS (<c>orderCode</c>) khi URL redirect
+    /// về trang hóa đơn không mang theo <c>bookingId</c>.
+    /// </summary>
+    private async Task<int?> TryRestoreBookingIdFromOrderCodeAsync()
+    {
+        if (OrderCode is null or <= 0)
+        {
+            return null;
+        }
+
+        var res = await SpaClient.GetByOrderCodeAsync(OrderCode.Value, CurrentCustomerId);
+        if (!res.IsSuccess || res.Data is null)
+        {
+            Logger.LineWarning($"[SpaInvoice] Không khôi phục được booking từ orderCode={OrderCode}: {res.Error}");
+            return null;
+        }
+
+        Logger.Line($"[SpaInvoice] Đã khôi phục booking #{res.Data.BookingId} từ orderCode={OrderCode}");
+        return res.Data.BookingId;
+    }
+
+    /// <summary>
+    /// Khôi phục mã booking từ server — booking spa đang thanh toán PayOS gần nhất
+    /// của chính khách đang đăng nhập.
+    ///
+    /// <para>
+    /// Lớp dự phòng CUỐI CÙNG: dùng khi URL không còn query string VÀ localStorage
+    /// đã bị xoá (vd người dùng mở tab mới, hoặc trình duyệt chặn storage).
+    /// Server tự tra trong bảng <c>Payments</c> và chỉ trả booking của chính khách
+    /// (kiểm tra claim) ⇒ không lộ thông tin người khác.
+    /// </para>
+    /// </summary>
+    private async Task<int?> TryRestoreBookingIdFromLatestPayOSAsync()
+    {
+        if (CurrentCustomerId <= 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var res = await SpaClient.GetLatestPayOSBookingAsync(CurrentCustomerId);
+            if (!res.IsSuccess || res.Data is null)
+            {
+                return null;
+            }
+
+            Logger.Line($"[SpaInvoice] Đã khôi phục booking #{res.Data.BookingId} từ payment gần nhất.");
+            return res.Data.BookingId;
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[SpaInvoice] Không khôi phục được booking từ server: {ex.Message}");
+            return null;
+        }
     }
 
     protected override void OnInitialized()

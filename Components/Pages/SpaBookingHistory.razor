@@ -7,10 +7,11 @@
 <PageTitle>Lịch sử đặt spa – Pet Toy Shop</PageTitle>
 
 <div class="home-page spa-bh-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Orders" />
+<TopBar />
     <PageContextBar Title="Lịch sử đặt dịch vụ" />
 
-    <CustomerOnlyGuard>
+    <RouteGuard AllowedRoles="customer">
     <main class="spa-bh-main">
         <div class="container spa-bh-container">
             @if (isLoading)
@@ -90,7 +91,7 @@
                                     {
                                         <a class="spa-bh-row spa-bh-row--clickable" href="@($"/spa-booking-history/{booking.BookingId}")">
                                             <div class="spa-bh-row__thumb">
-                                                <img src="@GetSpaServiceThumb(item.ServiceName)" alt="" />
+                                                <img src="@GetSpaServiceThumb(item.ServiceName)" alt="" loading="lazy" decoding="async" />
                                             </div>
                                             <div class="spa-bh-row__info">
                                                 <div class="spa-bh-row__title">@(string.IsNullOrWhiteSpace(item.ServiceName) ? "Dịch vụ spa" : item.ServiceName)</div>
@@ -150,7 +151,7 @@
     </main>
 
     <Footer />
-    </CustomerOnlyGuard>
+    </RouteGuard>
 </div>
 
 @code {
@@ -226,7 +227,14 @@
 
         busyBookingIds.Add(bookingId);
         error = null;
-        var res = await SpaClient.UpdateStatusAsync(bookingId, CurrentCustomerId, status);
+        StateHasChanged();
+
+        // Huỷ lịch dùng endpoint RIÊNG (/cancel) cho khách hàng.
+        // Endpoint /status yêu cầu policy StaffOrAdmin ⇒ khách luôn nhận 403 Forbidden.
+        var res = status == PetShop.Models.SpaBookingStatus.Cancelled
+            ? await SpaClient.CancelBookingAsync(bookingId, CurrentCustomerId)
+            : await SpaClient.UpdateStatusAsync(bookingId, CurrentCustomerId, status);
+
         busyBookingIds.Remove(bookingId);
 
         if (!res.IsSuccess)

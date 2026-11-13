@@ -282,7 +282,7 @@ namespace PetShop_PRN222.Components.Pages
     }
 
     private static string Vnd(decimal amount) =>
-        string.Format(new CultureInfo("vi-VN"), "{0:N0} ₫", amount);
+        PetShop.Components.Shared.Format.Vnd(amount);
 
     private static string FormatDateTime(DateTime value) =>
         value.ToString("g", new CultureInfo("vi-VN"));

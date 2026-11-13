@@ -8,8 +8,9 @@
 <PageTitle>Kết quả tìm kiếm – Pet Toy Shop</PageTitle>
 
 <div class="home-page">
-    <TopBar />
-    <Header OnOpenCart="OpenCart" />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Products" />
+<TopBar />
+    <Header />
     <Navigation />
 
     <main class="products-search-page">
@@ -46,8 +47,8 @@
 
             <div class="products-layout">
                 <ProductsSidebar Title="Danh mục đồ chơi"
-                                 Categories="categories"
-                                 SelectedCategoryId="selectedCategoryId"
+                                 Categories="@categories"
+                                 SelectedCategoryId="@selectedCategoryId"
                                  OnChange="HandleCategoryChange" />
 
                 <section class="products-content">
@@ -80,13 +81,11 @@
     </main>
 
     <Footer />
-    <CartDrawer Open="cartDrawerOpen" OnClose="CloseCart" />
 </div>
 
 @code {
     private IReadOnlyList<PetShop.Models.ProductDto> products = Array.Empty<PetShop.Models.ProductDto>();
     private IReadOnlyList<ProductsSidebar.CategoryOption> categories = Array.Empty<ProductsSidebar.CategoryOption>();
-    private bool cartDrawerOpen;
     private bool isLoading = true;
     private string? error;
 
@@ -162,18 +161,6 @@
             }
         }
         return map.Select(kv => new ProductsSidebar.CategoryOption(kv.Key, kv.Value)).ToArray();
-    }
-
-    private Task OpenCart()
-    {
-        cartDrawerOpen = true;
-        return Task.CompletedTask;
-    }
-
-    private Task CloseCart()
-    {
-        cartDrawerOpen = false;
-        return Task.CompletedTask;
     }
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);

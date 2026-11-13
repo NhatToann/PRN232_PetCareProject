@@ -9,7 +9,8 @@
 <PageTitle>Dịch vụ chăm sóc – Pet Toy Shop</PageTitle>
 
 <div class="home-page service-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Spa" />
+<TopBar />
     <Header />
     <Navigation />
 
@@ -86,7 +87,7 @@
                                                 style="background: #4a2477;"
                                                 @onclick:stopPropagation="true"
                                                 @onclick="() => AddToCart(card.ServiceId)">
-                                            @(card.Price > 0 ? card.Price.ToString("N0", new System.Globalization.CultureInfo("vi-VN")) + "₫" : "Liên hệ")
+                                            @(card.Price > 0 ? PetShop.Components.Shared.Format.Vnd(card.Price) : "Liên hệ")
                                         </button>
                                     </div>
                                 </div>

@@ -29,7 +29,30 @@ namespace PetShop.Interfaces
 
         Task<IReadOnlyList<string>> GetBoardingRoomSummariesAsync(CancellationToken ct = default);
 
-        Task<int> CountProductsAsync(string? productType, string? pet, CancellationToken ct = default);
+        /// <summary>
+        /// Đếm sản phẩm theo điều kiện (loại sản phẩm / loài thú / khoảng giá).
+        /// Sản phẩm đã xoá mềm không được tính.
+        /// </summary>
+        Task<int> CountProductsAsync(
+            string? productType,
+            string? pet,
+            decimal? minPrice = null,
+            decimal? maxPrice = null,
+            bool maxPriceInclusive = true,
+            CancellationToken ct = default);
+
+        /// <summary>
+        /// Tìm sản phẩm theo khoảng giá (kèm lọc loại sản phẩm / loài thú).
+        /// Sản phẩm đã xoá mềm không được trả về.
+        /// </summary>
+        Task<IReadOnlyList<ChatbotProductItem>> FindProductsByPriceRangeAsync(
+            decimal? minPrice,
+            decimal? maxPrice,
+            bool maxPriceInclusive = true,
+            string? productType = null,
+            string? pet = null,
+            int take = 20,
+            CancellationToken ct = default);
 
         Task<IReadOnlyList<ChatbotProductItem>> FindProductsByKeywordsAsync(
             IReadOnlyList<string> keywords,
@@ -52,5 +75,12 @@ namespace PetShop.Interfaces
         Task<IReadOnlyList<ChatbotServiceItem>> GetActiveServicesAsync(int take, CancellationToken ct = default);
 
         Task<IReadOnlyList<ChatbotOrderItem>> GetCustomerOrdersAsync(int customerId, int take, CancellationToken ct = default);
+
+        /// <summary>
+        /// Đọc cấu hình liên hệ của shop từ bảng <c>SystemSettings</c>
+        /// (khóa: <c>ShopAddress</c>, <c>ShopHotline</c>, <c>ShopEmail</c>,
+        /// <c>ShopWorkingHours</c>).
+        /// </summary>
+        Task<IReadOnlyDictionary<string, string>> GetShopContactSettingsAsync(CancellationToken ct = default);
     }
 }

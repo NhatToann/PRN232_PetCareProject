@@ -12,10 +12,11 @@
 <PageTitle>@(OrderId is null ? "Lịch sử đơn hàng" : "Chi tiết đơn hàng")</PageTitle>
 
 <div class="home-page @(OrderId is null ? "spa-bh-page order-shopee-page" : "order-detail-page")">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Orders" />
+<TopBar />
     <PageContextBar Title="@(OrderId is null ? "Lịch sử đơn hàng" : "Chi tiết đơn hàng")" />
 
-    <CustomerOnlyGuard>
+    <RouteGuard AllowedRoles="customer">
         @if (OrderId is null)
         {
             <main class="spa-bh-main">
@@ -106,9 +107,9 @@
                                         <div class="order-shopee-card__body">
                                             <div class="order-shopee-row">
                                                 <div class="order-shopee-row__thumb">
-                                                    @if (!string.IsNullOrWhiteSpace(order.PrimaryProductImageUrl))
+                                                    @if (!string.IsNullOrWhiteSpace(PetShop.Components.Shared.ImageUrl.SafeOrNull(order.PrimaryProductImageUrl)))
                                                     {
-                                                        <img src="@order.PrimaryProductImageUrl" alt="" />
+                                                        <img src="@PetShop.Components.Shared.ImageUrl.Safe(order.PrimaryProductImageUrl)" alt="" loading="lazy" decoding="async" />
                                                     }
                                                     else
                                                     {
@@ -182,9 +183,9 @@
                                 <div class="order-detail-spa-card__grid">
                                     <section class="spa-history-card__media">
                                         <div class="spa-history-card__image" style="padding:0;overflow:hidden;background:#f1f5f9">
-                                            @if (!string.IsNullOrWhiteSpace(firstItem?.ImageUrl))
+                                            @if (!string.IsNullOrWhiteSpace(PetShop.Components.Shared.ImageUrl.SafeOrNull(firstItem?.ImageUrl)))
                                             {
-                                                <img src="@firstItem.ImageUrl" alt="@(firstItem.ProductName ?? "")" style="width:100%;height:100%;object-fit:cover" />
+                                                <img src="@PetShop.Components.Shared.ImageUrl.Safe(firstItem?.ImageUrl)" alt="@(firstItem?.ProductName ?? "")" style="width:100%;height:100%;object-fit:cover" loading="lazy" decoding="async" />
                                             }
                                             else
                                             {
@@ -250,10 +251,10 @@
                                         {
                                             <div class="order-hist-line">
                                                 <div class="order-hist-line__main">
-                                                    @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                                    @if (!string.IsNullOrWhiteSpace(PetShop.Components.Shared.ImageUrl.SafeOrNull(item.ImageUrl)))
                                                     {
                                                         <div class="order-hist-line__thumb">
-                                                            <img src="@item.ImageUrl" alt="@item.ProductName" />
+                                                            <img src="@PetShop.Components.Shared.ImageUrl.Safe(item.ImageUrl)" alt="@item.ProductName" loading="lazy" decoding="async" />
                                                         </div>
                                                     }
                                                     <div>
@@ -351,7 +352,7 @@
         }
 
         <Footer />
-    </CustomerOnlyGuard>
+    </RouteGuard>
 </div>
 
 @code {

@@ -155,6 +155,15 @@ window.daNangData = (function () {
   // isKnownDistrict(district) — tương đương DA_NANG_DISTRICTS.includes(district)
   const isKnownDistrict = (district) => DA_NANG_DISTRICTS.includes(district);
 
+  // getDistricts() — danh sách 8 quận/huyện.
+  //
+  // BẢN SỬA: hàm này ĐÃ ĐƯỢC GỌI từ C# (AddressModal.cs gọi
+  // JS.InvokeAsync<string[]>("daNangData.getDistricts")) nhưng CHƯA BAO GIỜ được
+  // export ⇒ JS interop ném lỗi ⇒ danh sách gợi ý quận/huyện luôn RỖNG ⇒
+  // người dùng không chọn được quận ⇒ form địa chỉ không bao giờ hợp lệ ⇒
+  // nút "Lưu địa chỉ" không hoạt động.
+  const getDistricts = () => DA_NANG_DISTRICTS.slice();
+
   return {
     DA_NANG_WARDS_BY_DISTRICT,
     DA_NANG_DISTRICTS,
@@ -170,5 +179,6 @@ window.daNangData = (function () {
     wardSuggestionsFor,
     districtSuggestionsFor,
     isKnownDistrict,
+    getDistricts,
   };
 })();

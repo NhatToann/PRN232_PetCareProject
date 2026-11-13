@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PetShop.Models;
 
 namespace PetShop.Services
 {
@@ -77,12 +78,17 @@ namespace PetShop.Services
                 ? roleValues.FirstOrDefault()
                 : null;
 
-            if (string.IsNullOrWhiteSpace(role))
-            {
-                role = "customer";
-            }
-
-            var effectiveRole = role!;
+            // FAIL-CLOSED: không có header role ⇒ coi như khách hàng (customer),
+            // KHÔNG được coi là staff/admin.
+            //
+            // Vì sao quan trọng: nếu default là "customer" thì request nội bộ không
+            // gắn header sẽ đi vào nhánh khách ⇒ có thể đọc/ghi dữ liệu của người
+            // khác qua customerId trong query string. Còn nếu default là "staff" thì
+            // bất kỳ ai cũng vào được workspace nhân viên.
+            //
+            // Role cũng được chuẩn hoá qua AppRoles.Normalize để "user" và
+            // "customer" là cùng một nhóm (tránh so sánh role thiếu chính xác).
+            var effectiveRole = AppRoles.Normalize(role);
 
             var claims = new List<Claim>
             {

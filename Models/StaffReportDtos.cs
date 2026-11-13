@@ -26,7 +26,24 @@ namespace PetShop.Models
 
         public int TopSpaCount { get; set; }
 
+        /// <summary>
+        /// Phân bổ số lượt theo TỪNG DỊCH VỤ SPA thật (tên + số lượt), sắp xếp giảm dần.
+        /// Dùng cho thẻ "Tỷ lệ dịch vụ Spa" ở trang /revenue.
+        /// </summary>
+        public List<StaffSpaServiceShareDto> SpaServiceShares { get; set; } = new();
+
         public List<StaffTopProductDto> TopProducts { get; set; } = new();
+    }
+
+    /// <summary>Tỷ trọng của một dịch vụ spa trong tổng số lượt spa đã hoàn thành.</summary>
+    public class StaffSpaServiceShareDto
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public int Count { get; set; }
+
+        /// <summary>Tỷ lệ phần trăm (0-100) so với tổng số lượt spa.</summary>
+        public decimal Percent { get; set; }
     }
 
     /// <summary>Sản phẩm bán chạy nhất (dùng cho thẻ "Top sản phẩm").</summary>

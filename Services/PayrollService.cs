@@ -59,6 +59,7 @@ namespace PetShop.Services
             decimal totalSalary = Math.Round(monthlyBase * (actualShifts / (decimal)standardShifts), 2);
 
             var existing = await _db.PayrollRecords
+                .AsTracking()
                 .FirstOrDefaultAsync(p =>
                     p.StaffId == staffId &&
                     p.PeriodStart == periodStart &&
@@ -233,6 +234,7 @@ namespace PetShop.Services
                 return new PayrollConfigResultDto("error", "So ca chuan phai tu 10 den 30 ca/thang.", null);
 
             var config = await _db.StaffSalaries
+                .AsTracking()
                 .FirstOrDefaultAsync(s => s.StaffId == dto.StaffId, ct);
 
             if (config is null)

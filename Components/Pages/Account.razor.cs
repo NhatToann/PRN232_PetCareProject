@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
+using PetShop.Services;
 
 namespace PetShop_PRN222.Components.Pages
 {
@@ -73,7 +74,13 @@ namespace PetShop_PRN222.Components.Pages
             fullName = FirstNonEmpty(draft?.FullName, user.Name);
             email = FirstNonEmpty(draft?.Email, user.Email);
             phone = draft?.Phone ?? "";
-            address = draft?.Address ?? "";
+
+            // Thứ tự ưu tiên địa chỉ: localStorage draft → Customer.address_Customer trong DB → rỗng.
+            // Đọc DB giúp địa chỉ sống sót khi user xoá localStorage hoặc đăng nhập trên máy/tab khác.
+            var draftAddress = draft?.Address ?? "";
+            address = string.IsNullOrWhiteSpace(draftAddress)
+                ? await ReadAddressFromServerAsync()
+                : draftAddress;
 
             // Thứ tự ưu tiên ngày sinh: localStorage draft → Customer.birth_date trong DB → rỗng.
             // Đọc DB giúp ngày sinh sống sót khi user xoá localStorage hoặc đăng nhập trên máy/tab khác.
@@ -91,6 +98,28 @@ namespace PetShop_PRN222.Components.Pages
                 : await ReadAvatarFromServerAsync();
 
             loaded = true;
+        }
+
+        /// <summary>
+        /// Đọc địa chỉ giao hàng từ server (cột <c>Customer.address_Customer</c>).
+        /// Lỗi mạng/API không được làm hỏng trang — trả về chuỗi rỗng để UI fallback.
+        /// </summary>
+        private async Task<string> ReadAddressFromServerAsync()
+        {
+            try
+            {
+                var result = await AuthClient.GetAddressAsync();
+                if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Data))
+                {
+                    return result.Data!;
+                }
+            }
+            catch (Exception)
+            {
+                // Bỏ qua — địa chỉ trên DB là dữ liệu phụ, không chặn hiển thị trang.
+            }
+
+            return "";
         }
 
         /// <summary>
@@ -147,7 +176,8 @@ namespace PetShop_PRN222.Components.Pages
             var user = UserSession.CurrentUser;
             if (user is null)
             {
-                Navigation.NavigateTo("/login", forceLoad: true);
+                // Điều hướng NỘI BỘ ⇒ replace (không forceLoad) để giữ circuit Blazor.
+                Navigation.NavigateTo("/login", replace: true);
                 return;
             }
 
@@ -178,6 +208,10 @@ namespace PetShop_PRN222.Components.Pages
 
                 // Đồng bộ ngày sinh xuống DB (cột Customer.birth_date) — giống cách làm với avatar.
                 await SyncBirthDateToServerAsync(trimmedBirthDate);
+
+                // Đồng bộ địa chỉ giao hàng xuống DB (cột Customer.address_Customer) — địa chỉ
+                // nhập ở trang hồ sơ cũng là địa chỉ dùng cho các đơn hàng sau.
+                await SyncAddressToServerAsync(address.Trim());
 
                 success = "Đã lưu thông tin cá nhân.";
             }
@@ -260,6 +294,33 @@ namespace PetShop_PRN222.Components.Pages
             catch (Exception)
             {
                 // Bỏ qua — localStorage vẫn giữ ngày sinh, người dùng vẫn dùng được.
+            }
+        }
+
+        /// <summary>
+        /// Đẩy địa chỉ giao hàng xuống server (cột <c>Customer.address_Customer</c>)
+        /// kèm số điện thoại (cột <c>Customer.phone</c>).
+        /// Chuỗi rỗng ⇒ gửi null để xoá địa chỉ trên DB.
+        /// Bọc try/catch — lỗi API không được làm hỏng UI hoặc chặn lưu profile.
+        /// </summary>
+        private async Task SyncAddressToServerAsync(string? value)
+        {
+            try
+            {
+                var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                var result = await AuthClient.UpdateAddressWithPhoneAsync(normalized, phone.Trim());
+
+                if (result is null || !result.IsSuccess)
+                {
+                    Logger.LineWarning(
+                        $"[Account] Đồng bộ địa chỉ xuống server thất bại: " +
+                        $"status={result?.StatusCode?.ToString() ?? "null"}, " +
+                        $"error={result?.Error ?? "null"}");
+                }
+            }
+            catch (Exception)
+            {
+                // Bỏ qua — localStorage vẫn giữ địa chỉ, người dùng vẫn dùng được.
             }
         }
 

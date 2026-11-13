@@ -3,6 +3,7 @@
 @inject PetShop.Services.CartStateService CartState
 @inject PetShop.Services.UserSessionService UserSession
 @inject PetShop.Interfaces.ICheckoutClient CheckoutClient
+@inject PetShop.Interfaces.IAuthClient AuthClient
 @inject PetShop.Interfaces.IPaymentClient PaymentClient
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -12,10 +13,11 @@
 <PageTitle>Thanh toán</PageTitle>
 
 <div class="checkout-page-wrapper">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Checkout" />
+<TopBar />
     <PageContextBar Title="Thanh toán" />
 
-    <AuthGuard>
+    <RouteGuard>
     <div class="checkout-page">
         <div class="checkout-container">
             @if (!loaded)
@@ -83,9 +85,9 @@
                             <div class="checkout-table-row">
                                 <div class="col-product">
                                     <div class="checkout-product-image">
-                                        @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                        @if (!string.IsNullOrWhiteSpace(PetShop.Components.Shared.ImageUrl.SafeOrNull(item.ImageUrl)))
                                         {
-                                            <img src="@item.ImageUrl" alt="@item.Name" />
+                                            <img src="@PetShop.Components.Shared.ImageUrl.Safe(item.ImageUrl)" alt="@item.Name" loading="lazy" decoding="async" />
                                         }
                                         else
                                         {
@@ -153,24 +155,24 @@
             }
         </div>
     </div>
-    </AuthGuard>
+    </RouteGuard>
 
     <Footer />
 </div>
 
 @* Modal quản lý địa chỉ giao hàng — port từ nguồn OJT (AddressModal.jsx). *@
 <AddressModal IsOpen="ShowAddressModal"
-              AddressModalView="AddressModalView"
+              AddressModalView="@AddressModalView"
               EditingAddressId="EditingAddressId"
               SavedAddresses="SavedAddresses"
               SelectedSavedId="SelectedSavedId"
-              FullName="form.FullName"
-              Phone="form.Phone"
-              Email="form.Email"
-              Province="form.Province"
-              District="form.District"
-              Ward="form.Ward"
-              Address="form.AddressDetail"
+              FullName="@form.FullName"
+              Phone="@form.Phone"
+              Email="@form.Email"
+              Province="@form.Province"
+              District="@form.District"
+              Ward="@form.Ward"
+              Address="@form.AddressDetail"
               Errors="Errors"
               Touched="Touched"
               OnClose="CloseAddressModal"

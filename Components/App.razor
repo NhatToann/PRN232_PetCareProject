@@ -5,30 +5,26 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
-    <link rel="stylesheet" href="app.css" />
-    <link rel="stylesheet" href="css/template/index.css" />
-    <link rel="stylesheet" href="css/template/App.css" />
-    <link rel="stylesheet" href="css/template/home.css" />
-    <link rel="stylesheet" href="css/template/about.css" />
-    <link rel="stylesheet" href="css/template/cartDrawer.css" />
-    <link rel="stylesheet" href="css/template/pageContextBar.css" />
-    <link rel="stylesheet" href="css/template/auth.css" />
-    <link rel="stylesheet" href="css/template/profile.css?v=20260716-account" />
-    <link rel="stylesheet" href="css/template/searchProducts.css" />
-    <link rel="stylesheet" href="css/template/cart.css" />
-    <link rel="stylesheet" href="css/template/productDetails.css" />
-    <link rel="stylesheet" href="css/template/checkout.css" />
-    <link rel="stylesheet" href="css/template/systemPage.css" />
-    <link rel="stylesheet" href="css/template/notificationBell.css" />
-    <link rel="stylesheet" href="css/template/chatWidget.css" />
-    <link rel="stylesheet" href="css/template/checkoutResult.css" />
-    <link rel="stylesheet" href="css/template/codConfirmation.css" />
-    <link rel="stylesheet" href="css/template/spa.css?v=20260716-services" />
-    <link rel="stylesheet" href="css/spa/service-react.css?v=20260716-services" />
-    <link rel="stylesheet" href="css/template/invoice.css?v=20260716-invoice" />
-    <link rel="stylesheet" href="css/template/ordersStaff.css" />
-    <link rel="stylesheet" href="css/template/createProduct.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+    @* ------------------------------------------------------------------
+       CSS KHÔNG còn nạp toàn bộ ở đây.
+
+       Trước đây file này <link> cả 20 file CSS (~380 KB) ở MỌI trang —
+       kể cả /login và /system ⇒ mỗi lần điều hướng là tải lại 380 KB chưa
+       nén ⇒ "điều hướng rất thảm hại".
+
+       Nay mỗi layout nạp CSS dùng chung của nó và mỗi trang nạp CSS riêng:
+         - Trang khách : Components/Layout/MainLayout.razor
+         - Trang staff  : Components/Layout/StaffWorkspaceLayout.razor
+         - Trang auth   : Components/Layout/EmptyLayout.razor
+       Xem Services/CssBundle.cs để biết map trang → file CSS.
+       ------------------------------------------------------------------ *@
+
+    @* Font Awesome — HOST LOCAL (wwwroot/fontawesome).
+       Trước đây kéo từ cdnjs.cloudflare.com ⇒ gặy "net::ERR_CACHE_READ_FAILURE"
+       khi cache trình duyệt hỏng, và phụ thuộc mạng ngoài khi demo/offline.
+       Bản local đúng phiên bản 6.5.1 ⇒ không đổi giao diện, không cần mạng. *@
+    <link rel="stylesheet" href="fontawesome/css/all.min.css" />
     <style>
         .toast-notification {
             position: fixed;
@@ -68,11 +64,17 @@
 <body>
     <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
-    <script src="js/blazorAuth.js"></script>
+    @* Tự phục hồi khi circuit Blazor Server bị đóng (mất kết nối) — thay thế
+       modal "Could not reconnect..." bằng reload tự động, giữ nguyên giỏ hàng /
+       địa chỉ trong localStorage. Xem Services/CircuitDiagnosticsHandler.cs. *@
+    <script src="js/blazorReconnect.js?v=20261110-circuit-fix"></script>
+    <script src="js/blazorAuth.js?v=20261110-payos-code-fix"></script>
     <script src="js/spaCart.js"></script>
     <script src="js/cartStorage.js"></script>
     <script src="js/daNangData.js"></script>
     <script src="js/blazorUi.js"></script>
+    @* Hộp thoại hợp nhất — cuộn khung chat xuống đáy khi có tin mới. *@
+    <script src="js/chatWidget.js?v=20261112-scroll-fix2"></script>
     @* LS-10 — JavaScript client demo (slide PRN232 Ch07): jQuery 3.7.1 + client JS.
        Không nhúng <script> trong .razor — nạp tập trung tại đây. *@
     <script src="js/jquery.min.js"></script>

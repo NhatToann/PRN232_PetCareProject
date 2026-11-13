@@ -1,4 +1,4 @@
-﻿@page "/products/deleted"
+@page "/products/deleted"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
 @using PetShop.Models
@@ -41,7 +41,7 @@
                             <td class="text-start ps-4 py-3 fw-bold text-dark fs-5">
                                 <span class="text-decoration-line-through text-muted">@p.Name</span>
                             </td>
-                            <td class="fw-bold fs-5 text-secondary">@p.Price.ToString("N0") đ</td>
+                            <td class="fw-bold fs-5 text-secondary">@PetShop.Components.Shared.Format.Vnd(p.Price)</td>
                             <td class="pe-4">
                                 <button class="btn btn-sm btn-success rounded-pill px-3 fw-bold shadow-sm me-2" @onclick="() => Restore(p.ProductId)">
                                     <i class="fas fa-undo"></i> Khôi phục

@@ -1,11 +1,39 @@
 @inherits LayoutComponentBase
 @inject PetShop.Services.CartStateService CartState
+@inject PetShop.Services.CartDrawerStateService DrawerState
 @inject IJSRuntime JS
 @inject ILogger<MainLayout> Logger
 
+@* ------------------------------------------------------------------
+   CSS của layout khách hàng.
+
+   Trước đây App.razor nạp toàn bộ 20 file CSS (~380 KB) ở MỌI trang.
+   Nay chỉ nạp CSS dùng chung; mỗi trang tự khai báo phần riêng bằng
+   <PageStyles CssFiles="..." /> (xem CssBundle.cs).
+
+   LƯU Ý: layout KHÔNG nhận được parameter từ page (cú pháp @layout không
+   truyền được tham số) ⇒ phần CSS riêng của trang phải khai báo trong chính
+   file .razor của trang đó.
+   ------------------------------------------------------------------ *@
+<PageStyles CommonFiles="@PetShop.Services.CssBundle.CustomerCommon" />
+
 @Body
 
-@* Q21 — widget chat 1-1 khách ↔ nhân viên (fixed, góc phải dưới).
+@* ------------------------------------------------------------------
+   CartDrawer dùng CHUNG cho mọi trang.
+
+   LÝ DO: trước đây mỗi trang tự render <CartDrawer> và tự truyền
+   <Header OnOpenCart="..." />. Chỉ 4 trang làm vậy ⇒ các trang khác
+   (/services, /about, /boarding, /blog, /contact, /account…) bấm nút giỏ
+   hàng KHÔNG có gì xảy ra ⇒ buộc phải F5 mới phản hồi.
+
+   Nay drawer nằm ở layout (render 1 lần cho cả site) và điều khiển qua
+   CartDrawerStateService ⇒ nút giỏ hàng hoạt động trên MỌI trang.
+   ------------------------------------------------------------------ *@
+<CartDrawer />
+
+@* Q21/Q22 — hộp thoại hợp nhất (fixed, góc phải dưới).
+   MỘT panel duy nhất chứa cả trợ lý AI và tin nhắn nhân viên — không tách 2 mục.
    Bổ sung MỚI theo quyết định của user; không thay đổi markup của trang nào. *@
 <ChatWidget />
 

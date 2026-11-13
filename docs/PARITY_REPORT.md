@@ -4,7 +4,7 @@
 > **Người kiểm chứng:** Verifier agent (hội đồng migration OJT → PRN232)
 > **Đối tượng kiểm chứng:** `PRN232_PetCareProject` (đích) đối chiếu `Projectojt/BackEnd` + `Projectojt/frontend` (nguồn)
 > **Cách kiểm chứng:** chạy app thật (`dotnet run`, `http://localhost:5286` + `http://localhost:5287` gRPC), đo HTTP status + độ dài body từng route/API, đối chiếu MD5 asset, đọc log runtime.
-> **Kết luận ngắn:** Build/test sạch (**93/93 pass**), **40/40 route UI** và **toàn bộ API lõi** hoạt động; **144/144 ảnh + 15/15 ảnh pet + 2/2 template email** khớp MD5 100%. Chatbot **đã có câu trả lời AI thật** (`source=ai`, Q13) và **email gửi thật được** (Q17). Còn **4 lệch mức 🟡/🟠** (không có lệch chặn runtime 🔴).
+> **Kết luận ngắn:** Build/test sạch (**152/152 pass**), **40/40 route UI** và **toàn bộ API lõi** hoạt động; **144/144 ảnh + 15/15 ảnh pet + 2/2 template email** khớp MD5 100%. Chatbot **đã có câu trả lời AI thật** (`source=ai`, Q13) và **email gửi thật được** (Q17). **Luồng quên mật khẩu đã sửa + có integration test HTTP thật** (Q23). Còn **4 lệch mức 🟡/🟠** (không có lệch chặn runtime 🔴).
 
 ---
 
@@ -15,12 +15,16 @@
 | Hạng mục | Kết quả | Bằng chứng |
 |---|---|---|
 | `dotnet build PetShop_PRN222.csproj --nologo "-v:q"` | ✅ **0 Error / 0 Warning** (8,18 s) | Build succeeded. 0 Warning(s), 0 Error(s) — sau Q21 (widget chat) |
-| `dotnet test --nologo` | ✅ **93/93 pass**, 0 fail, 0 skip | `Passed! - Failed: 0, Passed: 93, Skipped: 0, Total: 93` (baseline 49 + 7 LS-11 + 14 Q9 + 9 Q20/Q22 + **14** test Q2 `RefreshTokenTests.cs`) — sau Q2 (refresh token Ch06) + Q19 (dọn secret) |
-| `dotnet run --no-build --launch-profile http` | ✅ Chạy nền thành công | `Now listening on: http://[::]:5286` + `http://[::]:5287` (gRPC h2c) |
+| `dotnet test --nologo` | ✅ **152/152 pass**, 0 fail, 0 skip | `Passed! - Failed: 0, Passed: 152, Skipped: 0, Total: 152` (baseline 49 + 7 LS-11 + 14 Q9 + 9 Q20/Q22 + 14 Q2 `RefreshTokenTests.cs` + **24 test luồng quên mật khẩu**: `AuthRouteContractTests.cs` 20 + `ForgotPasswordFlowTests.cs` 6 + `AuthClientTests.cs` 8 + `ApiErrorMessageReaderTests.cs` 10 — sau Q23 sửa luồng quên mật khẩu) |
+| `dotnet run --no-build --launch-profile http` | ✅ Chạy nền thành công | `Now listening on: http://[::]:5286` + `http://[::]:5287` (gRPC h2c) + `https://[::]:7083` |
 | DB `SHOP_PET_Database` | ✅ Kết nối OK, **32 bảng** | `sa`/`123`; bảng: `admin`…`WorkSchedule` |
 | Docker image | ✅ `petshop-prn232:latest` tồn tại (470 MB) | `docker images` |
 
-> ⚠️ **Lưu ý port:** `launchSettings.json` khai báo `5286`, nhưng `Program.cs:235-246` cấu hình Kestrel ép `5286 = HTTP/1.1` (web/REST) và `5287 = HTTP/2 thuần` (gRPC). Cả hai cổng đều đang listen.
+> ⚠️ **Lưu ý port:** `Program.cs` cấu hình Kestrel ép **3 cổng**: `5286 = HTTP/1.1` (web/REST), `5287 = HTTP/2 thuần` (gRPC h2c), `7083 = HTTPS` (profile `https`). Cả ba cổng đều đang listen.
+>
+> **Vì sao cần cổng 7083:** profile `https` trong `launchSettings.json` khai báo `https://localhost:7083`, nhưng `ConfigureKestrel` **ghi đè** toàn bộ địa chỉ của launch profile ⇒ cổng 7083 không bao giờ listen ⇒ trình duyệt báo `ERR_CONNECTION_REFUSED`. Đã khai báo thêm `ListenAnyIP(7083, UseHttps())` để sửa.
+>
+> **Vì sao KHÔNG dùng `UseHttpsRedirection()`:** cổng HTTP 5286 là cổng chính đã đăng ký Google OAuth (`redirect_uris` + `javascript_origins` = `http://localhost:5286`) và là cổng mà các self-HTTP client nội bộ gọi tới. Bật redirect ⇒ mọi request HTTP bị 307 sang HTTPS ⇒ (1) origin của Google Identity Services không còn khớp ClientId đã đăng ký, (2) self-HTTP client phải đi theo redirect sang cert dev tự ký, (3) SignalR/WebSocket bị đổi scheme. Vì vậy cổng 7083 phục vụ trực tiếp, **không redirect hai chiều**. Cần dev cert: `dotnet dev-certs https --trust`.
 
 ### 1.2. Tổng số route/API đã kiểm chứng
 
@@ -223,10 +227,10 @@
 
 | Mục | Trạng thái | Bằng chứng |
 |---|---|---|
-| TS-01 Unit test | ✅ | **93/93 pass** (nhiều hơn 30 mục PARITY ghi) — baseline 49 + 7 test LS-11 (`NotificationHubTests.cs`) + **14 test Q9** (`AuthServiceAvatarTests.cs`) + 9 test Q20/Q22 + **14 test Q2** (`RefreshTokenTests.cs`) |
+| TS-01 Unit test | ✅ | **152/152 pass** (nhiều hơn 30 mục PARITY ghi) — baseline 49 + 7 test LS-11 (`NotificationHubTests.cs`) + **14 test Q9** (`AuthServiceAvatarTests.cs`) + 9 test Q20/Q22 + **14 test Q2** (`RefreshTokenTests.cs`) + **44 test luồng quên mật khẩu** (Q23) |
 | TS-02 Test chatbot service | ❌ | Chưa có unit test; đã smoke 5 probe runtime |
 | TS-03 Test PayOS signature | ✅ | `tests/PetShop.Tests/PayOSServiceTests.cs` có `ComputeHmacHex` + test webhook |
-| TS-04 Contract test từng dòng PARITY | ⚠️ | Chưa viết test tự động; **GĐ3 đã kiểm chứng thủ công 137 probe** (xem file này) |
+| TS-04 Contract test từng dòng PARITY | ⚠️ | Đã có **integration test HTTP thật** (`WebApplicationFactory`) cho luồng quên mật khẩu — `tests/PetShop.Tests/ForgotPasswordFlowTests.cs` (6 test, chạy trọn luồng send-email-otp → verify-email-otp → reset-password → login trên DB thật). **Còn lại:** các dòng PARITY khác vẫn kiểm chứng thủ công |
 | TS-05 build 0 error | ✅ | 0/0 |
 | TS-06 app chạy thật | ✅ | `/` → 200 |
 | TS-07 Google OAuth end-to-end | ⚠️ | 3/3 tầng OK (config/UI/token) nhưng **chưa đăng nhập thật** (không có user thật + sandbox không có mạng ngoài tới Google) |

@@ -7,7 +7,79 @@
     <!-- User Secrets: nơi lưu cấu hình nhạy cảm của máy cá nhân.
          Xem README § Cấu hình & secret để biết cách điền. -->
     <UserSecretsId>petshop-prn232-local-dev</UserSecretsId>
+
+    <!--
+    TỐI ƯU RAM cho máy local (Blazor Server + EF Core + SignalR).
+
+    ServerGarbageCollection: ứng dụng là long-running server (circuit sống vài
+    phút → hàng giờ) ⇒ GC workstation sẽ phải collection thường xuyên và giữ
+    nhiều segment heap. Server GC chia heap theo core ⇒ collection nhanh hơn và
+    giữ BỘ NHỚ ỔN ĐỊNH hơn (ít fragmentation ⇒ ít RSS).
+
+    ConcurrentGarbageCollection: collection chạy nền (background GC) ⇒ không
+    dừng thread để xử lý ⇒ giảm độ trễ (lag) khi đang phục vụ request.
+
+    TieredCompilation: biên dịch đồng thời method sẵn sàng nhanh ⇒ app khởi
+    động nhanh hơn (rất quan trọng với self-HTTP: trang đầu tiên phải chờ app
+    khởi động).
+
+    ServerGarbageCollectorConcurrent (dưới dạng property runtimeconfig) được
+    bật qua ConcurrentGarbageCollection ở trên.
+    -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredCompilation>true</TieredCompilation>
+    <TieredPGO>true</TieredPGO>
+
+    <!-- Đặt trần bộ nhớ GC server.
+         ⚠️ SỬA (11/11/2026): 512 MB → 192 MB.
+         Máy local của user có 15.8 GB RAM nhưng chỉ còn ~1.6 GB trống
+         (SQL Server 1.4 GB + Cursor 700 MB×n + MsMpEng 368 MB). App chỉ cần
+         ~80-120 MB heap thực tế ⇒ trần 512 MB cho phép heap phình tới mức mà
+         máy không kham nổi ⇒ OS bắt đầu swap ⇒ app lag.
+         192 MB vẫn dư sức cho hàng chục circuit Blazor đồng thời, nhưng ép GC
+         thu hồi sớm và trả RAM về OS khi vượt ngưỡng. -->
+    <GCHeapHardLimit>0x0C000000</GCHeapHardLimit>
   </PropertyGroup>
+
+  <!--
+  TỐI ƯU RAM — cấu hình GC server runtime (ghi vào runtimeconfig.json).
+
+  1) System.GC.HeapCount = 2
+     Server GC mặc định tạo MỘT heap cho MỖI logical core. Máy local của user
+     có 12 logical core ⇒ 12 heap × (Gen0 budget riêng + overhead) ⇒ tiêu tốn
+     hàng trăm MB RAM chỉ để "phòng sẵn", dù app chỉ dùng 1-2 core.
+     Giới hạn còn 2 heap ⇒ giữ lợi ích GC server (pause ngắn, ít fragmentation)
+     mà RAM giảm rõ rệt.
+
+  2) System.GC.Gen0Size = 16 MB
+     Mặc định x64 server GC = 256 MB (rất lớn cho app này). Gen0 nhỏ ⇒ GC thu
+     hồi sớm hơn ⇒ RSS thấp hơn; mỗi lần GC rẹ nên không ảnh hưởng latency.
+     ⚠️ 32 MB → 16 MB (11/11/2026): với 2 heap ⇒ 2 × 32 = 64 MB "phòng sẵn"
+     Gen0 chỉ để phục vụ vài circuit. Giảm còn 16 MB ⇒ tiết kiệm 32 MB RSS.
+
+  3) System.GC.RetainVM = false
+     Trả RAM về OS sau khi GC (đảm bảo trên mọi cấu hình runtimeconfig).
+
+  4) System.GC.HeapHardLimit = 192 MB
+     Phải khớp với <GCHeapHardLimit> ở trên (0x0C000000 = 201.3 MB).
+     Runtimeconfig ghi đè bằng số thập phân ⇒ 201326592.
+
+  5) System.GC.ConserveMemory = 5 (0-9)
+     Tăng áp lực GC thu hồi bộ nhớ. Mức 5 = "trung bình": GC sẵn sàng dùng CPU
+     nhiều hơn một chút để trả RAM về OS sớm.
+     ĐO ĐƯỢC (11/11/2026): trước khi bật, sau 20 request HTTP liên tiếp RSS
+     tăng từ 120 MB → 205 MB và KHÔNG tụt lại sau 20s idle ⇒ máy 15.8 GB nhưng
+     còn ~1.6 GB trống thì đây là phần "phình" gây lag.
+     Ở mức 5, GC chủ động trả heap về OS ⇒ giữ RSS ổn định quanh mức nền.
+  -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.HeapCount" Value="2" />
+    <RuntimeHostConfigurationOption Include="System.GC.Gen0Size" Value="16777216" />
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" />
+    <RuntimeHostConfigurationOption Include="System.GC.HeapHardLimit" Value="201326592" />
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Test project nằm trong repo nhưng là project riêng — không được biên dịch vào web app. -->

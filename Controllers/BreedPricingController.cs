@@ -127,6 +127,7 @@ namespace PetShop.Controllers
             }
 
             var breedPricing = await _db.BreedPricings
+                .AsTracking()
                 .FirstOrDefaultAsync(bp => bp.BreedPricingId == id, ct);
 
             if (breedPricing == null)
@@ -158,6 +159,7 @@ namespace PetShop.Controllers
         public async Task<IActionResult> Delete(int id, CancellationToken ct)
         {
             var breedPricing = await _db.BreedPricings
+                .AsTracking()
                 .FirstOrDefaultAsync(bp => bp.BreedPricingId == id, ct);
 
             if (breedPricing == null)
@@ -190,6 +192,7 @@ namespace PetShop.Controllers
 
                 // Kiểm tra đã tồn tại chưa
                 var existing = await _db.BreedPricings
+                    .AsTracking()
                     .FirstOrDefaultAsync(bp => bp.BreedId == breed.BreedId, ct);
 
                 if (existing != null)

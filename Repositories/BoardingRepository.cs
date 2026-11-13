@@ -5,18 +5,39 @@ using PetShop.Models;
 
 namespace PetShop.Repositories
 {
+    /// <summary>
+    /// Truy vấn phòng lưu trú + booking.
+    ///
+    /// <para>
+    /// <b>VÌ SAO DÙNG IDbContextFactory:</b> trước đây repository nhận
+    /// <c>ShopPetDatabaseContext</c> scoped. Trong Blazor Server, layout
+    /// (TopBar/Footer — đọc <c>SystemSettings</c>) và page (đọc
+    /// <c>BoardingRooms</c>) được render SONG SONG trong cùng circuit ⇒ hai
+    /// truy vấn dùng chung một context ⇒ EF Core ném
+    /// <c>"A second operation was started on this context instance before a
+    /// previous operation completed"</c> ⇒ trang <c>/boarding</c> crash hoàn toàn
+    /// (lỗi tải danh sách phòng).
+    /// </para>
+    ///
+    /// <para>
+    /// Nay mỗi thao tác tạo context RIÊNG qua <see cref="IDbContextFactory{TContext}"/>
+    /// ⇒ an toàn khi truy vấn chạy song song, đúng pattern đã dùng ở
+    /// <c>StaffReportsRepository</c>.
+    /// </para>
+    /// </summary>
     public sealed class BoardingRepository : IBoardingRepository
     {
-        private readonly ShopPetDatabaseContext _db;
+        private readonly IDbContextFactory<ShopPetDatabaseContext> _factory;
 
-        public BoardingRepository(ShopPetDatabaseContext db)
+        public BoardingRepository(IDbContextFactory<ShopPetDatabaseContext> factory)
         {
-            _db = db;
+            _factory = factory;
         }
 
         public async Task<IReadOnlyList<BoardingRoom>> GetAllRoomsAsync(CancellationToken ct = default)
         {
-            return await _db.BoardingRooms
+            await using var context = await _factory.CreateDbContextAsync(ct);
+            return await context.BoardingRooms
                 .AsNoTracking()
                 .OrderBy(r => r.RoomId)
                 .ToListAsync(ct);
@@ -24,14 +45,16 @@ namespace PetShop.Repositories
 
         public async Task<BoardingRoom?> GetRoomByIdAsync(int roomId, CancellationToken ct = default)
         {
-            return await _db.BoardingRooms
+            await using var context = await _factory.CreateDbContextAsync(ct);
+            return await context.BoardingRooms
                 .AsNoTracking()
                 .FirstOrDefaultAsync(r => r.RoomId == roomId, ct);
         }
 
         public async Task<IReadOnlyList<BoardingBookingDto>> GetAllBookingsAsync(CancellationToken ct = default)
         {
-            var bookings = await _db.BoardingBookings
+            await using var context = await _factory.CreateDbContextAsync(ct);
+            var bookings = await context.BoardingBookings
                 .AsNoTracking()
                 .Include(b => b.Customer)
                 .OrderByDescending(b => b.CreatedAt)
@@ -66,31 +89,38 @@ namespace PetShop.Repositories
 
         public async Task<bool> ConfirmCheckinAsync(int bookingId, CancellationToken ct = default)
         {
-            var booking = await _db.BoardingBookings.FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
+            await using var context = await _factory.CreateDbContextAsync(ct);
+            var booking = await context.BoardingBookings
+                .AsTracking()
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
             if (booking is null) return false;
 
             booking.Status = "Đang sử dụng";
             booking.UpdatedAt = DateTime.Now;
-            await _db.SaveChangesAsync(ct);
+            await context.SaveChangesAsync(ct);
             return true;
         }
 
         public async Task<bool> ConfirmCheckoutAsync(int bookingId, CancellationToken ct = default)
         {
-            var booking = await _db.BoardingBookings.FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
+            await using var context = await _factory.CreateDbContextAsync(ct);
+            var booking = await context.BoardingBookings
+                .AsTracking()
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId, ct);
             if (booking is null) return false;
 
             booking.Status = "Đã trả phòng";
             booking.UpdatedAt = DateTime.Now;
-            await _db.SaveChangesAsync(ct);
+            await context.SaveChangesAsync(ct);
             return true;
         }
 
         public async Task<IReadOnlyList<BoardingAvailabilityDto>> GetAvailabilityAsync(CancellationToken ct = default)
         {
+            await using var context = await _factory.CreateDbContextAsync(ct);
             var today = DateOnly.FromDateTime(DateTime.Today);
 
-            var activeByType = await _db.BoardingBookings
+            var activeByType = await context.BoardingBookings
                 .AsNoTracking()
                 .Where(b => b.Status == "Đang sử dụng"
                     && b.CheckInDate <= today
@@ -99,7 +129,7 @@ namespace PetShop.Repositories
                 .Select(g => new { RoomType = g.Key, Count = g.Count() })
                 .ToListAsync(ct);
 
-            var allRooms = await _db.BoardingRooms
+            var allRooms = await context.BoardingRooms
                 .AsNoTracking()
                 .ToListAsync(ct);
 

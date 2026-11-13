@@ -109,5 +109,5 @@
 
 @functions {
     private static string FormatPrice(decimal value) =>
-        string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:C0}");
+        PetShop.Components.Shared.Format.Vnd(value);
 }

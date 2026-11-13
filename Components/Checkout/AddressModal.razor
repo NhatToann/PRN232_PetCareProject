@@ -16,7 +16,8 @@
 @if (IsOpen)
 {
     <div class="address-modal-overlay" role="presentation" @onmousedown="HandleOverlayClick">
-        <div class="address-modal" role="dialog" aria-modal="true" aria-labelledby="address-modal-title">
+        <div class="address-modal" role="dialog" aria-modal="true" aria-labelledby="address-modal-title"
+             @onmousedown:stopPropagation="true">
             <div class="address-modal-header">
                 <h3 id="address-modal-title" class="address-modal-title">
                     @if (AddressModalView == "form")
@@ -50,13 +51,13 @@
             }
             else
             {
-                <AddressModalForm FullName="FullName"
-                                  Phone="Phone"
-                                  Email="Email"
-                                  Province="Province"
-                                  District="District"
-                                  Ward="Ward"
-                                  Address="Address"
+                <AddressModalForm FullName="@FullName"
+                                  Phone="@Phone"
+                                  Email="@Email"
+                                  Province="@Province"
+                                  District="@District"
+                                  Ward="@Ward"
+                                  Address="@Address"
                                   Errors="Errors"
                                   Touched="Touched"
                                   ShowWardDropdown="ShowWardDropdown"

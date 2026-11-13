@@ -17,6 +17,7 @@ namespace PetShop.Controllers
             _logger.Line($"[AcceptRequest] requestId={requestId}, responderStaffId={responderStaffId}");
 
             var req = await _db.ShiftRequests
+                .AsTracking()
                 .FirstOrDefaultAsync(r => r.RequestId == requestId && r.ToStaffId == responderStaffId && r.Status == "Pending", ct);
 
             if (req is null)
@@ -42,8 +43,10 @@ namespace PetShop.Controllers
                 // myShift = ca MUON CHO của responder (req.ToShiftId), bên responder sở hữu
                 // partnerShift = ca MUON NHẬN của requester (req.FromShiftId), bên requester sở hữu
                 var myShift = await _db.WorkSchedules
+                    .AsTracking()
                     .FirstOrDefaultAsync(s => s.ScheduleId == req.ToShiftId && s.StaffId == responderStaffId, ct);
                 var partnerShift = await _db.WorkSchedules
+                    .AsTracking()
                     .FirstOrDefaultAsync(s => s.ScheduleId == req.FromShiftId && s.StaffId == req.EmployeeId, ct);
 
                 _logger.Line($"[AcceptRequest] myShift=(ScheduleId={myShift?.ScheduleId}, StaffId={myShift?.StaffId}), partnerShift=(ScheduleId={partnerShift?.ScheduleId}, StaffId={partnerShift?.StaffId})");
@@ -108,6 +111,7 @@ namespace PetShop.Controllers
             {
                 // Leave: ca MUON NHO của requester = req.FromShiftId, sở hữu bởi requester
                 var myShift = await _db.WorkSchedules
+                    .AsTracking()
                     .FirstOrDefaultAsync(s => s.ScheduleId == req.FromShiftId && s.StaffId == req.EmployeeId, ct);
 
                 if (myShift is null)
@@ -173,6 +177,7 @@ namespace PetShop.Controllers
         public async Task<ActionResult<ShiftExchangeActionResultDto>> DeclineRequest([FromRoute] int requestId, [FromQuery] int responderStaffId, CancellationToken ct)
         {
             var req = await _db.ShiftRequests
+                .AsTracking()
                 .FirstOrDefaultAsync(r => r.RequestId == requestId && r.ToStaffId == responderStaffId && r.Status == "Pending", ct);
 
             if (req is null)
@@ -200,6 +205,7 @@ namespace PetShop.Controllers
         public async Task<ActionResult<ShiftExchangeActionResultDto>> CancelRequest([FromRoute] int requestId, [FromQuery] int staffId, CancellationToken ct)
         {
             var req = await _db.ShiftRequests
+                .AsTracking()
                 .FirstOrDefaultAsync(r => r.RequestId == requestId && r.EmployeeId == staffId && r.Status == "Pending", ct);
 
             if (req is null)

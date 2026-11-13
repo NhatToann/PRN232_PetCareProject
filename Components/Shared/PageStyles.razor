@@ -1,0 +1,58 @@
+@* ------------------------------------------------------------------
+   PageStyles — khai báo các file CSS cần cho TRANG hiện tại.
+
+   VÌ SAO CẦN:
+   Trước đây App.razor <link> TOÀN BỘ 20 file CSS (~380 KB) ở MỌI trang,
+   kể cả /login và các trang staff. Mỗi lần điều hướng là tải lại toàn bộ
+   380 KB ⇒ cảm giác "điều hướng rất thảm hại".
+
+   Nay mỗi trang khai báo đúng CSS nó cần. Các file CSS dùng chung (header,
+   footer, home...) nằm trong nhóm "common" và được nạp ở layout.
+
+   CƠ CHẾ: <link rel="stylesheet"> đặt trong body.
+   HTML5 cho phép <link> trong body và mọi browser đều áp dụng. Cách này
+   đơn giản hơn HeadOutlet (vốn đòi render mode + section registry) và không
+   có nguy cơ CSS không được áp dụng do vấn đề render mode.
+
+   Browser sẽ cache file CSS (nếu server gửi ETag/Last-Modified) ⇒ lần điều
+   hướng thứ 2 trở đi KHÔNG tải lại CSS nào.
+   ------------------------------------------------------------------ *@
+
+@foreach (var file in EffectiveFiles)
+{
+    <link rel="stylesheet" href="@VersionedFile(file)" />
+}
+
+@code {
+    private List<string> _cssFiles = new();
+
+    /// <summary>
+    /// Danh sách đường dẫn CSS (tương đối so với wwwroot) cho trang này.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<string>? CssFiles { get; set; }
+
+    /// <summary>
+    /// CSS dùng chung cho MỌI trang (header, footer, nền, typography...).
+    /// Layout sẽ truyền xuống.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<string>? CommonFiles { get; set; }
+
+    private IEnumerable<string> EffectiveFiles =>
+        (CommonFiles ?? Array.Empty<string>())
+            .Concat(_cssFiles)
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .Distinct();
+
+    private static string VersionedFile(string file) => file is "css/template/chatWidget.css"
+        ? $"{file}?v=chat-redesign-20261113-1"
+        : file;
+
+    protected override void OnParametersSet()
+    {
+        _cssFiles = CssFiles is null
+            ? new List<string>()
+            : CssFiles.Where(f => !string.IsNullOrWhiteSpace(f)).Distinct().ToList();
+    }
+}

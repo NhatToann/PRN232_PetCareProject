@@ -1,9 +1,11 @@
-﻿@page "/system/bookings"
+@page "/system/bookings"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
 @using PetShop.Models
 @using PetShop.Services
 @inject IStaffReportsService ReportsService
+@inject PetShop.Services.StaffRefreshSignal RefreshSignal
+@implements IDisposable
 
 <PageTitle>Quản Lý Lịch Hẹn Spa</PageTitle>
 
@@ -127,8 +129,25 @@
     private List<BookingDto>? displayedBookings;
     private string currentTab = "today";
     private string toastMsg = "";
+    private IDisposable? _refreshSubscription;
 
-    protected override async Task OnInitializedAsync() { await LoadAndSeed(); }
+    protected override async Task OnInitializedAsync()
+    {
+        // Làm mới danh sách lịch hẹn theo tín hiệu từ thanh trên (mỗi 30s).
+        _refreshSubscription = RefreshSignal.Subscribe(async () =>
+        {
+            await LoadAndSeed();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await LoadAndSeed();
+    }
+
+    public void Dispose()
+    {
+        _refreshSubscription?.Dispose();
+        _refreshSubscription = null;
+    }
 
     private async Task LoadAndSeed()
     {
@@ -162,14 +181,23 @@
         else
             displayedBookings = allBookings?.OrderByDescending(b => b.AppointmentStart).ToList();
 
-        StateHasChanged();
+        // KHÔNG gọi StateHasChanged ở đây.
+        //
+        // LÝ DO: SetTab được gọi từ OnInitializedAsync — khi đó quá trình render
+        // (kể cả prerender) chưa xong; gọi StateHasChanged/InvokeAsync quá sớm làm
+        // circuit lỗi ⇒ trang trắng hoàn toàn.
+        // - Bấm nút tab: Blazor tự render lại sau event handler.
+        // - Tín hiệu làm mới: handler bên dưới đã gọi InvokeAsync(StateHasChanged).
     }
 
     private async Task UpdateStatus(int id, string newStatus)
     {
         await ReportsService.UpdateBookingStatusAsync(id, newStatus);
 
-        toastMsg = newStatus == "Đang tiến hành" ? "✓ Đã nhận lịch! Chờ làm dịch vụ." : "✓ Hoàn thành! Đã cộng 250.000đ vào doanh thu.";
+        // Không nhắc "cộng 250.000đ" (con số hardcode không đúng với dịch vụ thật).
+        toastMsg = newStatus == "Đang tiến hành"
+            ? "✓ Đã nhận lịch! Chờ làm dịch vụ."
+            : "✓ Đã đánh dấu hoàn thành lịch hẹn.";
         await LoadAndSeed();
 
         _ = Task.Run(async () => { await Task.Delay(3000); toastMsg = ""; await InvokeAsync(StateHasChanged); });

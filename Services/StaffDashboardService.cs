@@ -25,28 +25,11 @@ namespace PetShop.Services
                 .Include(b => b.Customer).Include(b => b.Pet).ThenInclude(p => p.Breed)
                 .Where(b => b.AppointmentStart.Date == currentTime.Date).OrderBy(b => b.AppointmentStart).ToListAsync();
 
-            // Bơm lịch hẹn mẫu khi hôm nay chưa có dữ liệu — phục vụ demo/bảo vệ môn học.
-            if (todayBookings.Count < 5)
-            {
-                try
-                {
-                    var b1 = new Booking { AppointmentStart = currentTime.AddMinutes(30), Status = "Đang xử lý", Note = "Chị Lan - Chó Poodle (Tắm sấy)", CreatedAt = DateTime.Now };
-                    var b2 = new Booking { AppointmentStart = currentTime.AddHours(1), Status = "Chờ xác nhận", Note = "Anh Hoàng - Mèo Anh (Cắt tỉa lông)", CreatedAt = DateTime.Now };
-                    var b3 = new Booking { AppointmentStart = currentTime.AddHours(2), Status = "Chưa thanh toán", Note = "Cô Mai - Chó Corgi (Spa tổng quát)", CreatedAt = DateTime.Now };
-                    var b4 = new Booking { AppointmentStart = currentTime.AddHours(3), Status = "Chờ xác nhận", Note = "Chú Tuấn - Mèo Ba Tư (Vệ sinh tai)", CreatedAt = DateTime.Now };
-                    var b5 = new Booking { AppointmentStart = currentTime.AddHours(4), Status = "Đang xử lý", Note = "Em Hương - Chó Pug (Grooming trọn gói)", CreatedAt = DateTime.Now };
-
-                    _context.Bookings.AddRange(b1, b2, b3, b4, b5);
-                    await _context.SaveChangesAsync();
-
-                    todayBookings = await _context.Bookings.Include(b => b.Customer)
-                        .Where(b => b.AppointmentStart.Date == currentTime.Date).OrderBy(b => b.AppointmentStart).ToListAsync();
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Không seed được lịch hẹn mẫu cho dashboard.");
-                }
-            }
+            // KHÔNG seed dữ liệu giả vào DB.
+            // Trước đây khi hôm nay chưa có lịch nào, service tự chèn 5 booking mẫu
+            // ("Chị Lan - Chó Poodle", ...) ⇒ dữ liệu rác lọt vào bảng Bookings, làm
+            // số liệu dashboard/lịch sử sai và gây khó cho việc chấm bài.
+            // Giờ chỉ đọc dữ liệu thật; không có lịch thì hiển thị 0.
 
             int servicesToday = todayBookings.Count;
             int pendingBookings = await _context.Bookings.CountAsync(b => b.Status == "Chờ xác nhận" || b.Status == "Chưa thanh toán" || b.Status == "pending" || b.Status == "Đang xử lý");
@@ -56,11 +39,13 @@ namespace PetShop.Services
                 .Take(6).Select(b => new NextTaskDto
                 {
                     Time = b.AppointmentStart.ToString("HH:mm"),
-                    CustomerName = b.Customer?.Name ?? (b.Note != null && b.Note.Contains("-") ? b.Note.Split('-')[0].Trim() : "Khách Demo"),
+                    // Tên khách lấy từ quan hệ thật trong DB. KHÔNG đoán từ Note
+                    // ("Chị Lan - Chó Poodle") vì đó là dữ liệu rác từ lúc seed mẫu.
+                    CustomerName = b.Customer?.Name ?? "Khách hàng",
                     PetName = b.Pet?.PetName ?? "Thú cưng",
-                    PetBreed = b.Pet?.Breed?.BreedName ?? "Chó/Mèo",
+                    PetBreed = b.Pet?.Breed?.BreedName ?? "—",
                     ServiceName = "Dịch vụ Spa Thú Cưng",
-                    Status = b.Status ?? "Đang xử lý"
+                    Status = b.Status ?? "Chờ xác nhận"
                 }).ToList();
 
             // Ca trực hiện tại lấy từ lịch thật trong DB; nếu hôm nay không có ca thì báo "Chưa có ca".
@@ -97,7 +82,11 @@ namespace PetShop.Services
 
         public async Task<bool> UpdateBookingStatusAsync(int bookingId, string newStatus)
         {
-            var booking = await _context.Bookings.FindAsync(bookingId);
+            // AsTracking: DbContext dùng NoTracking mặc định (tối ưu RAM) ⇒ phải
+            // bật tracking tường minh để thay đổi trạng thái được ghi xuống DB.
+            var booking = await _context.Bookings
+                .AsTracking()
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId);
             if (booking is null)
             {
                 _logger.LogWarning("Không tìm thấy booking {BookingId} để cập nhật trạng thái.", bookingId);
@@ -168,7 +157,9 @@ namespace PetShop.Services
             }
 
             // Update đúng dòng lịch được yêu cầu (không dùng "dòng cuối cùng" trong bảng).
-            var schedule = await _context.WorkSchedules.FirstOrDefaultAsync(w => w.ScheduleId == scheduleId);
+            var schedule = await _context.WorkSchedules
+                .AsTracking()
+                .FirstOrDefaultAsync(w => w.ScheduleId == scheduleId);
             if (schedule is null)
             {
                 _logger.LogWarning("Check-in thất bại: không tìm thấy ca với scheduleId={ScheduleId}.", scheduleId);

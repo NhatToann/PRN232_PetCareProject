@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PetShop.Components.Shared;
 using PetShop.Data;
 using PetShop.Interfaces;
 using PetShop.Models;
@@ -38,20 +39,25 @@ namespace PetShop.Repositories
                 .ToListAsync(ct);
 
             return pets
-                .Where(p => p.Age > 0 && p.Age < 50)
                 .Select(p => new ChatbotPetItem(p.Id, p.PetName, p.Age))
                 .ToList();
         }
 
         public async Task<IReadOnlyList<string>> GetRecentOrdersAsync(int customerId, CancellationToken ct = default)
         {
-            return await _db.Orders
+            // Ghi chú: định dạng tiền VND chuẩn hoá phải chạy ở TẠNG SỐ (client-side)
+            // vì hàm helper không dịch được sang SQL ⇒ project dữ liệu thô rồi format.
+            var rows = await _db.Orders
                 .AsNoTracking()
                 .Where(o => o.CustomerId == customerId)
                 .OrderByDescending(o => o.OrderDate)
                 .Take(5)
-                .Select(o => $"Đơn hàng #{o.OrderId} - {o.Status} - {o.TotalAmount:N0}đ")
+                .Select(o => new { o.OrderId, o.Status, o.TotalAmount })
                 .ToListAsync(ct);
+
+            return rows
+                .Select(o => $"Đơn hàng #{o.OrderId} - {o.Status} - {Format.Vnd(o.TotalAmount)}")
+                .ToList();
         }
 
         public async Task<IReadOnlyList<string>> GetRecentBookingsAsync(int customerId, CancellationToken ct = default)
@@ -83,26 +89,31 @@ namespace PetShop.Repositories
 
         public async Task<IReadOnlyList<string>> GetProductSummariesAsync(CancellationToken ct = default)
         {
-            var products = await _db.Products
+            var rows = await _db.Products
                 .AsNoTracking()
-                .Where(p => p.StockQuantity > 0)
-                .OrderByDescending(p => p.ProductId)
-                .Take(50)
-                .Select(p => $"{p.Name} - {p.Price:N0}đ (Còn {p.StockQuantity})")
+                .Where(p => !p.IsDeleted && p.StockQuantity > 0)
+                .OrderBy(p => p.ProductId)
+                .Take(60)
+                .Select(p => new { p.Name, p.Price, p.StockQuantity })
                 .ToListAsync(ct);
 
-            return products
+            return rows
+                .Select(p => $"{p.Name} - {Format.Vnd(p.Price)} (Còn {p.StockQuantity})")
                 .Where(p => !p.StartsWith("Allain Kirito") && !p.StartsWith("Nguyễn Văn A"))
                 .ToList();
         }
 
         public async Task<IReadOnlyList<string>> GetServiceSummariesAsync(CancellationToken ct = default)
         {
-            return await _db.PetServices
+            var rows = await _db.PetServices
                 .AsNoTracking()
                 .Where(s => s.Status == "active")
-                .Select(s => $"{s.Name} - {s.Price:N0}đ - {s.Duration} phút")
+                .Select(s => new { s.Name, s.Price, s.Duration })
                 .ToListAsync(ct);
+
+            return rows
+                .Select(s => $"{s.Name} - {Format.Vnd(s.Price)} - {s.Duration} phút")
+                .ToList();
         }
 
         public async Task<IReadOnlyList<string>> GetProductCategoryNamesAsync(CancellationToken ct = default)
@@ -123,17 +134,38 @@ namespace PetShop.Repositories
 
         public async Task<IReadOnlyList<string>> GetBoardingRoomSummariesAsync(CancellationToken ct = default)
         {
-            return await _db.BoardingRooms
+            var rows = await _db.BoardingRooms
                 .AsNoTracking()
-                .Select(r => $"{r.RoomName} - {r.RoomType} - {r.PricePerDay:N0}đ/ngày")
+                .Select(r => new { r.RoomName, r.RoomType, r.PricePerDay })
                 .ToListAsync(ct);
+
+            return rows
+                .Select(r => $"{r.RoomName} - {r.RoomType} - {Format.Vnd(r.PricePerDay)}/ngày")
+                .ToList();
         }
 
-        public async Task<int> CountProductsAsync(string? productType, string? pet, CancellationToken ct = default)
+        /// <summary>
+        /// Đếm sản phẩm theo điều kiện (loại sản phẩm / loài thú / khoảng giá).
+        ///
+        /// <para>
+        /// <b>LỖI CŨ (11/11/2026):</b> không lọc <c>IsDeleted</c> ⇒ đếm cả sản phẩm
+        /// đã bị xoá mềm ⇒ trả về "42 sản phẩm" trong khi shop thực tế chỉ còn 40.
+        /// </para>
+        /// </summary>
+        public async Task<int> CountProductsAsync(
+            string? productType,
+            string? pet,
+            decimal? minPrice = null,
+            decimal? maxPrice = null,
+            bool maxPriceInclusive = true,
+            CancellationToken ct = default)
         {
             var query = _db.Products
                 .Include(p => p.Category)
                 .AsQueryable();
+
+            // Sản phẩm đã xoá mềm KHÔNG được tính vào kết quả.
+            query = query.Where(p => !p.IsDeleted);
 
             if (!string.IsNullOrEmpty(productType))
             {
@@ -145,6 +177,18 @@ namespace PetShop.Repositories
                 query = query.Where(p => p.Name.Contains(pet) || (p.Description != null && p.Description.Contains(pet)));
             }
 
+            if (minPrice.HasValue)
+            {
+                query = query.Where(p => p.Price >= minPrice.Value);
+            }
+
+            if (maxPrice.HasValue)
+            {
+                query = maxPriceInclusive
+                    ? query.Where(p => p.Price <= maxPrice.Value)
+                    : query.Where(p => p.Price < maxPrice.Value);
+            }
+
             return await query.CountAsync(ct);
         }
 
@@ -153,7 +197,7 @@ namespace PetShop.Repositories
             int take,
             CancellationToken ct = default)
         {
-            var baseProductQ = _db.Products.Include(p => p.Category).AsNoTracking();
+            var baseProductQ = _db.Products.Include(p => p.Category).AsNoTracking().Where(p => !p.IsDeleted);
             IQueryable<Product> andQ = baseProductQ;
             foreach (var kw in keywords)
             {
@@ -177,6 +221,59 @@ namespace PetShop.Repositories
             return products
                 .Select(MapProduct)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Tìm sản phẩm theo khoảng giá (có thể kèm loại sản phẩm / loài thú).
+        ///
+        /// <para>
+        /// <b>VÌ SAO CẦN (11/11/2026):</b> khách hỏi "món nào dưới 20k" nhưng
+        /// trước đây chatbot không hề lọc theo giá ⇒ đếm ra tổng số sản phẩm
+        /// (42) và trả về câu template cố định ⇒ người dùng tưởng bị hardcode.
+        /// </para>
+        /// </summary>
+        public async Task<IReadOnlyList<ChatbotProductItem>> FindProductsByPriceRangeAsync(
+            decimal? minPrice,
+            decimal? maxPrice,
+            bool maxPriceInclusive = true,
+            string? productType = null,
+            string? pet = null,
+            int take = 20,
+            CancellationToken ct = default)
+        {
+            var query = _db.Products
+                .Include(p => p.Category)
+                .AsNoTracking()
+                .Where(p => !p.IsDeleted);
+
+            if (!string.IsNullOrEmpty(productType))
+            {
+                query = query.Where(p => (p.Category != null && p.Category.Name.Contains(productType)) || p.Name.Contains(productType));
+            }
+
+            if (!string.IsNullOrEmpty(pet))
+            {
+                query = query.Where(p => p.Name.Contains(pet) || (p.Description != null && p.Description.Contains(pet)));
+            }
+
+            if (minPrice.HasValue)
+            {
+                query = query.Where(p => p.Price >= minPrice.Value);
+            }
+
+            if (maxPrice.HasValue)
+            {
+                query = maxPriceInclusive
+                    ? query.Where(p => p.Price <= maxPrice.Value)
+                    : query.Where(p => p.Price < maxPrice.Value);
+            }
+
+            var products = await query
+                .OrderBy(p => p.Price)
+                .Take(take)
+                .ToListAsync(ct);
+
+            return products.Select(MapProduct).ToList();
         }
 
         public async Task<IReadOnlyList<ChatbotServiceItem>> FindServicesByKeywordsAsync(
@@ -259,6 +356,23 @@ namespace PetShop.Repositories
             return orders
                 .Select(o => new ChatbotOrderItem(o.OrderId, o.Status, o.TotalAmount))
                 .ToList();
+        }
+
+        public async Task<IReadOnlyDictionary<string, string>> GetShopContactSettingsAsync(CancellationToken ct = default)
+        {
+            var keys = new[] { "ShopAddress", "ShopHotline", "ShopEmail", "ShopWorkingHours" };
+
+            var rows = await _db.SystemSettings
+                .AsNoTracking()
+                .Where(s => keys.Contains(s.SettingKey))
+                .ToListAsync(ct);
+
+            return rows
+                .GroupBy(s => s.SettingKey)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(x => x.SettingValue).FirstOrDefault() ?? string.Empty,
+                    StringComparer.OrdinalIgnoreCase);
         }
 
         private static ChatbotProductItem MapProduct(Product p) => new(

@@ -100,4 +100,16 @@ public static class ChatRepositoryKind
 
     /// <summary>Khách hàng (bảng <c>Customer</c>).</summary>
     public const string Customer = "customer";
+
+    /// <summary>
+    /// Hộp thư CHUNG của nhân viên (bảng <c>ChatMessages</c> dùng chung theo khách).
+    ///
+    /// <para>
+    /// <b>VÌ SAO CẦN (13/11/2026):</b> luồng chat khách ↔ nhân viên nay KHÔNG còn
+    /// là 1-1 mà là <b>hộp thư chung</b> — mọi nhân viên đều thấy tin của cùng 1
+    /// khách ⇒ khách không cần chọn người nhận ⇒ dùng "loại đối tác" đặc biệt này
+    /// để đánh dấu "gửi vào hộp thư nhân viên".
+    /// </para>
+    /// </summary>
+    public const string Pool = "pool";
 }

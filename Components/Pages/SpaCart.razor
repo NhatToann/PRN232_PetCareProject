@@ -11,8 +11,9 @@
 <PageTitle>Giỏ spa – Pet Toy Shop</PageTitle>
 
 <div class="home-page">
-    <TopBar />
-    <CustomerOnlyGuard>
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.SpaCart" />
+<TopBar />
+    <RouteGuard AllowedRoles="customer">
     <PageContextBar Title="Giỏ hàng" />
 
     <main class="spa-cart-page">
@@ -85,7 +86,7 @@
                                         <td class="spa-cart-checkout__cell-product">
                                             <div class="spa-cart-checkout__product">
                                                 <div class="spa-cart-checkout__product-thumb">
-                                                    <img src="@GetThumb(service.Name)" alt="@service.Name" />
+                                                    <img src="@GetThumb(service.Name)" alt="@service.Name" loading="lazy" decoding="async" />
                                                 </div>
                                                 <div class="spa-cart-checkout__product-info">
                                                     <div class="spa-cart-checkout__product-name">@service.Name</div>
@@ -153,12 +154,12 @@
                                                                             var cls = pctVal > 100 ? "up" : pctVal < 100 ? "down" : "base";
                                                                             <span class="spa-cart-checkout__pet-price-badge @cls">
                                                                                 @(pctVal > 100 ? $"+{(pctVal - 100):0}%" : pctVal < 100 ? $"-{(100 - pctVal):0}%" : "(giá gốc)")
-                                                                                - @PriceForPet(service, pet).ToString("N0", Vi)₫
+                                                                                - @PetShop.Components.Shared.Format.Vnd(PriceForPet(service, pet))
                                                                             </span>
                                                                         }
                                                                         else
                                                                         {
-                                                                            <span class="spa-cart-checkout__pet-price-badge base">- @PriceForPet(service, pet).ToString("N0", Vi)₫</span>
+                                                                            <span class="spa-cart-checkout__pet-price-badge base">- @PetShop.Components.Shared.Format.Vnd(PriceForPet(service, pet))</span>
                                                                         }
                                                                     </label>
                                                                 }
@@ -190,7 +191,7 @@
                                                         var pct = GetPctForPet(service, pet);
                                                         <div class="spa-cart-checkout__cell-price-item">
                                                             @pet.PetName@(pet.BreedName is not null ? $" ({pet.BreedName})" : "")
-                                                            <span class="spa-cart-checkout__cell-price-value">@PriceForPet(service, pet).ToString("N0", Vi)₫</span>
+                                                            <span class="spa-cart-checkout__cell-price-value">@PetShop.Components.Shared.Format.Vnd(PriceForPet(service, pet))</span>
                                                             @if (pct is not null && pct.Value != 100)
                                                             {
                                                                 <span class="spa-cart-checkout__cell-price-pct @(pct.Value > 100 ? "up" : "down")">
@@ -203,11 +204,11 @@
                                             }
                                             else
                                             {
-                                                <span>@(service.Price > 0 ? $"{service.Price.ToString("N0", Vi)}₫" : "—")</span>
+                                                <span>@(service.Price > 0 ? PetShop.Components.Shared.Format.Vnd(service.Price) : "—")</span>
                                             }
                                         </td>
                                         <td class="spa-cart-checkout__cell-qty">@(selectedPets.Count > 0 ? selectedPets.Count : 1)</td>
-                                        <td class="spa-cart-checkout__cell-total">@total.ToString("N0", Vi)₫</td>
+                                        <td class="spa-cart-checkout__cell-total">@PetShop.Components.Shared.Format.Vnd(total)</td>
                                     </tr>
                                 }
                             </tbody>
@@ -233,7 +234,7 @@
                     <div class="spa-cart-checkout__summary">
                         <div class="spa-cart-checkout__summary-row spa-cart-checkout__summary-row--total">
                             <span>Tổng thanh toán</span>
-                            <span class="spa-cart-checkout__total-value">@TotalPrice.ToString("N0", Vi)₫</span>
+                            <span class="spa-cart-checkout__total-value">@PetShop.Components.Shared.Format.Vnd(TotalPrice)</span>
                         </div>
                     </div>
 
@@ -249,7 +250,7 @@
     </main>
 
     <Footer />
-    </CustomerOnlyGuard>
+    </RouteGuard>
 </div>
 
 @code {

@@ -1,6 +1,7 @@
 @using Microsoft.JSInterop;
 @inject PetShop.Interfaces.IProductCatalogClient ProductCatalog
 @inject PetShop.Services.CartStateService CartState
+@inject PetShop.Services.CartDrawerStateService DrawerState
 @inject PetShop.Services.UserSessionService UserSession
 @inject NavigationManager Navigation
 @inject ILogger<Header> Logger
@@ -22,7 +23,7 @@
                        placeholder="Search products..."
                        value="@searchTerm"
                        @oninput="HandleSearchInput"
-                       @onfocus="() => showSuggestions = true"
+                       @onfocus="HandleSearchFocus"
                        @onblur="HideSuggestionsLater" />
                 <button type="submit" class="search-button" aria-label="Search">
                     <i class="fas fa-search" aria-hidden="true"></i>
@@ -82,7 +83,8 @@
 
     private string searchTerm = string.Empty;
     private bool showSuggestions;
-    private bool isLoadingSuggestions = true;
+    private bool isLoadingSuggestions;
+    private bool namesLoaded;
     private IReadOnlyList<string> allProductNames = Array.Empty<string>();
 
     private string LogoTarget => (UserSession.CurrentUser?.Role ?? string.Empty).Equals("staff", StringComparison.OrdinalIgnoreCase) ? "/system" : "/";
@@ -127,16 +129,62 @@
         try { await CartState.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[Header.razor] CartState.LoadAsync threw: {ex.GetType().Name}"); }
         _cartReady = true;
         try { await UserSession.LoadAsync(); } catch (Exception ex) { Logger.LineWarning($"[Header.razor] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
-        var products = await ProductCatalog.GetProductsAsync();
-        allProductNames = products.Data?.Select(product => product.Name).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().ToArray() ?? Array.Empty<string>();
-        isLoadingSuggestions = false;
         StateHasChanged();
+
+        // KHÔNG tải danh sách tên sản phẩm ở đây.
+        //
+        // Lý do (tối ưu RAM + độ trễ điều hướng):
+        //   Header nằm ở MỌI trang ⇒ trước đây mỗi lần điều hướng đều tải
+        //   danh mục sản phẩm chỉ để gợi ý tìm kiếm. Dù đã rút gọn thành endpoint
+        //   "names" (chỉ cột Name) + cache server-side, việc gọi ở mọi trang vẫn
+        //   là 1 round-trip thừa cho tới khi user thực sự gõ vào ô tìm kiếm.
+        //   Nay chỉ tải lazily khi user focus vào ô tìm kiếm (xem EnsureNamesAsync).
+    }
+
+    /// <summary>
+    /// Tải danh sách tên sản phẩm (lazy) — chỉ gọi khi user focus vào ô tìm kiếm.
+    /// Có guard "đã tải rồi" để không gọi lặp lại.
+    /// </summary>
+    private async Task EnsureNamesAsync()
+    {
+        if (namesLoaded || isLoadingSuggestions)
+        {
+            return;
+        }
+
+        isLoadingSuggestions = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await ProductCatalog.GetProductNamesAsync();
+            allProductNames = result.Data ?? Array.Empty<string>();
+            namesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[Header.razor] GetProductNamesAsync threw: {ex.GetType().Name}");
+        }
+        finally
+        {
+            isLoadingSuggestions = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private void HandleSearchInput(ChangeEventArgs args)
     {
         searchTerm = args.Value?.ToString() ?? string.Empty;
         showSuggestions = true;
+    }
+
+    /// <summary>
+    /// Khi user focus vào ô tìm kiếm ⇒ mới tải danh sách gợi ý (lazy).
+    /// </summary>
+    private async Task HandleSearchFocus()
+    {
+        showSuggestions = true;
+        await EnsureNamesAsync();
     }
 
     private Task HandleSearchAsync()
@@ -163,7 +211,30 @@
         Navigation.NavigateTo($"/search?q={Uri.EscapeDataString(term)}");
     }
 
-    private Task OpenCart() => OnOpenCart.InvokeAsync();
+    /// <summary>
+    /// Mở giỏ hàng.
+    ///
+    /// <para>
+    /// <b>Fix lỗi "nút giỏ hàng chết sau khi chuyển trang":</b> trước đây hàm
+    /// này CHỈ gọi <c>OnOpenCart.InvokeAsync()</c> — mà <c>OnOpenCart</c> chỉ
+    /// được truyền ở 4 trang (Home / Products / Search / ProductDetail). Các trang
+    /// còn lại gọi <c>&lt;Header /&gt;</c> trần ⇒ <c>EventCallback</c> rỗng ⇒ bấm
+    /// nút **không làm gì** ⇒ buộc phải F5.
+    /// </para>
+    ///
+    /// <para>
+    /// Nay luôn mở drawer dùng chung (<see cref="CartDrawerStateService"/>) —
+    /// nhờ vậy nút giỏ hàng hoạt động trên <b>mọi</b> trang. Callback
+    /// <c>OnOpenCart</c> (nếu trang nào còn truyền) vẫn được gọi để giữ tương
+    /// thích với các trang tự quản lý drawer.
+    /// </para>
+    /// </summary>
+    private Task OpenCart()
+    {
+        DrawerState.Open();
+
+        return OnOpenCart.HasDelegate ? OnOpenCart.InvokeAsync() : Task.CompletedTask;
+    }
 
     private static string NormalizeText(string value)
     {
@@ -171,7 +242,7 @@
         return new string(normalized.Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray()).Trim();
     }
 
-    private static string FormatVnd(decimal value) => string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:N0}₫");
+    private static string FormatVnd(decimal value) => PetShop.Components.Shared.Format.Vnd(value);
 
     private void HandleCartChanged() { try { InvokeAsync(StateHasChanged); } catch (JSDisconnectedException) { } }
 

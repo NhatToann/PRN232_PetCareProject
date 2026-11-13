@@ -1,0 +1,141 @@
+@page "/blog"
+
+<PageTitle>Blog - Pet Toy Shop</PageTitle>
+
+<div class="home-page blog-page">
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.About" />
+    <TopBar />
+    <Header />
+    <Navigation />
+
+    <main class="about-main">
+        <section class="about-hero">
+            <div class="container">
+                <div class="about-hero__card">
+                    <p class="about-hero__kicker">Blog Pet Toy Shop</p>
+                    <h1>
+                        Chia sẻ kiến thức chăm sóc thú cưng, kinh nghiệm từ đội ngũ bác sĩ và nhân viên
+                        tại cửa hàng.
+                    </h1>
+                    <p>
+                        Mỗi bài viết đều được biên soạn dựa trên kinh nghiệm thực tế tại Pet Toy Shop:
+                        cách chăm sóc lông - da, lịch tiêm phòng, chuẩn bị cho lần đầu đi khám bệnh,
+                        cũng như những mẹo nhỏ giúp bạn và bé có những ngày tháng thoải mái hơn.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="about-section">
+            <div class="container">
+                <h2 class="about-title">Bài viết mới nhất</h2>
+                <div class="about-grid about-grid--three">
+                    @foreach (var post in Posts)
+                    {
+                        <article class="about-card blog-card">
+                            <img src="@post.Image"
+                                 alt="@post.Title"
+                                 class="blog-card__image"
+                                 loading="lazy"
+                                 decoding="async" />
+                            <h3>@post.Title</h3>
+                            <p>@post.Excerpt</p>
+                            <div class="blog-card__meta">
+                                <span><i class="fas fa-calendar me-1"></i>@post.Date</span>
+                                <span><i class="fas fa-tag me-1"></i>@post.Category</span>
+                            </div>
+                        </article>
+                    }
+                </div>
+            </div>
+        </section>
+
+        <section class="about-section about-section--alt">
+            <div class="container">
+                <article class="about-card about-card--faq">
+                    <h2>Thông tin liên hệ</h2>
+                    <p>
+                        Bạn cần tư vấn cụ thể cho bé của mình? Hãy nhắn tin qua chatbot hoặc gọi hotline
+                        của cửa hàng. Đội ngũ nhân viên luôn sẵn sàng hỗ trợ theo giờ làm việc.
+                    </p>
+                    <ul>
+                        <li>Đặt lịch dịch vụ spa &amp; grooming trực tuyến.</li>
+                        <li>Theo dõi lịch sử chăm sóc của thú cưng trong tài khoản cá nhân.</li>
+                        <li>Mua sắm thức ăn, đồ chơi và phụ kiện cho bé tại cửa hàng.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <Footer />
+</div>
+
+<style>
+    .blog-card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+        .blog-card__image {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 14px;
+            margin-bottom: 6px;
+        }
+
+        .blog-card__meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 0.85rem;
+            color: #6b7280;
+            font-weight: 600;
+        }
+</style>
+
+@code {
+    private sealed record BlogPost(string Title, string Excerpt, string Image, string Date, string Category);
+
+    private static readonly IReadOnlyList<BlogPost> Posts = new[]
+    {
+        new BlogPost(
+            "5 dấu hiệu thú cưng đang cần tắm sấy tại spa",
+            "Lông xù, mùi hôi, da đỏ hay thường xuyên ngứa chân đều là tín hiệu thú cưng cần được chăm sóc da - lông chuyên sâu hơn.",
+            "/images/petnews1.jpg",
+            "12/10/2026",
+            "Chăm sóc da - lông"),
+        new BlogPost(
+            "Lịch tiêm phòng cho chó và mèo: hướng dẫn đầy đủ",
+            "Mũi 7, 8, 9 và 10 tuần tuổi là các mốc tiêm phòng quan trọng nhất. Bài viết hướng dẫn chi tiết từng mũi và các mũi nhắc lại.",
+            "/images/petnews2.jpg",
+            "05/10/2026",
+            "Sức khỏe"),
+        new BlogPost(
+            "Chuẩn bị cho lần đầu thú cưng đi khám bệnh",
+            "Những mẹo giúp bé ít hoảng loạn hơn: mang theo món đồ yêu thích, chuẩn bị giấy tờ tiêm chủng và lịch sử tiêm phòng.",
+            "/images/petnews3.jpg",
+            "28/09/2026",
+            "Hướng dẫn"),
+        new BlogPost(
+            "Đi lưu trú cần chuẩn bị gì cho bé?",
+            "Phòng lưu trú tiêu chuẩn với điều hoá, giám sát 24/7. Bài viết hướng dẫn khách hàng những món đồ nên mang theo khi gửi bé ở.",
+            "/images/petnews4.jpg",
+            "20/09/2026",
+            "Lưu trú"),
+        new BlogPost(
+            "Cách chọn thức ăn phù hợp theo độ tuổi của bé",
+            "Mỗi giai đoạn tuổi cần hàm lượng dinh dưỡng khác nhau. Bài viết giúp bạn đọc nhãn thức ăn và tránh những thành phần không nên dùng.",
+            "/images/petnews5.jpg",
+            "12/09/2026",
+            "Dinh dưỡng"),
+        new BlogPost(
+            "Mùa hè: cứu thú cưng khỏi say nắng và trong nóng",
+            "Hạ nhiệt thường xuyên, uống đủ nước và tránh đi dạo giữa trưa là những điều đơn giản nhưng cần thiết trong mùa hè.",
+            "/images/petnews6.jpg",
+            "05/09/2026",
+            "Mẹo hay"),
+    };
+}

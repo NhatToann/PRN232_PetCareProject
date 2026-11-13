@@ -1,9 +1,11 @@
-﻿@page "/system/orders"
+@page "/system/orders"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
 @using PetShop.Models
 @using PetShop.Services
 @inject IStaffReportsService ReportsService
+@inject PetShop.Services.StaffRefreshSignal RefreshSignal
+@implements IDisposable
 
 <PageTitle>Quản Lý Đơn Hàng</PageTitle>
 
@@ -62,7 +64,7 @@
                             <div class="text-muted fw-medium"><i class="fas fa-user-circle me-1"></i> @o.CustomerName</div>
                         </td>
                         <td class="fw-medium text-secondary">@o.OrderDate.ToString("dd/MM/yyyy HH:mm")</td>
-                        <td><div class="fw-bold text-success fs-5">@o.TotalAmount.ToString("N0") đ</div></td>
+                        <td><div class="fw-bold text-success fs-5">@PetShop.Components.Shared.Format.Vnd(o.TotalAmount)</div></td>
                         <td>
                             @if (o.Status == "Chờ xác nhận")
                             {
@@ -180,8 +182,25 @@
     private int pendingCount = 0;
     private int shippingCount = 0;
     private int cancelledCount = 0;
+    private IDisposable? _refreshSubscription;
 
-    protected override async Task OnInitializedAsync() { await Load(); }
+    protected override async Task OnInitializedAsync()
+    {
+        // Làm mới danh sách đơn hàng theo tín hiệu từ thanh trên (mỗi 30s).
+        _refreshSubscription = RefreshSignal.Subscribe(async () =>
+        {
+            await Load();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await Load();
+    }
+
+    public void Dispose()
+    {
+        _refreshSubscription?.Dispose();
+        _refreshSubscription = null;
+    }
 
     private async Task Load()
     {

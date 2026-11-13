@@ -38,10 +38,10 @@ else
                     <InputText @bind-Value="product.Name" class="form-control form-control-lg bg-light border-0" required />
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label fw-bold text-secondary">Giá bán (Nhập theo ngàn VNĐ)</label>
+                    <label class="form-label fw-bold text-secondary">Giá bán (VNĐ)</label>
                     <div class="input-group input-group-lg shadow-sm">
                         <InputNumber @bind-Value="InputPrice" class="form-control bg-white border-0" required />
-                        <span class="input-group-text fw-bold text-white bg-primary border-0">@((InputPrice * 1000).ToString("N0")) đ</span>
+                        <span class="input-group-text fw-bold text-white bg-primary border-0">@PetShop.Components.Shared.Format.Vnd(InputPrice)</span>
                     </div>
                 </div>
                 <div class="col-md-6">
@@ -72,7 +72,8 @@ else
         product = await ProductService.GetForEditAsync(Id);
         if (product != null)
         {
-            InputPrice = product.Price / 1000;
+            // Giá luôn nhập/lưu trực tiếp theo VND (không chia ngàn) — đồng nhất với ProductCreate.
+            InputPrice = product.Price;
         }
     }
 
@@ -80,7 +81,7 @@ else
     {
         try
         {
-            product!.Price = InputPrice * 1000;
+            product!.Price = InputPrice;
 
             // Chống lỗi DateTime SQL (SQL Server không chấp nhận DateTime trước năm 1753)
             // được ProductManagementService xử lý trước khi ghi.

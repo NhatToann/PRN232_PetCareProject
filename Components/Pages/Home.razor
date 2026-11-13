@@ -8,8 +8,9 @@
 <PageTitle>Pet Toy Shop</PageTitle>
 
 <div class="home-page">
-    <TopBar />
-    <Header OnOpenCart="OpenCart" />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Home" />
+<TopBar />
+    <Header />
     <Navigation />
 
     <main>
@@ -19,8 +20,8 @@
             <FeaturedCategories />
 
             <!-- FIX TRỤC TRẶC TRÙNG TÊN: Dùng namespace tuyệt đối trỏ thẳng vào thư mục Home -->
-            <PetShop_PRN222.Components.Home.ProductList Products="products"
-                                                        Loading="isLoadingProducts"
+            <PetShop_PRN222.Components.Home.ProductList Products="@products"
+                                                        Loading="@isLoadingProducts"
                                                         Error="@productError"
                                                         OnAddToCart="ShowAddedToastAsync"
                                                         OnRetry="LoadProductsAsync" />
@@ -30,14 +31,12 @@
 
     <Footer />
     <Toast Show="toastVisible" Message="@toastMessage" />
-    <CartDrawer Open="cartDrawerOpen" OnClose="CloseCart" />
 </div>
 
 @code {
     private IReadOnlyList<PetShop.Models.ProductDto> products = Array.Empty<PetShop.Models.ProductDto>();
     private bool isLoadingProducts = true;
     private string? productError;
-    private bool cartDrawerOpen;
     private bool toastVisible;
     private string toastMessage = string.Empty;
 
@@ -71,18 +70,6 @@
         products = result.Data ?? Array.Empty<PetShop.Models.ProductDto>();
         productError = result.Error;
         isLoadingProducts = false;
-    }
-
-    private Task OpenCart()
-    {
-        cartDrawerOpen = true;
-        return Task.CompletedTask;
-    }
-
-    private Task CloseCart()
-    {
-        cartDrawerOpen = false;
-        return Task.CompletedTask;
     }
 
     private async Task ShowAddedToastAsync(PetShop.Models.ProductDto product)

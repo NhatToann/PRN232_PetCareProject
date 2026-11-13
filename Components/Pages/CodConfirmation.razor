@@ -9,7 +9,8 @@
 <PageTitle>Xác nhận đơn hàng – Pet Toy Shop</PageTitle>
 
 <div class="cod-confirmation-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.CodConfirmation" />
+<TopBar />
     <PageContextBar Title="Xác nhận đơn hàng" />
 
     <div class="cod-confirmation-content">
@@ -76,9 +77,9 @@
                     {
                         <div class="suggested-product-card">
                             <a href="/products/@product.ProductId" class="suggested-product-image">
-                                @if (!string.IsNullOrWhiteSpace(product.ImageUrl))
+                                @if (!string.IsNullOrWhiteSpace(PetShop.Components.Shared.ImageUrl.SafeOrNull(product.ImageUrl)))
                                 {
-                                    <img src="@product.ImageUrl" alt="@product.Name" />
+                                    <img src="@PetShop.Components.Shared.ImageUrl.Safe(product.ImageUrl)" alt="@product.Name" loading="lazy" decoding="async" />
                                 }
                                 else
                                 {
@@ -171,7 +172,8 @@
     {
         if (!UserSession.IsAuthenticated)
         {
-            Navigation.NavigateTo("/login", forceLoad: true);
+            // Điều hướng NỘI BỘ ⇒ replace (không forceLoad) để giữ circuit Blazor.
+            Navigation.NavigateTo("/login", replace: true);
             return;
         }
 
@@ -215,7 +217,7 @@
     }
 
     private static string FormatPrice(decimal value) =>
-        string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:C0}");
+        PetShop.Components.Shared.Format.Vnd(value);
 
     private sealed record LocalCartItem(int Id, string Name, decimal Price, string Image, int Quantity);
 

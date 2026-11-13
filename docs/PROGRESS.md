@@ -68,7 +68,7 @@
 |---|---|
 | `dotnet build --nologo "-v:q"` | ✅ **0 error / 0 warning** (9,72 s) |
 | `dotnet test --nologo` | ✅ **93/93 pass**, 0 fail, 0 skip (baseline 49 + 7 LS-11 + 14 Q9 + 9 Q20/Q22 + 14 Q2) |
-| `dotnet run --no-build --launch-profile http` | ✅ `Now listening on: http://[::]:5286` (HTTP/1.1) + `http://[::]:5287` (HTTP/2 h2c, gRPC) |
+| `dotnet run --no-build --launch-profile http` | ✅ `Now listening on: http://[::]:5286` (HTTP/1.1) + `http://[::]:5287` (HTTP/2 h2c, gRPC) + `https://[::]:7083` (HTTPS) |
 | DB `SHOP_PET_Database` | ✅ 32 bảng, `sa`/`123` |
 | Docker | ✅ image `petshop-prn232:latest` tồn tại (470 MB) |
 

@@ -5,6 +5,7 @@
 @inject PetShop.Interfaces.IAuthClient AuthClient
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ILogger<Account> Logger
 @using System.Globalization
 @using System.Text.Json
 @using Microsoft.AspNetCore.Components.Forms
@@ -12,11 +13,12 @@
 <PageTitle>Chỉnh sửa thông tin</PageTitle>
 
 <div class="home-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Profile" />
+<TopBar />
     <Header />
     <Navigation />
 
-    <CustomerOnlyGuard>
+    <RouteGuard AllowedRoles="customer">
         <main class="profile-page">
             <div class="container">
                 <section class="profile-card profile-shopee">
@@ -95,9 +97,9 @@
 
                         <aside class="profile-shopee__aside profile-shopee__aside--edit">
                             <div class="profile-shopee__avatarRing" aria-hidden="true">
-                                @if (!string.IsNullOrWhiteSpace(avatarUrl))
+                                @if (!string.IsNullOrWhiteSpace(PetShop.Components.Shared.ImageUrl.SafeOrNull(avatarUrl)))
                                 {
-                                    <img src="@avatarUrl" alt="" class="profile-shopee__avatarImg" />
+                                    <img src="@PetShop.Components.Shared.ImageUrl.Safe(avatarUrl)" alt="" class="profile-shopee__avatarImg" />
                                 }
                                 else
                                 {
@@ -134,7 +136,7 @@
         </main>
 
         <Footer />
-    </CustomerOnlyGuard>
+    </RouteGuard>
 </div>
 
 @code {

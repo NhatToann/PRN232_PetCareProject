@@ -24,8 +24,14 @@ public sealed class ProductCatalogClient : IProductCatalogClient
         return GetJsonAsync<IReadOnlyList<ProductDto>>($"api/products{query}", Array.Empty<ProductDto>(), cancellationToken);
     }
 
-    public Task<ProductCatalogResult<IReadOnlyList<ProductCategoryFilterDto>>> GetCategoriesAsync(string? keyword = null, CancellationToken cancellationToken = default)
+    public Task<ProductCatalogResult<IReadOnlyList<string>>> GetProductNamesAsync(CancellationToken cancellationToken = default)
     {
+        // Endpoint nhẹ (chỉ cột Name) + cache server-side ⇒ nhẹ hơn hàng trăm lần
+        // so với tải toàn bộ danh mục sản phẩm chỉ để gợi ý tìm kiếm.
+        return GetJsonAsync<IReadOnlyList<string>>("api/products/names", Array.Empty<string>(), cancellationToken);
+    }
+
+    public Task<ProductCatalogResult<IReadOnlyList<ProductCategoryFilterDto>>> GetCategoriesAsync(string? keyword = null, CancellationToken cancellationToken = default)    {
         var query = BuildQuery(("keyword", Normalize(keyword)));
         return GetJsonAsync<IReadOnlyList<ProductCategoryFilterDto>>($"api/products/categories{query}", Array.Empty<ProductCategoryFilterDto>(), cancellationToken);
     }

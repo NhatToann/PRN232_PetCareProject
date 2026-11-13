@@ -10,11 +10,20 @@ public sealed class OrderClient : IOrderClient
     private readonly HttpClient _httpClient;
     private readonly ILogger<OrderClient> _logger;
 
+    /// <summary>
+    /// Session scoped của circuit Blazor — dùng để gắn header phiên đăng nhập
+    /// (<c>X-User-Id</c> / <c>X-Customer-Id</c> / <c>X-User-Role</c>) cho các
+    /// endpoint <c>api/orders/*</c> có <c>[Authorize]</c>.
+    /// </summary>
+    private readonly UserSessionService _userSession;
+
     public OrderClient(HttpClient httpClient,
-        ILogger<OrderClient> logger)
+        ILogger<OrderClient> logger,
+        UserSessionService userSession)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _userSession = userSession;
     }
 
     public Task<FrontendApiResult<IReadOnlyList<FrontendOrderSummary>>> GetHistoryAsync(int customerId, CancellationToken cancellationToken = default) =>
@@ -30,7 +39,10 @@ public sealed class OrderClient : IOrderClient
     {
         try
         {
-            using var response = await _httpClient.GetAsync(uri, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            SessionHeader.Attach(request, _userSession.CurrentUser);
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return FrontendApiResult<T>.Failure(await response.Content.ReadAsStringAsync(cancellationToken), (int)response.StatusCode);
@@ -59,6 +71,8 @@ public sealed class OrderClient : IOrderClient
         try
         {
             using var request = new HttpRequestMessage(method, uri);
+            SessionHeader.Attach(request, _userSession.CurrentUser);
+
             if (payload is not null)
             {
                 request.Content = JsonContent.Create(payload);

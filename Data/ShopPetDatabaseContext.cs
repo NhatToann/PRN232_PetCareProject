@@ -426,6 +426,11 @@ namespace PetShop.Data
                     .HasColumnType("datetime");
                 entity.Property(e => e.StaffId).HasColumnName("StaffID");
 
+                // Cột thêm cho HỘP THƯ CHUNG (13/11/2026) — lưu tên + loại thật
+                // của người gửi để mọi nhân viên đều thấy ai đã trả lời khách.
+                entity.Property(e => e.SenderName).HasMaxLength(100);
+                entity.Property(e => e.SenderKind).HasMaxLength(10);
+
                 entity.HasOne(d => d.Customer).WithMany(p => p.ChatMessages)
                     .HasForeignKey(d => d.CustomerId)
                     .HasConstraintName("FK_ChatMessages_Customer");

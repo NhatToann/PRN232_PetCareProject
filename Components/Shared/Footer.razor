@@ -1,3 +1,5 @@
+@inject PetShop.Services.ShopContactService ShopContact
+
 <footer class="footer">
     <div class="container">
         <div class="footer-content">
@@ -15,9 +17,9 @@
                     Thế giới đồ chơi cho thú cưng với hơn 1000+ sản phẩm chất lượng, an toàn và thân thiện với mọi loài vật.
                 </p>
                 <div class="footer-contact">
-                    <p><i class="fas fa-map-marker-alt contact-icon" aria-hidden="true"></i><span>123 Đường ABC, Quận 1, TP.HCM</span></p>
-                    <p><i class="fas fa-phone contact-icon" aria-hidden="true"></i><span>0123 456 789</span></p>
-                    <p><i class="fas fa-envelope contact-icon" aria-hidden="true"></i><span>contact@pettoy.com</span></p>
+                    <p><i class="fas fa-map-marker-alt contact-icon" aria-hidden="true"></i><span>@Address</span></p>
+                    <p><i class="fas fa-phone contact-icon" aria-hidden="true"></i><span>@Hotline</span></p>
+                    <p><i class="fas fa-envelope contact-icon" aria-hidden="true"></i><span>@Email</span></p>
                 </div>
             </div>
 
@@ -71,3 +73,29 @@
         </div>
     </div>
 </footer>
+
+@code {
+    /// <summary>
+    /// Thông tin liên hệ THẬT (đọc từ bảng <c>SystemSettings</c>) — không hardcode.
+    /// </summary>
+    private string Address { get; set; } = string.Empty;
+
+    private string Hotline { get; set; } = string.Empty;
+
+    private string Email { get; set; } = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var contact = await ShopContact.GetAsync();
+            Address = contact.Address;
+            Hotline = contact.Hotline;
+            Email = contact.Email;
+        }
+        catch
+        {
+            // DB lỗi ⇒ để trống, không crash trang.
+        }
+    }
+}

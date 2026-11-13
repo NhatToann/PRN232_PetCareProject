@@ -1,24 +1,30 @@
 @using Microsoft.JSInterop;
 @inject PetShop.Services.CartStateService CartState
+@inject PetShop.Services.CartDrawerStateService DrawerState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject ILogger<CartDrawer> Logger
 @implements IDisposable
 
-@if (!_isReady)
-{
-    <div class="cart-drawer-root" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title">
-        <div class="cart-drawer">
-            <header class="cart-drawer__header">
-                <h2 id="cart-drawer-title" class="cart-drawer__title">Giỏ hàng</h2>
-            </header>
-            <div class="cart-drawer__body">
-                <p style="padding:20px;text-align:center;color:#888;">Đang tải…</p>
-            </div>
-        </div>
-    </div>
-}
-else if (Open)
+@* ------------------------------------------------------------------
+   CART DRAWER — panel trượt bên phải.
+
+   ⚠️ SỬA LỖI (11/11/2026) — "vừa vào web thì giỏ hàng tự hiện rồi tự mất":
+
+   Nhánh cũ render `<div class="cart-drawer-root">` NGAY Ở render đầu tiên
+   (khi `_isReady == false`) để hiện "Đang tải…". Nhưng CSS của
+   `.cart-drawer-root` là:
+
+       position: fixed; inset: 0; z-index: 10000;
+
+   ⇒ một overlay PHỦ TOÀN MÀN HÌNH + panel trắng trượt vào từ phải xuất
+   hiện ngay khi vừa vào web, rồi biến mất sau `OnAfterRenderAsync` ⇒
+   người dùng thấy "trang cart tự hiện/tự mất".
+
+   CÁCH SỬA: chỉ render drawer khi nó THẬT SỰ mở (`IsOpen`). Trạng thái
+   "đang tải giỏ hàng" được xử lý bên trong panel, không hiện overlay.
+   ------------------------------------------------------------------ *@
+@if (IsOpen)
 {
     <div class="cart-drawer-root" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title">
         <button type="button" class="cart-drawer-backdrop" aria-label="Đóng giỏ hàng" @onclick="CloseAsync"></button>
@@ -32,7 +38,11 @@ else if (Open)
             </header>
 
             <div class="cart-drawer__body">
-                @if (CartState.Items.Count == 0)
+                @if (!_isReady)
+                {
+                    <p style="padding:20px;text-align:center;color:#888;">Đang tải…</p>
+                }
+                else if (CartState.Items.Count == 0)
                 {
                     <div class="cart-drawer__empty">
                         <p class="cart-drawer__empty-title">Giỏ hàng trống</p>
@@ -46,9 +56,9 @@ else if (Open)
                         {
                             <li class="cart-drawer__item" @key="item.ProductId">
                                 <div class="cart-drawer__thumb">
-                                    @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                    @if (!string.IsNullOrWhiteSpace(PetShop.Components.Shared.ImageUrl.SafeOrNull(item.ImageUrl)))
                                     {
-                                        <img src="@item.ImageUrl" alt="" />
+                                        <img src="@PetShop.Components.Shared.ImageUrl.Safe(item.ImageUrl)" alt="" loading="lazy" decoding="async" />
                                     }
                                     else
                                     {
@@ -81,14 +91,54 @@ else if (Open)
 }
 
 @code {
+    /// <summary>
+    /// Trạng thái mở/đóng do <see cref="CartDrawerStateService"/> quản lý.
+    ///
+    /// <para>
+    /// Trước đây drawer nhận tham số <c>Open</c> từ page ⇒ mỗi page phải tự
+    /// khai báo <c>cartDrawerOpen</c> + <c>OpenCart</c>/<c>CloseCart</c>, và chỉ 4
+    /// page làm vậy ⇒ các trang khác bấm nút giỏ hàng **không phản hồi**.
+    /// Nay đọc trạng thái từ service ⇒ hoạt động trên mọi trang.
+    /// </para>
+    /// </summary>
     [Parameter] public bool Open { get; set; }
+
     [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>
+    /// Drawer đang mở khi EITHER trang truyền <c>Open="true"</c> (cách cũ) HOẶC
+    /// service báo mở (cách mới, dùng chung cho mọi trang).
+    /// </summary>
+    private bool IsOpen => Open || DrawerState.IsOpen;
 
     private bool _isReady;
 
     protected override void OnInitialized()
     {
         CartState.Changed += HandleCartChanged;
+        DrawerState.Changed += HandleDrawerChanged;
+
+        // QUAN TRỌNG — fix lỗi "nút giỏ hàng chết sau khi chuyển trang".
+        //
+        // VÌ SAO:
+        //   Drawer là lớp overlay `position: fixed; inset: 0; z-index: 10000`
+        //   (xem wwwroot/css/template/cartDrawer.css). Khi người dùng mở drawer
+        //   rồi bấm link điều hướng (ví dụ menu "Dịch vụ", "Về chúng tôi"...),
+        //   layout KHÔNG bị dispose ⇒ <CartDrawer> vẫn còn trong DOM và
+        //   `DrawerState.IsOpen` vẫn = true ⇒ backdrop tiếp tục phủ kín màn hình.
+        //
+        //   ⇒ Mọi thao tác click của người dùng (kể cả nút giỏ hàng) bị backdrop
+        //     nuốt mất ⇒ "bấm không có phản hồi" ⇒ buộc phải F5/reset trang.
+        //
+        // CÁCH SỬA:
+        //   Mỗi lần route đổi ⇒ tự đóng drawer (đúng UX thông thường: điều hướng
+        //   đi nơi khác thì panel trượt ra phải đóng lại).
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        DrawerState.Close();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -101,7 +151,19 @@ else if (Open)
         }
     }
 
-    private async Task CloseAsync() => await OnClose.InvokeAsync();
+    private Task CloseAsync()
+    {
+        DrawerState.Close();
+
+        // Vẫn gọi OnClose nếu page cũ truyền (để giữ tương thích với các
+        // page đang dùng <CartDrawer Open=... OnClose=... /> riêng).
+        if (OnClose.HasDelegate)
+        {
+            return OnClose.InvokeAsync();
+        }
+
+        return Task.CompletedTask;
+    }
 
     private async Task RemoveAsync(int productId) => await CartState.RemoveAsync(productId);
 
@@ -130,12 +192,16 @@ else if (Open)
 
     private sealed record CheckoutStorageItem(int ProductId, string Name, decimal Price, string? ImageUrl, int Quantity);
 
-    private static string FormatVnd(decimal value) => string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:N0}₫");
+    private static string FormatVnd(decimal value) => PetShop.Components.Shared.Format.Vnd(value);
 
     private void HandleCartChanged() { try { InvokeAsync(StateHasChanged); } catch (JSDisconnectedException) { } }
+
+    private void HandleDrawerChanged() { try { InvokeAsync(StateHasChanged); } catch (JSDisconnectedException) { } }
 
     public void Dispose()
     {
         CartState.Changed -= HandleCartChanged;
+        DrawerState.Changed -= HandleDrawerChanged;
+        Navigation.LocationChanged -= HandleLocationChanged;
     }
 }

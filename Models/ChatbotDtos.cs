@@ -41,6 +41,18 @@ namespace PetShop.Models
         public List<string> ProductCategories { get; set; } = new();
         public List<string> Species { get; set; } = new();
         public List<string> BoardingRooms { get; set; } = new();
+
+        /// <summary>
+        /// Thông tin liên hệ THẬT của shop (đọc từ bảng <c>SystemSettings</c>).
+        /// Không hardcode trong prompt.
+        /// </summary>
+        public string ShopAddress { get; set; } = string.Empty;
+
+        public string ShopHotline { get; set; } = string.Empty;
+
+        public string ShopEmail { get; set; } = string.Empty;
+
+        public string ShopWorkingHours { get; set; } = string.Empty;
     }
 
     public class ChatIntentDto

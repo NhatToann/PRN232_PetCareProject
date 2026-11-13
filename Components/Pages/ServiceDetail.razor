@@ -10,7 +10,8 @@
 <PageTitle>@(detail?.Service?.Name ?? "Chi tiết dịch vụ")</PageTitle>
 
 <div class="home-page pd-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.ProductDetail" />
+<TopBar />
     <Header />
     <Navigation />
 
@@ -60,7 +61,7 @@
                     <div class="pd-two-col">
                         <div class="pd-media">
                             <div class="pd-main-img">
-                                <img src="@currentImage" alt="@service.Name" />
+                                <img src="@currentImage" alt="@service.Name" fetchpriority="high" decoding="async" />
                                 @if (images.Length > 1)
                                 {
                                     <button type="button" class="pd-thumb-nav" aria-label="Ảnh trước" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);z-index:2" @onclick="PrevImage">‹</button>
@@ -79,7 +80,7 @@
                                                     class="pd-thumb @(idx == selectedImageIndex ? "is-active" : null)"
                                                     aria-label="@($"Xem ảnh {idx + 1}")"
                                                     @onclick="() => selectedImageIndex = idx">
-                                                <img src="@images[idx]" alt="" />
+                                                <img src="@images[idx]" alt="" loading="lazy" decoding="async" />
                                             </button>
                                         }
                                     </div>

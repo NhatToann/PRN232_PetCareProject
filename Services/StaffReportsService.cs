@@ -6,15 +6,20 @@ namespace PetShop.Services
     /// <summary>
     /// Nghiệp vụ báo cáo/dashboard cho khu vực nhân viên.
     ///
-    /// Hằng số <see cref="SpaUnitPrice"/> giữ nguyên mốc 250.000đ/spa như bản gốc
-    /// (mỗi lịch spa "Hoàn thành" tính một đơn vị).
+    /// <para>
+    /// Doanh thu spa được tính từ DỮ LIỆU THẬT: tổng <c>unit_price × quantity</c>
+    /// của các dòng <c>BookingService</c> (fallback: số tiền đã thanh toán trong
+    /// bảng <c>Payments</c>). Trước đây mọi lịch spa đều được tính cứng
+    /// 250.000đ ⇒ báo cáo sai lệch so với thực tế.
+    /// </para>
     /// </summary>
     public sealed class StaffReportsService : IStaffReportsService
     {
-        /// <summary>Giá trị đơn hàng cho mỗi lịch spa hoàn thành (giữ nguyên bản gốc).</summary>
-        private const decimal SpaUnitPrice = 250000m;
-
-        private const string SpaServiceName = "Tắm sấy trọn gói - 250.000đ";
+        /// <summary>
+        /// Giá dự phòng khi lịch spa không có dòng dịch vụ lẫn giao dịch thanh toán
+        /// (dữ liệu cũ tạo booking trước khi có bảng Booking_Service).
+        /// </summary>
+        private const decimal SpaFallbackUnitPrice = 250000m;
 
         private readonly IStaffReportsRepository _repository;
         private readonly ILogger<StaffReportsService> _logger;
@@ -36,14 +41,18 @@ namespace PetShop.Services
 
             var allOrders = await _repository.GetAllOrdersAsync(ct);
             var completedSpas = await _repository.GetCompletedBookingsAsync(ct);
+            var spaPayments = await _repository.GetPaidSpaPaymentsAsync(ct);
+
+            // Doanh thu spa theo giá THẬT của từng booking.
+            var spaAmounts = BuildSpaAmountMap(completedSpas, spaPayments);
 
             var validOrders = allOrders
                 .Where(o => o.Status == "Hoàn thành" || o.PaymentStatus == "Đã thanh toán")
                 .ToList();
 
-            var spaToday = completedSpas.Count(b => b.AppointmentStart.Date == today) * SpaUnitPrice;
-            var spaWeek = completedSpas.Count(b => b.AppointmentStart.Date >= startOfWeek) * SpaUnitPrice;
-            var spaMonth = completedSpas.Count(b => b.AppointmentStart.Date >= startOfMonth) * SpaUnitPrice;
+            var spaToday = SumSpa(completedSpas, spaAmounts, b => b.AppointmentStart.Date == today);
+            var spaWeek = SumSpa(completedSpas, spaAmounts, b => b.AppointmentStart.Date >= startOfWeek);
+            var spaMonth = SumSpa(completedSpas, spaAmounts, b => b.AppointmentStart.Date >= startOfMonth);
 
             var summary = new StaffRevenueSummaryDto
             {
@@ -59,7 +68,7 @@ namespace PetShop.Services
                 summary.LineLabels.Add(targetDate.ToString("dd/MM"));
 
                 var orderSum = validOrders.Where(o => o.OrderDate.Date == targetDate).Sum(o => o.TotalAmount);
-                var spaSum = completedSpas.Count(b => b.AppointmentStart.Date == targetDate) * SpaUnitPrice;
+                var spaSum = SumSpa(completedSpas, spaAmounts, b => b.AppointmentStart.Date == targetDate);
                 summary.LineData.Add(orderSum + spaSum);
             }
 
@@ -91,7 +100,48 @@ namespace PetShop.Services
                 .Take(3)
                 .ToList();
 
+            // Tỷ lệ từng dịch vụ spa — tính từ dữ liệu thật, KHÔNG cộng số bùa
+            // (trước đây là "topSpaCount + 5" và "topSpaCount + 2").
+            summary.SpaServiceShares = BuildSpaServiceShares(completedSpas);
+
             return summary;
+        }
+
+        /// <summary>
+        /// Thống kê số lượt theo từng dịch vụ spa trong các booking đã hoàn thành.
+        /// </summary>
+        private static List<StaffSpaServiceShareDto> BuildSpaServiceShares(IReadOnlyList<Booking> completedSpas)
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var b in completedSpas)
+            {
+                foreach (var bs in b.BookingServices)
+                {
+                    var name = bs.Service?.Name;
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    counts[name!] = counts.TryGetValue(name!, out var c)
+                        ? c + Math.Max(bs.Quantity, 1)
+                        : Math.Max(bs.Quantity, 1);
+                }
+            }
+
+            var total = counts.Values.Sum();
+
+            return counts
+                .OrderByDescending(kv => kv.Value)
+                .Take(6)
+                .Select(kv => new StaffSpaServiceShareDto
+                {
+                    Name = kv.Key,
+                    Count = kv.Value,
+                    Percent = total > 0 ? Math.Round(kv.Value * 100m / total, 1) : 0m
+                })
+                .ToList();
         }
 
         public async Task<StaffDashboardMetricsDto> GetDashboardMetricsAsync(CancellationToken ct = default)
@@ -102,13 +152,16 @@ namespace PetShop.Services
 
             var allOrders = await _repository.GetAllOrdersAsync(ct);
             var completedSpas = await _repository.GetCompletedBookingsAsync(ct);
+            var spaPayments = await _repository.GetPaidSpaPaymentsAsync(ct);
+
+            var spaAmounts = BuildSpaAmountMap(completedSpas, spaPayments);
 
             var paidOrders = allOrders
                 .Where(o => o.Status == "Hoàn thành" || o.PaymentStatus == "Đã thanh toán")
                 .ToList();
 
-            var spaRevToday = completedSpas.Count(b => b.AppointmentStart.Date == today) * SpaUnitPrice;
-            var spaRevWeek = completedSpas.Count(b => b.AppointmentStart.Date >= startOfWeek) * SpaUnitPrice;
+            var spaRevToday = SumSpa(completedSpas, spaAmounts, b => b.AppointmentStart.Date == today);
+            var spaRevWeek = SumSpa(completedSpas, spaAmounts, b => b.AppointmentStart.Date >= startOfWeek);
 
             var metrics = new StaffDashboardMetricsDto
             {
@@ -131,7 +184,7 @@ namespace PetShop.Services
                 metrics.LineLabels.Add(targetDate.ToString("dd/MM"));
 
                 var orderSum = paidOrders.Where(o => o.OrderDate.Date == targetDate).Sum(o => o.TotalAmount);
-                var spaSum = completedSpas.Count(b => b.AppointmentStart.Date == targetDate) * SpaUnitPrice;
+                var spaSum = SumSpa(completedSpas, spaAmounts, b => b.AppointmentStart.Date == targetDate);
                 metrics.LineData.Add(orderSum + spaSum);
             }
 
@@ -144,26 +197,49 @@ namespace PetShop.Services
         {
             var rawBookings = await _repository.GetAllBookingsAsync(ct);
 
-            // Tên khách / thú cưng hiển thị cố định theo bản gốc (dữ liệu demo trước đây).
-            var randomNames = new[] { "Trần Bích Ngọc", "Lê Minh Khang", "Nguyễn Hoàng Yến", "Phạm Tuấn Anh", "Vũ Mai Phương" };
-            var randomPets = new[] { "Lu (Corgi)", "Mập (Mèo Anh)", "Milo (Poodle)", "Bull (Pug)", "Bông (Husky)" };
-
-            return rawBookings.Select((b, index) =>
-            {
-                var pet = randomPets[index % randomPets.Length];
-                var breed = pet.Contains('(') ? pet.Split('(')[1].Trim(')') : string.Empty;
-
-                return new StaffBookingListItemDto
+            // KHÔNG dùng tên ngẫu nhiên từ mảng hardcode.
+            // Trước đây service gán "Trần Bích Ngọc / Lu (Corgi) / ..." theo thứ tự
+            // index ⇒ mọi lịch hẹn hiển thị tên khách/giống thú cưng GIẢ, không
+            // khớp với dữ liệu thật trong DB. Nay lấy thẳng từ quan hệ
+            // Customer / Pet / Breed / BookingService đã Include sẵn.
+            return rawBookings
+                .Select(b => new StaffBookingListItemDto
                 {
                     BookingId = b.BookingId,
-                    CustomerName = randomNames[index % randomNames.Length],
-                    PetName = pet.Split(' ')[0],
-                    PetBreed = breed,
+                    CustomerName = string.IsNullOrWhiteSpace(b.Customer?.Name) ? "Khách hàng" : b.Customer!.Name,
+                    PetName = string.IsNullOrWhiteSpace(b.Pet?.PetName) ? "Thú cưng" : b.Pet!.PetName,
+                    PetBreed = string.IsNullOrWhiteSpace(b.Pet?.Breed?.BreedName) ? "—" : b.Pet!.Breed!.BreedName,
                     AppointmentStart = b.AppointmentStart,
-                    Status = b.Status ?? "Chờ xác nhận",
-                    ServiceName = SpaServiceName
-                };
-            }).ToList();
+                    Status = string.IsNullOrWhiteSpace(b.Status) ? "Chờ xác nhận" : b.Status!,
+                    ServiceName = BuildServiceName(b)
+                })
+                .ToList();
+        }
+
+        /// <summary>
+        /// Tên dịch vụ hiển thị cho một booking — ghép từ các dòng
+        /// <c>BookingService</c> trong DB. Nếu booking không có dòng dịch vụ thì
+        /// dùng tên trong <c>Note</c> (nếu có), cuối cùng mới là nhãn chung.
+        /// </summary>
+        private static string BuildServiceName(Booking booking)
+        {
+            var names = booking.BookingServices
+                .Where(bs => bs.Service is not null && !string.IsNullOrWhiteSpace(bs.Service.Name))
+                .Select(bs => bs.Service!.Name)
+                .Distinct()
+                .ToList();
+
+            if (names.Count > 0)
+            {
+                return string.Join(", ", names);
+            }
+
+            if (!string.IsNullOrWhiteSpace(booking.Note))
+            {
+                return booking.Note!.Trim();
+            }
+
+            return "Dịch vụ Spa";
         }
 
         public async Task<IReadOnlyList<StaffOrderListItemDto>> GetOrderListAsync(int take, CancellationToken ct = default)
@@ -237,6 +313,75 @@ namespace PetShop.Services
         {
             var bookings = await _repository.GetAllBookingsAsync(ct);
             return bookings.Count(b => b.AppointmentStart.Date == today);
+        }
+
+        /// <summary>
+        /// Bản đồ doanh thu (đồng) cho từng booking spa.
+        ///
+        /// <para>Thứ tự ưu tiên:</para>
+        /// <list type="number">
+        /// <item>Tổng <c>unit_price × quantity</c> của các dòng <c>BookingService</c> (giá thật).</item>
+        /// <item>Số tiền đã thanh toán trong bảng <c>Payments</c> (giao dịch PayOS).</item>
+        /// <item>Giá dự phòng cho booking cũ không có dòng dịch vụ lẫn giao dịch.</item>
+        /// </list>
+        /// </summary>
+        private static Dictionary<int, decimal> BuildSpaAmountMap(
+            IReadOnlyList<Booking> bookings,
+            IReadOnlyList<Payment> payments)
+        {
+            var paymentByBooking = new Dictionary<int, decimal>();
+            foreach (var p in payments)
+            {
+                if (p.ReferenceId is int bookingId)
+                {
+                    paymentByBooking[bookingId] = paymentByBooking.TryGetValue(bookingId, out var current)
+                        ? current + p.Amount
+                        : p.Amount;
+                }
+            }
+
+            var map = new Dictionary<int, decimal>();
+            foreach (var b in bookings)
+            {
+                var fromServices = b.BookingServices
+                    .Where(bs => bs.Service != null)
+                    .Sum(bs => (bs.UnitPrice ?? bs.Service?.Price ?? 0m) * (bs.Quantity <= 0 ? 1 : bs.Quantity));
+
+                if (fromServices > 0)
+                {
+                    map[b.BookingId] = fromServices;
+                }
+                else if (paymentByBooking.TryGetValue(b.BookingId, out var paid))
+                {
+                    map[b.BookingId] = paid;
+                }
+                else
+                {
+                    map[b.BookingId] = SpaFallbackUnitPrice;
+                }
+            }
+
+            return map;
+        }
+
+        /// <summary>Tổng doanh thu spa theo điều kiện lọc trên thời gian bắt đầu.</summary>
+        private static decimal SumSpa(
+            IReadOnlyList<Booking> bookings,
+            IReadOnlyDictionary<int, decimal> amounts,
+            Func<Booking, bool> predicate)
+        {
+            decimal sum = 0m;
+            foreach (var b in bookings)
+            {
+                if (!predicate(b))
+                {
+                    continue;
+                }
+
+                sum += amounts.TryGetValue(b.BookingId, out var amount) ? amount : SpaFallbackUnitPrice;
+            }
+
+            return sum;
         }
     }
 }

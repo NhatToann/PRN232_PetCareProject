@@ -9,10 +9,11 @@
 <PageTitle>Chi tiết đặt lịch spa - Pet Toy Shop</PageTitle>
 
 <div class="home-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Orders" />
+<TopBar />
     <PageContextBar Title="Chi tiết đặt lịch spa" />
 
-    <CustomerOnlyGuard>
+    <RouteGuard AllowedRoles="customer">
     <main class="spa-cart-page">
         <div class="container">
             @if (isLoading)
@@ -55,7 +56,7 @@
                     <article class="spa-history-card spa-booking-detail-card">
                         <section class="spa-history-card__media">
                             <div class="spa-history-card__image" style="padding:0;overflow:hidden;background:#f1f5f9">
-                                <img src="@GetSpaServiceThumb(primaryName)" alt="@primaryName" />
+                                <img src="@GetSpaServiceThumb(primaryName)" alt="@primaryName" loading="lazy" decoding="async" />
                             </div>
 
                             <div class="spa-history-card__info">
@@ -142,7 +143,7 @@
                                     <div class="order-hist-line">
                                         <div class="order-hist-line__main">
                                             <div class="order-hist-line__thumb">
-                                                <img src="@GetSpaServiceThumb(item.ServiceName)" alt="@item.ServiceName" />
+                                                <img src="@GetSpaServiceThumb(item.ServiceName)" alt="@item.ServiceName" loading="lazy" decoding="async" />
                                             </div>
                                             <div>
                                                 <div class="order-hist-line__title">@(string.IsNullOrWhiteSpace(item.ServiceName) ? "Dịch vụ spa" : item.ServiceName)</div>
@@ -163,7 +164,7 @@
     </main>
 
     <Footer />
-    </CustomerOnlyGuard>
+    </RouteGuard>
 </div>
 
 @code {
@@ -250,6 +251,14 @@
         paymentLoading = false;
         if (res.IsSuccess && res.Data is not null && !string.IsNullOrWhiteSpace(res.Data.CheckoutUrl))
         {
+            // Lưu dự phòng vào localStorage — trường hợp PayOS redirect về mà
+            // query string bị rút gọn thì trang hóa đơn vẫn tìm được booking.
+            await JS.InvokeVoidAsync(
+                "localStorage.setItem",
+                SpaCart.PendingSpaBookingKey,
+                System.Text.Json.JsonSerializer.Serialize(
+                    new SpaCart.PendingSpaBooking(invoice.BookingId, new List<int> { invoice.BookingId }, res.Data.OrderCode)));
+
             Navigation.NavigateTo(res.Data.CheckoutUrl, forceLoad: true);
             return;
         }
@@ -266,7 +275,8 @@
         if (!confirm) return;
 
         isCancelling = true;
-        var res = await SpaClient.UpdateStatusAsync(invoice.BookingId, CurrentCustomerId, PetShop.Models.SpaBookingStatus.Cancelled);
+        // Endpoint RIÊNG cho khách hàng — endpoint /status yêu cầu StaffOrAdmin ⇒ 403.
+        var res = await SpaClient.CancelBookingAsync(invoice.BookingId, CurrentCustomerId);
         isCancelling = false;
 
         if (!res.IsSuccess)

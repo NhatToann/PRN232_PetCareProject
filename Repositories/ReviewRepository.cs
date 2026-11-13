@@ -102,6 +102,7 @@ namespace PetShop.Repositories
             }
 
             var existing = await _db.Reviews
+                .AsTracking()
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == productId &&
                     r.CustomerId == customerId &&

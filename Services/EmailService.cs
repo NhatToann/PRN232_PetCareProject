@@ -56,10 +56,10 @@ namespace PetShop.Services
                 {
                     ItemName = Escape(i.ItemName),
                     Quantity = i.Quantity,
-                    UnitPrice = i.UnitPrice.ToString("N0"),
-                    LineTotal = (i.Quantity * i.UnitPrice).ToString("N0")
+                    UnitPrice = PetShop.Components.Shared.Format.VndNumber(i.UnitPrice),
+                    LineTotal = PetShop.Components.Shared.Format.VndNumber(i.Quantity * i.UnitPrice)
                 }),
-                TotalAmount = totalAmount.ToString("N0")
+                TotalAmount = PetShop.Components.Shared.Format.VndNumber(totalAmount)
             });
 
             await SendHtmlEmailAsync(toEmail, subject, html, ct);
@@ -95,10 +95,10 @@ namespace PetShop.Services
                     {
                         ItemName = EscapeHtmlMinimal(i.ItemName),
                         Quantity = i.Quantity,
-                        UnitPrice = i.UnitPrice.ToString("N0"),
-                        LineTotal = (i.Quantity * i.UnitPrice).ToString("N0")
+                        UnitPrice = PetShop.Components.Shared.Format.VndNumber(i.UnitPrice),
+                        LineTotal = PetShop.Components.Shared.Format.VndNumber(i.Quantity * i.UnitPrice)
                     }),
-                    TotalAmount = totalAmount.ToString("N0")
+                    TotalAmount = PetShop.Components.Shared.Format.VndNumber(totalAmount)
                 });
             }
             else
@@ -113,10 +113,10 @@ namespace PetShop.Services
                     {
                         ItemName = Escape(i.ItemName),
                         Quantity = i.Quantity,
-                        UnitPrice = i.UnitPrice.ToString("N0"),
-                        LineTotal = (i.Quantity * i.UnitPrice).ToString("N0")
+                        UnitPrice = PetShop.Components.Shared.Format.VndNumber(i.UnitPrice),
+                        LineTotal = PetShop.Components.Shared.Format.VndNumber(i.Quantity * i.UnitPrice)
                     }),
-                    TotalAmount = totalAmount.ToString("N0")
+                    TotalAmount = PetShop.Components.Shared.Format.VndNumber(totalAmount)
                 });
             }
 
@@ -155,8 +155,8 @@ namespace PetShop.Services
                 Days = days,
                 Pets = pets,
                 Notes = EscapeHtmlMinimal(notes ?? ""),
-                PricePerDay = pricePerDay.ToString("N0"),
-                TotalPrice = totalPrice.ToString("N0"),
+                PricePerDay = PetShop.Components.Shared.Format.VndNumber(pricePerDay),
+                TotalPrice = PetShop.Components.Shared.Format.VndNumber(totalPrice),
                 PaymentMethodLabel = EscapeHtmlMinimal(paymentMethodLabel),
                 PaymentStatusLabel = EscapeHtmlMinimal(paymentStatusLabel),
                 PaymentStatusClass = statusIsPaid ? "payment-badge--paid" : "payment-badge--unpaid"

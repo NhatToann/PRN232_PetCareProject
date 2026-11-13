@@ -12,6 +12,9 @@ namespace PetShop.Services
     /// </summary>
     public sealed partial class PayOSService
     {
+        /// <summary>
+        /// Cập nhật trạng thái cho MỘT booking.
+        /// </summary>
         private async Task UpdateSpaBookingStatusAsync(int? bookingId, string status, CancellationToken ct)
         {
             if (!bookingId.HasValue)
@@ -19,7 +22,9 @@ namespace PetShop.Services
                 return;
             }
 
-            var booking = await _db.Bookings.FirstOrDefaultAsync(b => b.BookingId == bookingId.Value, ct);
+            var booking = await _db.Bookings
+                .AsTracking()
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId.Value, ct);
             if (booking is null)
             {
                 return;
@@ -30,6 +35,87 @@ namespace PetShop.Services
             await _db.SaveChangesAsync(ct);
         }
 
+        /// <summary>
+        /// Cập nhật trạng thái cho TẤT CẢ các booking thuộc cùng một payment.
+        ///
+        /// <para>
+        /// <b>Vì sao cần:</b> khách có thể đặt spa cho N pet ⇒ hệ thống tạo N booking
+        /// (mỗi pet 1 booking) nhưng gộp thành MỘT payment PayOS. Payment lưu
+        /// <c>ReferenceId</c> = booking đầu tiên và ghi danh sách booking trong
+        /// <c>Note</c> theo dạng <c>...; bookings=12,13,14</c>.
+        ///
+        /// Bản cũ chỉ gọi <c>UpdateSpaBookingStatusAsync(payment.ReferenceId)</c>
+        /// ⇒ chỉ booking đầu tiên được chuyển sang "Đã thanh toán", các booking
+        /// còn lại treo ở "Chờ thanh toán PayOS" vĩnh viễn ⇒ khách thấy đã trả tiền
+        /// nhưng lịch vẫn bị tính là chưa thanh toán ⇒ "đặt spa không ổn".
+        /// </para>
+        /// </summary>
+        private async Task UpdateSpaBookingsStatusAsync(Payment payment, string status, CancellationToken ct)
+        {
+            var bookingIds = ParseBookingIdsFromNote(payment.Note, payment.ReferenceId);
+
+            if (bookingIds.Count == 0)
+            {
+                return;
+            }
+
+            var bookings = await _db.Bookings
+                .AsTracking()
+                .Where(b => bookingIds.Contains(b.BookingId))
+                .ToListAsync(ct);
+
+            foreach (var booking in bookings)
+            {
+                booking.Status = status;
+                booking.UpdatedAt = DateTime.Now;
+            }
+
+            await _db.SaveChangesAsync(ct);
+
+            if (bookings.Count > 1)
+            {
+                _logger.Line($"[PayOS] Updated {bookings.Count} bookings to '{status}' for payment #{payment.PaymentId}.");
+            }
+        }
+
+        /// <summary>
+        /// Bóc danh sách booking id từ <c>Note</c> của payment.
+        /// Định dạng: <c>"...; bookings=12,13,14"</c>.
+        /// </summary>
+        private static List<int> ParseBookingIdsFromNote(string? note, int? fallbackReferenceId)
+        {
+            var result = new List<int>();
+
+            if (!string.IsNullOrWhiteSpace(note))
+            {
+                var marker = note.IndexOf("bookings=", StringComparison.OrdinalIgnoreCase);
+                if (marker >= 0)
+                {
+                    var tail = note[(marker + "bookings=".Length)..];
+
+                    // Danh sách id dùng dấu phẩy làm tách ("12,13,14") ⇒ phải cắt ở
+                    // dấu kết thúc mảng (chấm phẩy / khoảng trắng), KHÔNG cắt ở dấu phẩy.
+                    var end = tail.IndexOfAny(new[] { ';', ' ', '\r', '\n' });
+                    var segment = end >= 0 ? tail[..end] : tail;
+
+                    foreach (var part in segment.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    {
+                        if (int.TryParse(part, out var id) && id > 0 && !result.Contains(id))
+                        {
+                            result.Add(id);
+                        }
+                    }
+                }
+            }
+
+            if (result.Count == 0 && fallbackReferenceId.HasValue && fallbackReferenceId.Value > 0)
+            {
+                result.Add(fallbackReferenceId.Value);
+            }
+
+            return result;
+        }
+
         private async Task UpdateBoardingBookingStatusAsync(int? bookingId, string status, CancellationToken ct)
         {
             if (!bookingId.HasValue)
@@ -37,7 +123,9 @@ namespace PetShop.Services
                 return;
             }
 
-            var booking = await _db.BoardingBookings.FirstOrDefaultAsync(b => b.BookingId == bookingId.Value, ct);
+            var booking = await _db.BoardingBookings
+                .AsTracking()
+                .FirstOrDefaultAsync(b => b.BookingId == bookingId.Value, ct);
             if (booking is null)
             {
                 return;
@@ -115,6 +203,7 @@ namespace PetShop.Services
             }
 
             var order = await _db.Orders
+                .AsTracking()
                 .Include(o => o.OrderDetails)
                 .FirstOrDefaultAsync(o => o.OrderId == orderId.Value, ct);
             if (order is null)
@@ -132,17 +221,11 @@ namespace PetShop.Services
             }
             order.PaidAt = DateTime.Now;
 
-            // Tru stock cho tung san pham trong don hang
-            foreach (var detail in order.OrderDetails.Where(d => d.ProductId != null))
-            {
-                var product = await _db.Products.FirstOrDefaultAsync(p => p.ProductId == detail.ProductId, ct);
-                if (product != null && product.StockQuantity > 0)
-                {
-                    var qty = detail.Quantity ?? 1;
-                    product.StockQuantity = Math.Max(0, product.StockQuantity - qty);
-                }
-            }
-
+            // KHÔNG trừ tồn kho ở đây.
+            //
+            // Lý do: trừ kho chỉ thực hiện ở bước "nhân viên xác nhận đơn"
+            // (OrdersController.StaffConfirm). Trước đây cả webhook lẫn
+            // StaffConfirm đều trừ ⇒ đơn thanh toán PayOS bị trừ kho 2 LẦN.
             await _db.SaveChangesAsync(ct);
             _logger.Line($"[PayOS] Order #{orderId} updated. Status -> Chờ xác nhận, PaymentStatus -> Đã thanh toán.");
         }
@@ -154,7 +237,9 @@ namespace PetShop.Services
                 return;
             }
 
-            var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderId == orderId.Value, ct);
+            var order = await _db.Orders
+                .AsTracking()
+                .FirstOrDefaultAsync(o => o.OrderId == orderId.Value, ct);
             if (order is null)
             {
                 _logger.Line($"[PayOS] CancelOrder: Order #{orderId} not found.");
@@ -172,6 +257,29 @@ namespace PetShop.Services
             else
             {
                 _logger.Line($"[PayOS] Order #{orderId} has status '{order.Status}', not cancelling.");
+            }
+        }
+
+        /// <summary>
+        /// Gửi hoá đơn spa cho TẤT CẢ các booking thuộc cùng một payment.
+        ///
+        /// <para>
+        /// Bản cũ chỉ gửi cho <c>payment.ReferenceId</c> (booking đầu tiên) ⇒
+        /// khi khách đặt N pet (N booking) thì N-1 booking không có hoá đơn.
+        /// </para>
+        /// </summary>
+        private async Task SendSpaInvoicesEmailAsync(Payment payment, string paymentStatusLabel, CancellationToken ct)
+        {
+            var bookingIds = ParseBookingIdsFromNote(payment.Note, payment.ReferenceId);
+
+            if (bookingIds.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var bookingId in bookingIds)
+            {
+                await SendSpaInvoiceEmailAsync(bookingId, paymentStatusLabel, ct);
             }
         }
 

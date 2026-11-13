@@ -1,5 +1,17 @@
 @inherits LayoutComponentBase
 
+@* ------------------------------------------------------------------
+   Layout cho các trang không cần header/footer (login, register,
+   forgot password, 404).
+
+   Chỉ nạp CSS tối thiểu: base + auth. Trước đây App.razor nạp 380 KB ở
+   mọi trang ⇒ trang login cũng tải 380 KB ⇒ nút "Đăng nhập Google" hiện
+   ra chậm và gọi script GSI nhiều lần ⇒ log rác.
+   ------------------------------------------------------------------ *@
+<PageStyles CommonFiles="@PetShop.Services.CssBundle.Merge(
+    PetShop.Services.CssBundle.Common,
+    PetShop.Services.CssBundle.Auth)" />
+
 @Body
 
 <div id="blazor-error-ui">

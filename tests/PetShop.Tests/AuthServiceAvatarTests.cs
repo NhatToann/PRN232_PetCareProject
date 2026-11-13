@@ -57,6 +57,18 @@ public class AuthServiceAvatarTests
         public Task<string?> GetCustomerAvatarAsync(int customerId, CancellationToken ct = default)
             => Task.FromResult(LastAvatarUrl);
 
+        public Task<bool> UpdateCustomerAddressAsync(int customerId, string? address, CancellationToken ct = default)
+            => Task.FromResult(true);
+
+        public Task<string?> GetCustomerAddressAsync(int customerId, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+
+        public Task<bool> UpdateCustomerPhoneAsync(int customerId, string? phone, CancellationToken ct = default)
+            => Task.FromResult(true);
+
+        public Task<string?> GetCustomerPhoneAsync(int customerId, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+
         public Task<bool> UpdateCustomerBirthDateAsync(int customerId, DateTime? birthDate, CancellationToken ct = default)
         {
             UpdateBirthDateCallCount++;
@@ -109,7 +121,7 @@ public class AuthServiceAvatarTests
     {
         var config = new ConfigurationBuilder().Build();
         var factory = new NullHttpClientFactory();
-        return (new AuthService(repo, config, new FakeEmailService(), factory), repo);
+        return (new AuthService(repo, config, new FakeEmailService(), factory, new NullLogger<AuthService>()), repo);
     }
 
     [Fact]

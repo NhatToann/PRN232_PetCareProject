@@ -1,18 +1,20 @@
 /* ===================================================================
-   chatWidget.css — widget chat 1-1 khách ↔ nhân viên (Q21)
+   chatWidget.css — hộp thoại HỢP NHẤT (trợ lý AI + nhân viên).
 
-   Bổ sung MỚI, file riêng — KHÔNG sửa bất kỳ file CSS nào khác.
-   Tông màu theo bản gốc: cyan #6fd5dd + các biến màu đã có trong
-   css/template/home.css (--main-bg, --card-bg, --text, --text-light,
-   --text-dark, --border-radius, --shadow-light...).
+   REDESIGN 12/11/2026:
+     - MỘT panel duy nhất, MỘT luồng tin nhắn (không còn tab chia 2 mục).
+     - Mọi tin nhắn có AVATAR (người dùng / robot AI / nhân viên).
+     - Chọn đích đến nằm ở chip trong ô nhập, không phải tab.
 
-   KHÔNG dùng tím #4a2477 (theo ràng buộc Q18 — tông gốc).
+   File RIÊNG, KHÔNG sửa bất kỳ file CSS nào khác.
+   Tông màu đồng bộ: cyan #6fd5dd + #3a9ea8, header #176b78 → #2c9da5.
+   KHÔNG dùng tím #4a2477 (ràng buộc Q18).
    =================================================================== */
 
 .chat-widget {
     position: fixed;
-    right: 20px;
-    bottom: 20px;
+    right: 22px;
+    bottom: 22px;
     z-index: 10500;
     display: flex;
     flex-direction: column;
@@ -21,13 +23,64 @@
     font-family: inherit;
 }
 
-/* Chưa đăng nhập ⇒ giữ gốc trong DOM nhưng không hiển thị gì. */
-.chat-widget--hidden {
-    display: none;
+/* ---------------------------------------------------------------
+   GỠ VIỀN VUÔNG KHI HOVER / CLICK  (13/11/2026)
+
+   `index.css` có rule GLOBAL:
+       button:hover         { border-color: #646cff; }
+       button:focus         { outline: 4px auto -webkit-focus-ring-color; }
+       button:focus-visible { outline: 4px auto -webkit-focus-ring-color; }
+   ⇒ rê chuột hoặc CLICK vào nút "AI" / "Nhân viên" sinh viền vuông
+     (tím #646cff + focus-ring xanh mặc định của Chrome).
+
+   Sửa: chặn rule global trong phạm vi widget chat. CHỈ áp cho các nút
+   trơn (không có viền riêng) — không đụng `.chat-suggestion` (có viền
+   cyan) và `.chat-panel-close` (viền trắng).
+   --------------------------------------------------------------- */
+.chat-widget button:hover,
+.chat-widget button:active,
+.chat-widget button:focus {
+    border-color: transparent;
+    outline: none;
+}
+
+/* Giữ viền riêng của các nút có thiết kế (gợi ý nhanh, nút đóng). */
+.chat-widget .chat-suggestion:hover {
+    border-color: #6fd5dd;
+}
+
+.chat-widget .chat-suggestion:focus {
+    outline: none;
+}
+
+.chat-widget .chat-suggestion:focus-visible {
+    outline: 2px solid #6fd5dd;
+    outline-offset: 1px;
+}
+
+.chat-widget .chat-panel-close:hover {
+    border-color: #ffffff;
+}
+
+.chat-widget .chat-panel-close:focus {
+    outline: none;
+}
+
+.chat-widget .chat-panel-close:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
+}
+
+/* Vẫn giữ vòng focus cho bàn phím (accessibility) — dạng bo tròn, không vuông.
+   Dùng specificity CAO hơn rule reset ở trên để không bị ghi đè. */
+.chat-widget .chat-target-bar__item:focus-visible {
+    outline: 2px solid #3a9ea8;
+    outline-offset: 2px;
+    border-radius: 12px;
 }
 
 /* ---------------------------------------------------------------
-   Nút tròn nhỏ mở chat
+   Nút tròn mở chat
    --------------------------------------------------------------- */
 .chat-fab {
     position: relative;
@@ -55,10 +108,6 @@
     outline-offset: 3px;
 }
 
-.chat-fab--active {
-    background: linear-gradient(135deg, #3a9ea8, #6fd5dd);
-}
-
 .chat-fab-badge {
     position: absolute;
     top: -3px;
@@ -77,20 +126,19 @@
 }
 
 /* ---------------------------------------------------------------
-   Panel chat
+   Panel
    --------------------------------------------------------------- */
 .chat-panel {
-    width: 340px;
-    max-width: calc(100vw - 40px);
-    height: 460px;
-    max-height: calc(100vh - 110px);
+    width: min(400px, calc(100vw - 28px));
+    height: min(590px, calc(100dvh - 90px));
+    max-height: calc(100vh - 90px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: var(--card-bg, #ffffff);
-    border: 1px solid rgba(111, 213, 221, 0.35);
-    border-radius: var(--border-radius, 22px);
-    box-shadow: 0 18px 44px rgba(58, 158, 168, 0.22);
+    background: #ffffff;
+    border: 1px solid rgba(27, 91, 103, .12);
+    border-radius: 24px;
+    box-shadow: 0 24px 70px rgba(18, 61, 73, .24), 0 4px 14px rgba(18, 61, 73, .08);
     animation: chat-widget-rise 0.22s ease-out;
 }
 
@@ -99,6 +147,7 @@
         opacity: 0;
         transform: translateY(12px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -109,51 +158,78 @@
 .chat-panel-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 14px 16px;
-    background: linear-gradient(135deg, #6fd5dd, #3a9ea8);
+    gap: 12px;
+    min-height: 76px;
+    padding: 15px 18px;
+    background: linear-gradient(120deg, #176b78 0%, #2c9da5 100%);
     color: #ffffff;
+}
+
+/* Logo robot lớn, nổi bật ở góc trái header */
+.chat-panel-logo {
+    flex: 0 0 auto;
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, .16);
+    border: 1px solid rgba(255, 255, 255, .3);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25);
+}
+
+.chat-bot-icon {
+    display: block;
+    width: 30px;
+    height: 30px;
 }
 
 .chat-panel-title {
     display: flex;
+    flex: 1;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     min-width: 0;
 }
 
 .chat-panel-title-text {
-    font-size: 1rem;
+    font-size: 15px;
     font-weight: 700;
-    letter-spacing: 0.2px;
+    letter-spacing: .1px;
 }
 
 .chat-panel-status {
     font-size: 11px;
-    opacity: 0.92;
+    opacity: .9;
 }
 
-.chat-panel-status--offline {
-    opacity: 0.8;
+.chat-panel-status-sep {
+    padding: 0 4px;
+    opacity: .65;
 }
 
 .chat-panel-close {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: none;
+    box-sizing: border-box;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    padding: 0;
+    border: 2px solid #ffffff;
+    border-radius: 10px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.2);
+    background: #14535d;
     color: #ffffff;
-    transition: background 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0, 34, 40, .28);
+    transition: background .18s ease, color .18s ease;
 }
 
 .chat-panel-close:hover {
-    background: rgba(255, 255, 255, 0.35);
+    background: #ffffff;
+    color: #14535d;
 }
 
 .chat-panel-close:focus-visible {
@@ -161,79 +237,233 @@
     outline-offset: 2px;
 }
 
-/* --- Dropdown đối tác --- */
-.chat-peer-picker {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    background: var(--card-bg-alt, #f8f3fa);
-    border-bottom: 1px solid rgba(111, 213, 221, 0.28);
+.chat-panel-close > svg {
+    display: block;
+    width: 18px;
+    min-width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
 }
 
-.chat-peer-label {
-    font-size: 12px;
+/* ---------------------------------------------------------------
+   Avatar dùng chung (người dùng / AI / nhân viên)
+   --------------------------------------------------------------- */
+.chat-avatar {
+    width: var(--chat-avatar-size, 34px);
+    height: var(--chat-avatar-size, 34px);
+    flex: 0 0 var(--chat-avatar-size, 34px);
+    border-radius: 50%;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    user-select: none;
+    background: #e6eef0;
+}
+
+.chat-avatar__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.chat-avatar__initials {
+    font-size: calc(var(--chat-avatar-size, 34px) * .38);
     font-weight: 700;
-    color: var(--text-light, #8b8498);
-    white-space: nowrap;
+    color: #ffffff;
+    letter-spacing: .02em;
 }
 
-.chat-peer-select {
-    flex: 1;
-    min-width: 0;
-    padding: 7px 10px;
-    font-size: 13px;
-    color: var(--text-dark, #2a2438);
-    background: #ffffff;
-    border: 1px solid rgba(111, 213, 221, 0.5);
-    border-radius: 10px;
-    cursor: pointer;
+/* Trợ lý AI — icon robot nội tuyến, không phụ thuộc file ảnh ngoài. */
+.chat-avatar--ai {
+    background: linear-gradient(135deg, #6fd5dd, #2c9da5);
+    color: #ffffff;
 }
 
-.chat-peer-select:focus-visible {
-    outline: 2px solid #6fd5dd;
-    outline-offset: 1px;
+/* Icon robot to & rõ: chiếm 72% khung avatar, nét đậm. */
+.chat-avatar__robot {
+    width: calc(var(--chat-avatar-size, 34px) * .72);
+    height: calc(var(--chat-avatar-size, 34px) * .72);
+    stroke-width: 2;
 }
 
-/* --- Khung tin nhắn --- */
+/* Người dùng — ảnh thật; fallback initials nền cam. */
+.chat-avatar--user {
+    background: linear-gradient(135deg, #f0a868, #e0743f);
+}
+
+/* Nhân viên — fallback initials; màu theo vai trò. */
+.chat-avatar--staff {
+    background: linear-gradient(135deg, #4fb3c4, #2b8b9b);
+}
+
+.chat-avatar--doctor {
+    background: linear-gradient(135deg, #63b3ed, #3a86c8);
+}
+
+.chat-avatar--admin {
+    background: linear-gradient(135deg, #8e8bb8, #5f5b8a);
+}
+
+/* ---------------------------------------------------------------
+   Khung tin nhắn — MỘT danh sách chung cho AI + nhân viên
+   --------------------------------------------------------------- */
 .chat-messages {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 14px;
+    overscroll-behavior: contain;
+    padding: 18px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    background: var(--main-bg, #faf7fb);
+    gap: 12px;
+    background: #f7f9f9;
+}
+
+/* ⚠️ KHÔNG khai báo `scrollbar-width` / `scrollbar-color` ở rule gốc.
+   Từ Chrome 121+, nếu 2 thuộc tính này khác `auto` thì toàn bộ pseudo
+   `::-webkit-scrollbar-*` bị BỎ QUA ⇒ mất thiết kế gradient.
+   ⇒ Chỉ dùng `::-webkit-scrollbar` cho Chrome/Edge/Safari,
+     còn Firefox (không hỗ trợ pseudo) mới dùng rule trong @supports bên dưới. */
+
+/* Rãnh cuộn: nền rất nhạt + viền mảnh cho "ăn" vào khung */
+.chat-messages::-webkit-scrollbar {
+    width: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+    background: linear-gradient(90deg, rgba(58, 158, 168, .06), rgba(58, 158, 168, .02));
+    border-radius: 999px;
+    margin: 4px 0;
+}
+
+/* Con trượt: gradient cyan + bóng nhẹ, bo tròn */
+.chat-messages::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #a8d8de 0%, #6fbcc4 55%, #4fa8b2 100%);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .55);
+    transition: background .2s ease;
+}
+
+/* Khi rê chuột lên con trượt ⇒ đậm hơn, dễ kéo */
+.chat-messages::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #8ecdd5 0%, #4fa8b2 55%, #3a9ea8 100%);
+    background-clip: padding-box;
+}
+
+/* Khoảng trống góc dưới bên phải */
+.chat-messages::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Firefox — chỉ khi trình duyệt KHÔNG hỗ trợ pseudo webkit */
+@supports not selector(::-webkit-scrollbar) {
+    .chat-messages {
+        scrollbar-width: thin;
+        scrollbar-color: #9ecfd6 transparent;
+    }
 }
 
 .chat-empty {
     margin: auto;
-    padding: 18px 12px;
+    padding: 24px 18px;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-width: 280px;
+    color: #718589;
     font-size: 13px;
-    color: var(--text-light, #8b8498);
+    line-height: 1.55;
+}
+
+.chat-empty strong {
+    color: #345257;
+    font-size: 15px;
+    font-weight: 700;
 }
 
 .chat-empty--error {
     color: #c0392b;
 }
 
-.chat-row {
+.chat-suggestions {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    max-width: 82%;
+    gap: 7px;
+    width: 100%;
+    margin-top: 4px;
+}
+
+.chat-suggestion {
+    padding: 8px 12px;
+    font-size: 12.5px;
+    text-align: left;
+    color: #345257;
+    background: #ffffff;
+    border: 1px solid rgba(111, 213, 221, .5);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background .18s ease, border-color .18s ease;
+}
+
+.chat-suggestion:hover {
+    background: rgba(111, 213, 221, .12);
+    border-color: #6fd5dd;
+}
+
+.chat-suggestion:focus-visible {
+    outline: 2px solid #6fd5dd;
+    outline-offset: 1px;
+}
+
+/* --- Một hàng tin nhắn --- */
+.chat-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    max-width: 92%;
 }
 
 .chat-row--mine {
     align-self: flex-end;
-    align-items: flex-end;
+    flex-direction: row-reverse;
 }
 
 .chat-row--theirs {
     align-self: flex-start;
-    align-items: flex-start;
+}
+
+.chat-row__body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.chat-row--mine .chat-row__body {
+    align-items: flex-end;
+}
+
+.chat-row__meta {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 0 4px;
+}
+
+.chat-row__author {
+    font-size: 11px;
+    font-weight: 700;
+    color: #345257;
+}
+
+.chat-row__role {
+    font-size: 10px;
+    color: #8b9b9e;
 }
 
 .chat-bubble {
@@ -247,60 +477,226 @@
 
 .chat-row--theirs .chat-bubble {
     background: #ffffff;
-    color: var(--text, #3d3550);
-    border: 1px solid rgba(111, 213, 221, 0.35);
+    color: #3d3550;
+    border: 1px solid rgba(111, 213, 221, .35);
     border-bottom-left-radius: 5px;
 }
 
 .chat-row--mine .chat-bubble {
-    background: linear-gradient(135deg, #6fd5dd, #3a9ea8);
+    background: linear-gradient(135deg, #218b96, #35aab0);
     color: #ffffff;
     border-bottom-right-radius: 5px;
 }
 
+/* Tin của nhân viên — viền xanh nhạt để phân biệt với AI. */
+.chat-row--staff .chat-bubble {
+    border-color: rgba(43, 139, 155, .3);
+}
+
+.chat-bubble--typing {
+    opacity: .75;
+    font-style: italic;
+}
+
 .chat-time {
     font-size: 10.5px;
-    color: var(--text-light, #8b8498);
+    color: #8b9b9e;
     padding: 0 4px;
 }
 
-/* --- Ô nhập + nút gửi --- */
+/* ---------------------------------------------------------------
+   Thanh chọn đích đến (nằm ngang dưới header) — icon + tên rút gọn
+
+   REDESIGN 13/11/2026 (hộp thư chung):
+     - Khách chỉ còn 2 nút: "AI" + "Nhân viên" (bỏ danh sách 18+ nhân viên).
+     - Nền khung chữ nhật chuyển sang XÁM (#f1f5f9) theo yêu cầu.
+   --------------------------------------------------------------- */
+.chat-target-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    background: #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* ⚠️ Xem giải thích ở `.chat-messages` — không khai báo scrollbar-width/color
+   ở rule gốc, nếu không Chrome 121+ sẽ bỏ qua toàn bộ pseudo webkit. */
+
+/* Thanh cuộn ngang — mảnh, bo tròn, ẩn cho tinh gọn */
+.chat-target-bar::-webkit-scrollbar {
+    height: 7px;
+}
+
+.chat-target-bar::-webkit-scrollbar-track {
+    background: linear-gradient(90deg, rgba(58, 158, 168, .07), rgba(58, 158, 168, .02));
+    border-radius: 999px;
+    margin: 2px 4px 0;
+}
+
+.chat-target-bar::-webkit-scrollbar-thumb {
+    background: linear-gradient(90deg, #b0dbe0 0%, #7dc3cb 50%, #5fb2ba 100%);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5);
+    transition: background .2s ease;
+}
+
+.chat-target-bar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(90deg, #93d0d8 0%, #5fb2ba 50%, #3a9ea8 100%);
+    background-clip: padding-box;
+}
+
+.chat-target-bar::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Firefox — chỉ khi trình duyệt KHÔNG hỗ trợ pseudo webkit */
+@supports not selector(::-webkit-scrollbar) {
+    .chat-target-bar {
+        scrollbar-width: thin;
+        scrollbar-color: #bcdde1 transparent;
+    }
+}
+
+.chat-target-bar__item {
+    flex: 0 0 auto;
+    width: 62px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+    transition: transform .18s ease;
+}
+
+.chat-target-bar__item:hover {
+    transform: translateY(-2px);
+}
+
+.chat-target-bar__item:focus-visible {
+    outline: 2px solid #3a9ea8;
+    outline-offset: 2px;
+    border-radius: 12px;
+}
+
+.chat-target-bar__label {
+    max-width: 62px;
+    font-size: 10.5px;
+    line-height: 1.25;
+    font-weight: 650;
+    color: #6c8085;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Nhãn vai trò — giúp phân biệt các đối tác TRÙNG TÊN
+   (staff "Nguyễn Văn A" vs admin "Nguyễn Văn A" — id các bảng trùng nhau). */
+.chat-target-bar__role {
+    max-width: 62px;
+    padding: 1px 5px;
+    font-size: 8.5px;
+    line-height: 1.4;
+    font-weight: 700;
+    letter-spacing: .2px;
+    text-align: center;
+    color: #5d8f96;
+    background: #eaf5f6;
+    border-radius: 999px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------
+   Hộp thư CHUNG của nhân viên (icon nhóm người) — 13/11/2026
+   --------------------------------------------------------------- */
+.chat-avatar--pool {
+    background: linear-gradient(135deg, #5ec4cf, #2c9da5);
+    color: #ffffff;
+}
+
+.chat-avatar__pool {
+    display: block;
+    width: calc(var(--chat-avatar-size, 34px) * .74);
+    height: calc(var(--chat-avatar-size, 34px) * .74);
+    stroke-width: 1.8;
+}
+
+/* Logo nhóm người ở header panel (nền trong suốt, nét trắng) */
+.chat-panel-logo--staff {
+    background: rgba(255, 255, 255, .16);
+}
+
+.chat-panel-logo--staff .chat-avatar__pool {
+    width: 30px;
+    height: 30px;
+}
+
+.chat-target-bar__item--active .chat-target-bar__label {
+    color: #176b78;
+}
+
+.chat-target-bar__item--active .chat-target-bar__role {
+    color: #ffffff;
+    background: #3a9ea8;
+}
+
+.chat-target-bar__item--active .chat-avatar {
+    box-shadow: 0 0 0 3px #ffffff, 0 0 0 5px #3a9ea8;
+}
+
+/* ---------------------------------------------------------------
+   Ô nhập
+   --------------------------------------------------------------- */
 .chat-composer {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 12px;
+    padding: 12px 14px;
     background: #ffffff;
-    border-top: 1px solid rgba(111, 213, 221, 0.28);
+    border-top: 1px solid #edf1f1;
 }
 
 .chat-input {
     flex: 1;
     min-width: 0;
-    padding: 9px 13px;
+    min-height: 44px;
+    padding: 10px 15px;
     font-size: 13.5px;
-    color: var(--text-dark, #2a2438);
-    background: var(--main-bg, #faf7fb);
-    border: 1px solid rgba(111, 213, 221, 0.45);
-    border-radius: 20px;
+    color: #2a2438;
+    background: #f7f9f9;
+    border: 1px solid #e0e9ea;
+    border-radius: 22px;
     outline: none;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    transition: border-color .2s ease, box-shadow .2s ease;
 }
 
 .chat-input:focus {
     border-color: #6fd5dd;
-    box-shadow: 0 0 0 3px rgba(111, 213, 221, 0.2);
+    box-shadow: 0 0 0 3px rgba(111, 213, 221, .2);
 }
 
 .chat-input:disabled {
-    opacity: 0.6;
+    opacity: .6;
     cursor: not-allowed;
 }
 
 .chat-send-btn {
-    width: 38px;
-    height: 38px;
-    flex-shrink: 0;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
     border-radius: 50%;
     border: none;
     cursor: pointer;
@@ -308,9 +704,9 @@
     align-items: center;
     justify-content: center;
     color: #ffffff;
-    background: linear-gradient(135deg, #6fd5dd, #3a9ea8);
-    box-shadow: 0 4px 12px rgba(111, 213, 221, 0.35);
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    background: linear-gradient(135deg, #218b96, #35aab0);
+    box-shadow: 0 4px 10px rgba(35, 139, 150, .2);
+    transition: transform .2s ease, opacity .2s ease;
 }
 
 .chat-send-btn:hover:not(:disabled) {
@@ -318,7 +714,7 @@
 }
 
 .chat-send-btn:disabled {
-    opacity: 0.5;
+    opacity: .5;
     cursor: not-allowed;
     box-shadow: none;
 }
@@ -328,8 +724,15 @@
     outline-offset: 2px;
 }
 
+.chat-send-btn > svg {
+    display: block;
+    width: 18px;
+    min-width: 18px;
+    height: 18px;
+}
+
 /* ---------------------------------------------------------------
-   Màn hình nhỏ — thu gọn panel
+   Màn hình nhỏ
    --------------------------------------------------------------- */
 @media (max-width: 480px) {
     .chat-widget {
@@ -339,7 +742,8 @@
 
     .chat-panel {
         width: calc(100vw - 24px);
-        height: 70vh;
+        height: min(590px, calc(100dvh - 82px));
+        max-height: calc(100vh - 82px);
     }
 
     .chat-fab {

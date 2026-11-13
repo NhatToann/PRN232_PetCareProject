@@ -1,0 +1,140 @@
+@page "/boarding"
+@inject PetShop.Interfaces.IBoardingService BoardingService
+@inject ILogger<Boarding> Logger
+
+<PageTitle>Phòng lưu trú – Pet Toy Shop</PageTitle>
+
+<div class="home-page boarding-page">
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Spa" />
+    <TopBar />
+    <Header />
+    <Navigation />
+
+    <main class="products-search-page">
+        <div class="container products-shell">
+            <div class="products-intro">
+                <div>
+                    <h1>Phòng lưu trú (Boarding)</h1>
+                    <p>Không gian lưu trú tiện nghi cho thú cưng khi bạn đi xa</p>
+                </div>
+                @if (!isLoading && error is null)
+                {
+                    <div class="products-badge">@rooms.Count loại phòng</div>
+                }
+            </div>
+
+            @if (isLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3 text-muted">Đang tải danh sách phòng...</p>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(error))
+            {
+                <div class="alert alert-danger rounded-4">
+                    <i class="fas fa-exclamation-circle me-2"></i> @error
+                </div>
+            }
+            else if (rooms.Count == 0)
+            {
+                <div class="text-center py-5 text-muted">Hiện chưa có phòng lưu trú nào.</div>
+            }
+            else
+            {
+                <div class="row g-4">
+                    @foreach (var room in rooms)
+                    {
+                        <div class="col-md-6 col-lg-4">
+                            <article class="fox-card p-4 h-100 border-0 shadow-sm">
+                                <img src="@RoomImage(room.RoomType)"
+                                     alt="@room.RoomName"
+                                     class="rounded-4 shadow-sm mb-3 w-100"
+                                     style="height:180px;object-fit:cover;"
+                                     loading="lazy" />
+
+                                <h3 class="fw-bold text-dark mb-1">@room.RoomName</h3>
+                                <div class="text-muted small mb-3">@RoomTypeLabel(room.RoomType)</div>
+
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <span class="fs-5 fw-bold text-success">
+                                        @PetShop.Components.Shared.Format.Vnd(room.PricePerDay)<span class="fs-6 text-muted">/ngày</span>
+                                    </span>
+                                    <span class="badge rounded-pill bg-primary-subtle text-primary">
+                                        @room.Rooms phòng
+                                    </span>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(room.Description))
+                                {
+                                    <p class="text-muted small flex-grow-1">@TrimDescription(room.Description)</p>
+                                }
+                            </article>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </main>
+
+    <Footer />
+</div>
+
+@code {
+    private IReadOnlyList<BoardingRoom> rooms = Array.Empty<BoardingRoom>();
+    private bool isLoading = true;
+    private string? error;
+
+    /// <summary>Ảnh minh hoạ theo loại phòng (file có thật trong <c>wwwroot/images</c>).</summary>
+    private static string RoomImage(string? roomType)
+    {
+        var t = (roomType ?? string.Empty).Trim().ToLowerInvariant();
+        if (t.Contains("vip")) return "/images/room-cat-vip1.jpg";
+        if (t.Contains("dog_large") || t.Contains("dog large")) return "/images/room-dog-large1.jpg";
+        if (t.Contains("dog_small") || t.Contains("dog small")) return "/images/room-dog-small1.jpg";
+        if (t.Contains("cat_large") || t.Contains("cat large")) return "/images/room-cat-normal2.jpg";
+        if (t.Contains("cat_small") || t.Contains("cat small")) return "/images/room-cat-normal3.jpg";
+        if (t.Contains("cat")) return "/images/room-cat-normal1.jpg";
+        return "/images/placeholder.jpg";
+    }
+
+    private static string RoomTypeLabel(string? roomType)
+    {
+        var t = (roomType ?? string.Empty).Trim().ToLowerInvariant();
+        return t switch
+        {
+            "cat" => "Phòng cho mèo",
+            "dog_large" => "Phòng cho chó lớn",
+            "dog_small" => "Phòng cho chó nhỏ",
+            _ => t.Length == 0 ? "Phòng lưu trú" : t,
+        };
+    }
+
+    /// <summary>Cắt bớt mô tả dài (seed có mô tả nhiều dòng) để hiển thị gọn.</summary>
+    private static string TrimDescription(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description)) return string.Empty;
+        var firstLine = description
+            .Split('\n', '\r')
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => l.Length > 0) ?? string.Empty;
+        return firstLine.Length > 160 ? firstLine[..160] + "..." : firstLine;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            rooms = await BoardingService.GetAllRoomsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LineError(ex, $"[Boarding] Không tải được danh sách phòng: {ex.Message}");
+            error = "Không tải được danh sách phòng lưu trú. Vui lòng thử lại.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

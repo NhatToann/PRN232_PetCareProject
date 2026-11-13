@@ -331,8 +331,17 @@ Cơ chế mới — `VerifyAndUpgradeAsync`:
 | `WorkScheduleDedupTests.cs` | 7 | Gom dòng lịch trùng, giữ `schedule_id` nhỏ nhất, tách theo staff / theo khung giờ, `StaffId = null` → key 0, sắp xếp |
 | `AuthServiceTests.cs` | 8 | BCrypt đúng/sai, migrate-on-login (customer + staff), không migrate khi sai mật khẩu, tài khoản bị khoá, tài khoản không tồn tại, mật khẩu rỗng |
 | `JwtTokenServiceTests.cs` | 8 | Phát hành/kiểm tra JWT: claim đầy đủ, chữ ký sai, token rỗng/rác, token hết hạn, khoá rỗng hoặc < 32 ký tự |
+| `AuthRouteContractTests.cs` | 20 | **Contract luồng quên mật khẩu**: route client phải khớp controller (đọc IL string literal), DTO không được có validation metadata đặt sai chỗ (`[property: Compare]` ⇒ 409), min/max length tách riêng, service layer so khớp mật khẩu |
+| `ForgotPasswordFlowTests.cs` | 6 | **Integration test HTTP THẬT** (`WebApplicationFactory`): chạy trọn luồng send-email-otp → verify-email-otp → reset-password → login trên DB thật; message lỗi đúng nghĩa (quá dài ≠ quá ngắn), OTP sai ⇒ 401, email không tồn tại ⇒ 404 |
+| `AuthClientTests.cs` | 8 | `AuthClient` gọi **đúng path** (`/api/auth/send-email-otp`, `/api/auth/verify-email-otp`, `/api/auth/reset-password`) và trả message tiếng Việt sạch thay vì JSON thô |
+| `ApiErrorMessageReaderTests.cs` | 10 | Parser lỗi: `ValidationProblemDetails` (gom `errors`), `{message}`, `ProblemDetails` (detail → title), body rỗng / không phải JSON |
 
-Chạy: `dotnet test` → **30 passed, 0 failed**.
+Chạy: `dotnet test` → **152 passed, 0 failed**.
+
+> **Bắt buộc:** khi sửa DTO có primary constructor, KHÔNG dùng `[property: Compare(...)]` —
+> ASP.NET Core ném `InvalidOperationException` ⇒ endpoint trả **409** ⇒ luồng quên mật khẩu
+> chết. Đã có `ForgotPasswordFlowTests` chặn regression này (test FAIL với `Conflict`
+> nếu attribute bị đặt lại sai chỗ).
 
 > Test project được thêm vào `PetShop_PRN222.sln`. `PetShop_PRN222.csproj` đã `Compile Remove="tests\**\*.cs"`
 > để web app không biên dịch nhầm file test.

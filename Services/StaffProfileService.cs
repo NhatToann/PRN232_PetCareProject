@@ -8,28 +8,38 @@ namespace PetShop.Services
     /// <summary>
     /// Đọc/ghi hồ sơ người dùng đang đăng nhập.
     ///
+    /// <para>
     /// Lưu ý về định danh: hệ thống đăng nhập trả về UserId theo bảng tương ứng với vai trò
     /// (Customer cho user, Staff cho staff, Admin cho admin). Vì vậy ta định vị bản ghi
     /// bằng email trước (email là duy nhất trong toàn hệ thống), rồi mới dùng id làm điều kiện
     /// kiểm tra bổ sung. Nhờ vậy không bao giờ ghi nhầm sang người khác chỉ vì id trùng.
+    /// </para>
+    ///
+    /// <para>
+    /// Dùng <see cref="IDbContextFactory{TContext}"/> thay vì <c>DbContext</c> scoped
+    /// để truy vấn hồ sơ (chạy trong layout) không xung đột với truy vấn dashboard
+    /// (chạy trong page) khi Blazor Server render đồng thời.
+    /// </para>
     /// </summary>
     public sealed class StaffProfileService : IStaffProfileService
     {
-        private readonly ShopPetDatabaseContext _db;
+        private readonly IDbContextFactory<ShopPetDatabaseContext> _factory;
 
-        public StaffProfileService(ShopPetDatabaseContext db)
+        public StaffProfileService(IDbContextFactory<ShopPetDatabaseContext> factory)
         {
-            _db = db;
+            _factory = factory;
         }
 
         public async Task<StaffProfileDto?> GetProfileAsync(int userId, string? email, CancellationToken ct = default)
         {
             var normalizedEmail = (email ?? string.Empty).Trim().ToLowerInvariant();
 
+            await using var db = await _factory.CreateDbContextAsync(ct);
+
             // Ưu tiên bảng Staff — người dùng đang đăng nhập ở khu vực nhân viên.
             if (!string.IsNullOrWhiteSpace(normalizedEmail))
             {
-                var staff = await _db.Staff
+                var staff = await db.Staff
                     .AsNoTracking()
                     .FirstOrDefaultAsync(
                         s => (s.Email ?? string.Empty).Trim().ToLower() == normalizedEmail,
@@ -54,7 +64,7 @@ namespace PetShop.Services
             }
 
             // Không có email khớp ở bảng Staff → tìm trong bảng Customer.
-            var customer = await _db.Customers
+            var customer = await db.Customers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
                     c => !string.IsNullOrWhiteSpace(normalizedEmail)
@@ -64,7 +74,7 @@ namespace PetShop.Services
             if (customer is null && userId > 0)
             {
                 // Dự phòng: không có email (ví dụ đăng nhập bằng Google mà DB chưa đồng bộ) → dùng id.
-                customer = await _db.Customers
+                customer = await db.Customers
                     .AsNoTracking()
                     .FirstOrDefaultAsync(c => c.CustomerId == userId, ct);
             }
@@ -91,7 +101,8 @@ namespace PetShop.Services
 
             if (!string.IsNullOrWhiteSpace(normalizedEmail))
             {
-                var staffId = await _db.Staff
+                await using var db = await _factory.CreateDbContextAsync(ct);
+                var staffId = await db.Staff
                     .AsNoTracking()
                     .Where(s => (s.Email ?? string.Empty).Trim().ToLower() == normalizedEmail)
                     .Select(s => (int?)s.StaffId)
@@ -109,15 +120,20 @@ namespace PetShop.Services
             return userId > 0 ? userId : 0;
         }
 
-        public async Task<bool> UpdateProfileAsync(StaffProfileDto profile, CancellationToken ct = default)        {
+        public async Task<bool> UpdateProfileAsync(StaffProfileDto profile, CancellationToken ct = default)
+        {
             if (profile.Id <= 0)
             {
                 return false;
             }
 
+            await using var db = await _factory.CreateDbContextAsync(ct);
+
             if (string.Equals(profile.Source, "staff", StringComparison.OrdinalIgnoreCase))
             {
-                var staff = await _db.Staff.FirstOrDefaultAsync(s => s.StaffId == profile.Id, ct);
+                var staff = await db.Staff
+                    .AsTracking()
+                    .FirstOrDefaultAsync(s => s.StaffId == profile.Id, ct);
                 if (staff is null)
                 {
                     return false;
@@ -126,11 +142,13 @@ namespace PetShop.Services
                 staff.Name = profile.Name;
                 staff.Phone = profile.Phone;
                 staff.Email = profile.Email;
-                await _db.SaveChangesAsync(ct);
+                await db.SaveChangesAsync(ct);
                 return true;
             }
 
-            var customer = await _db.Customers.FirstOrDefaultAsync(c => c.CustomerId == profile.Id, ct);
+            var customer = await db.Customers
+                .AsTracking()
+                .FirstOrDefaultAsync(c => c.CustomerId == profile.Id, ct);
             if (customer is null)
             {
                 return false;
@@ -139,7 +157,7 @@ namespace PetShop.Services
             customer.Name = profile.Name;
             customer.Phone = profile.Phone;
             customer.Email = profile.Email;
-            await _db.SaveChangesAsync(ct);
+            await db.SaveChangesAsync(ct);
             return true;
         }
     }

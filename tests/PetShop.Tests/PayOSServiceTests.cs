@@ -55,6 +55,25 @@ public class PayOSServiceTests
         "{\"code\":\"00\",\"data\":{\"orderCode\":123456789,\"status\":\"PAID\"}}";
 
     /// <summary>
+    /// Envelope webhook đúng chuẩn PayOS (mẫu trong tài liệu chính thức).
+    ///
+    /// <para>
+    /// Chú ý: <c>data</c> KHÔNG có field <c>status</c> — trạng thái thành công suy ra
+    /// từ <c>success = true</c> và <c>data.code = "00"</c>.
+    /// </para>
+    /// </summary>
+    private const string PayOSStandardWebhookBody =
+        "{\"code\":\"00\",\"desc\":\"success\",\"success\":true," +
+        "\"data\":{\"orderCode\":123456789,\"amount\":3000,\"description\":\"VQRIO123\"," +
+        "\"accountNumber\":\"12345678\",\"reference\":\"TF230204212323\"," +
+        "\"transactionDateTime\":\"2023-02-04 18:25:00\",\"currency\":\"VND\"," +
+        "\"paymentLinkId\":\"124c33293c43417ab7879e14c8d9eb18\",\"code\":\"00\"," +
+        "\"desc\":\"Thành công\",\"counterAccountBankId\":\"\",\"counterAccountBankName\":\"\"," +
+        "\"counterAccountName\":\"\",\"counterAccountNumber\":\"\",\"virtualAccountName\":\"\"," +
+        "\"virtualAccountNumber\":\"\"}," +
+        "\"signature\":\"8d8640d802576397a1ce45ebda7f835055768ac7ad2e0bfb77f9b8f12cca4c7f\"}";
+
+    /// <summary>
     /// Tính HMAC-SHA256 giống hệt <c>ComputeHmac</c> của service:
     /// key = UTF8(ChecksumKey), data = UTF8(raw body), hash = hex lowercase (<c>x2</c>).
     /// </summary>
@@ -70,6 +89,37 @@ public class PayOSServiceTests
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Dựng chữ ký webhook theo đúng thuật toán PayOS:
+    /// lấy <c>data</c>, sort key alphabet, ghép <c>k=v&amp;k=v</c>, HMAC-SHA256 với checksum key.
+    /// </summary>
+    private static string ComputePayOSWebhookSignature(string rawBody, string key)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(rawBody);
+        var data = doc.RootElement.GetProperty("data");
+
+        var pairs = new List<KeyValuePair<string, string>>();
+        foreach (var prop in data.EnumerateObject())
+        {
+            string value = prop.Value.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Null => string.Empty,
+                System.Text.Json.JsonValueKind.String => prop.Value.GetString() ?? string.Empty,
+                System.Text.Json.JsonValueKind.Number => prop.Value.GetRawText(),
+                System.Text.Json.JsonValueKind.True => "true",
+                System.Text.Json.JsonValueKind.False => "false",
+                _ => prop.Value.GetRawText()
+            };
+
+            pairs.Add(new KeyValuePair<string, string>(prop.Name, value));
+        }
+
+        pairs.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+        var canonical = string.Join("&", pairs.Select(p => $"{p.Key}={p.Value}"));
+
+        return ComputeHmacHex(canonical, key);
     }
 
     private static PayOSService CreateService(HttpClient httpClient, string baseUrl = MerchantBaseUrl)
@@ -99,7 +149,7 @@ public class PayOSServiceTests
     public void VerifyWebhook_ChuKyDung_TraVeTrue()
     {
         var service = CreateService(new HttpClient());
-        var signature = ComputeHmacHex(RawWebhookBody, ChecksumKey);
+        var signature = ComputePayOSWebhookSignature(RawWebhookBody, ChecksumKey);
 
         Assert.True(service.VerifyWebhook(RawWebhookBody, signature));
     }
@@ -109,7 +159,7 @@ public class PayOSServiceTests
     {
         var service = CreateService(new HttpClient());
 
-        Assert.False(service.VerifyWebhook(RawWebhookBody, ComputeHmacHex(RawWebhookBody, "khoa-khac")));
+        Assert.False(service.VerifyWebhook(RawWebhookBody, ComputePayOSWebhookSignature(RawWebhookBody, "khoa-khac")));
     }
 
     [Fact]
@@ -125,7 +175,7 @@ public class PayOSServiceTests
     {
         // Nguồn dùng StringComparison.OrdinalIgnoreCase ⇒ chữ hoa/thường đều hợp lệ.
         var service = CreateService(new HttpClient());
-        var signature = ComputeHmacHex(RawWebhookBody, ChecksumKey);
+        var signature = ComputePayOSWebhookSignature(RawWebhookBody, ChecksumKey);
 
         Assert.True(service.VerifyWebhook(RawWebhookBody, signature.ToUpperInvariant()));
         Assert.True(service.VerifyWebhook(RawWebhookBody, signature.ToLowerInvariant()));
@@ -135,7 +185,7 @@ public class PayOSServiceTests
     public void VerifyWebhook_RawBodyRong_TraVeFalse()
     {
         var service = CreateService(new HttpClient());
-        var signature = ComputeHmacHex(RawWebhookBody, ChecksumKey);
+        var signature = ComputePayOSWebhookSignature(RawWebhookBody, ChecksumKey);
 
         Assert.False(service.VerifyWebhook(string.Empty, signature));
         Assert.False(service.VerifyWebhook("   ", signature));
@@ -152,17 +202,62 @@ public class PayOSServiceTests
     }
 
     [Fact]
-    public void VerifyWebhook_DungRawBodyKhongTaiSerialize_TraVeTrue()
+    public void VerifyWebhook_EnvelopePayOSChuan_TraVeTrue()
     {
-        // Payload có khoảng trắng/thứ tự field khác ⇒ re-serialize sẽ đổi chữ ký.
-        // Service phải ký đúng chuỗi raw nhận được (payload.GetRawText()).
-        const string raw = "{\n  \"data\" : {\n    \"status\": \"PAID\",\n    \"orderCode\": 42\n  },\n  \"code\": \"00\"\n}";
+        // Mẫu webhook chính thức PayOS (có data.code = "00", không có data.status).
+        var service = CreateService(new HttpClient());
+        var signature = ComputePayOSWebhookSignature(PayOSStandardWebhookBody, ChecksumKey);
+
+        Assert.True(service.VerifyWebhook(PayOSStandardWebhookBody, signature));
+    }
+
+    [Fact]
+    public void VerifyWebhook_KhongPhaiKyTrenToanBoRawBody_TraVeFalse()
+    {
+        // REGRESSION: bản cũ ký trên RAW BODY của cả envelope ⇒ không bao giờ khớp
+        // với chữ ký PayOS (PayOS ký trên object "data") ⇒ webhook luôn 401.
         var service = CreateService(new HttpClient());
 
-        Assert.True(service.VerifyWebhook(raw, ComputeHmacHex(raw, ChecksumKey)));
-        // Chữ ký của bản re-serialize (không giữ format) phải bị từ chối.
-        Assert.False(service.VerifyWebhook(raw, ComputeHmacHex(
-            "{\"data\":{\"status\":\"PAID\",\"orderCode\":42},\"code\":\"00\"}", ChecksumKey)));
+        // Chữ ký theo cách SAI (raw body) phải bị từ chối.
+        var wrongSignature = ComputeHmacHex(PayOSStandardWebhookBody, ChecksumKey);
+
+        Assert.False(service.VerifyWebhook(PayOSStandardWebhookBody, wrongSignature));
+    }
+
+    [Fact]
+    public void VerifyWebhook_ThayDoiData_SaiChuKy()
+    {
+        // Chống giả mạo: sửa 1 byte trong "data" ⇒ chữ ký phải không còn khớp.
+        var service = CreateService(new HttpClient());
+        var signature = ComputePayOSWebhookSignature(PayOSStandardWebhookBody, ChecksumKey);
+
+        var tampered = PayOSStandardWebhookBody.Replace("\"amount\":3000", "\"amount\":9999");
+
+        Assert.False(service.VerifyWebhook(tampered, signature));
+    }
+
+    [Fact]
+    public void VerifyWebhook_KhongCoData_TraVeFalse()
+    {
+        var service = CreateService(new HttpClient());
+
+        Assert.False(service.VerifyWebhook("{\"code\":\"00\",\"signature\":\"abc\"}", "abc"));
+    }
+
+    [Fact]
+    public void VerifyWebhook_JsonKhongHopLe_TraVeFalse()
+    {
+        var service = CreateService(new HttpClient());
+
+        Assert.False(service.VerifyWebhook("khong-phai-json", "abc"));
+    }
+
+    [Fact]
+    public void ComputeWebhookSignature_DataNull_TrongChuoiRong()
+    {
+        var service = CreateService(new HttpClient());
+
+        Assert.Equal(string.Empty, service.ComputeWebhookSignature("{\"code\":\"00\"}"));
     }
 
     // ---------------------------------------------------------------------

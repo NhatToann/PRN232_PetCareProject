@@ -30,6 +30,16 @@ _extract_slides.ps1
 logs/
 run_out.log
 run_err.log
+*.err
+run_out.txt
+run_err.txt
+logs_app_stdout.txt
+logs_app_stderr.txt
+
+# Script test tạm / file rác
+temp_*.ps1
+.codex-docx-build/
+.buildcheck/
 
 # OS files
 .DS_Store

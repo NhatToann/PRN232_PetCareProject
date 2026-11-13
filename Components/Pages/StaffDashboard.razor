@@ -1,11 +1,13 @@
-﻿@page "/system"
+@page "/system"
 @layout PetShop_PRN222.Components.Layout.StaffWorkspaceLayout
 @rendermode InteractiveServer
 @using PetShop.Models
 @using PetShop.Services
 @inject IStaffReportsService ReportsService
+@inject PetShop.Services.StaffRefreshSignal RefreshSignal
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
+@implements IDisposable
 
 <PageTitle>Bảng Điều Khiển - Nhân Viên</PageTitle>
 
@@ -30,7 +32,7 @@ else
                     <div class="text-muted fw-bold text-uppercase" style="font-size: 0.8rem;">Doanh Thu Hôm Nay</div>
                     <div class="icon-box bg-primary-subtle text-primary"><i class="fas fa-wallet"></i></div>
                 </div>
-                <h2 class="fw-bold text-dark mb-1">@revToday.ToString("N0") <span class="fs-5 text-muted">đ</span></h2>
+                <h2 class="fw-bold text-dark mb-1">@PetShop.Components.Shared.Format.Vnd(revToday)</h2>
             </div>
         </div>
 
@@ -40,7 +42,7 @@ else
                     <div class="text-muted fw-bold text-uppercase" style="font-size: 0.8rem;">Doanh Thu Tuần Này</div>
                     <div class="icon-box bg-success-subtle text-success"><i class="fas fa-chart-line"></i></div>
                 </div>
-                <h2 class="fw-bold text-dark mb-1">@revWeek.ToString("N0") <span class="fs-5 text-muted">đ</span></h2>
+                <h2 class="fw-bold text-dark mb-1">@PetShop.Components.Shared.Format.Vnd(revWeek)</h2>
             </div>
         </div>
 
@@ -153,7 +155,7 @@ else
     window.renderDashboardCharts = function (lLabels, lData, dLabels, dData, dColors) {
         if (typeof Chart === 'undefined') {
             let script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            script.src = 'js/chart.umd.js';
             script.onload = () => initCharts(lLabels, lData, dLabels, dData, dColors);
             document.head.appendChild(script);
         } else {
@@ -276,7 +278,23 @@ else
     public class LocalTaskDto { public string Time { get; set; } = ""; public string CustomerName { get; set; } = ""; public string PetName { get; set; } = ""; public string PetBreed { get; set; } = ""; public string ServiceName { get; set; } = ""; public string Status { get; set; } = ""; }
     private List<LocalTaskDto> nextTasks = new();
 
+    private IDisposable? _refreshSubscription;
+
     protected override async Task OnInitializedAsync()
+    {
+        // Nhận tín hiệu làm mới từ thanh trên (đồng hồ "Làm mới: 30s") để số liệu
+        // trên dashboard luôn là dữ liệu MỚI NHẤT từ DB.
+        _refreshSubscription = RefreshSignal.Subscribe(async () =>
+        {
+            await LoadDashboardAsync();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await LoadDashboardAsync();
+    }
+
+    /// <summary>Nạp lại toàn bộ chỉ số + danh sách nhiệm vụ từ DB.</summary>
+    private async Task LoadDashboardAsync()
     {
         // Chỉ số bảng điều khiển được tổng hợp ở tầng service (đơn hàng + spa).
         var metrics = await ReportsService.GetDashboardMetricsAsync();
@@ -290,16 +308,34 @@ else
         lineLabels = metrics.LineLabels;
         lineData = metrics.LineData;
 
-        // TẠO 3 NHIỆM VỤ TIẾP THEO (TÊN KHÁCH THẬT, GIỜ TƯƠNG LAI)
+        // "NHIỆM VỤ SPA TIẾP THEO": lấy lịch hẹn THẬT từ DB (đơn hàng đang chờ/xử lý),
+        // sắp xếp theo thời gian tăng dần. KHÔNG hardcode tên khách/giờ như trước —
+        // dữ liệu giả làm dashboard hiển thị sai và dễ gây hiểu lầm khi chấm bài.
+        var bookings = await ReportsService.GetBookingListAsync();
         var now = DateTime.Now;
-        nextTasks = new List<LocalTaskDto>
-        {
-            new LocalTaskDto { Time = now.AddMinutes(30).ToString("HH:mm"), CustomerName = "Trần Bích Ngọc", PetName = "Lu Cưng", PetBreed = "Poodle", ServiceName = "Tắm sấy Spa - 250.000đ", Status = "Đang xử lý" },
-            new LocalTaskDto { Time = now.AddHours(1).ToString("HH:mm"), CustomerName = "Nguyễn Minh Khang", PetName = "Mập", PetBreed = "Mèo Anh Lông Ngắn", ServiceName = "Cắt tỉa lông - 350.000đ", Status = "Chờ xác nhận" },
-            new LocalTaskDto { Time = now.AddHours(2).ToString("HH:mm"), CustomerName = "Lê Hoàng Yến", PetName = "Đốm", PetBreed = "Corgi", ServiceName = "Vệ sinh tai móng - 150.000đ", Status = "Chờ xác nhận" }
-        };
+        nextTasks = bookings
+            .Where(b => b.Status is "Chờ xác nhận" or "Chưa thanh toán" or "Đang tiến hành" or "Đang xử lý")
+            .Where(b => b.AppointmentStart >= now.AddHours(-2))
+            .OrderBy(b => b.AppointmentStart)
+            .Take(6)
+            .Select(b => new LocalTaskDto
+            {
+                Time = b.AppointmentStart.ToString("HH:mm"),
+                CustomerName = string.IsNullOrWhiteSpace(b.CustomerName) ? "Khách hàng" : b.CustomerName,
+                PetName = string.IsNullOrWhiteSpace(b.PetName) ? "Thú cưng" : b.PetName,
+                PetBreed = string.IsNullOrWhiteSpace(b.PetBreed) ? "—" : b.PetBreed,
+                ServiceName = string.IsNullOrWhiteSpace(b.ServiceName) ? "Dịch vụ Spa" : b.ServiceName,
+                Status = b.Status
+            })
+            .ToList();
 
         isLoading = false;
+    }
+
+    public void Dispose()
+    {
+        _refreshSubscription?.Dispose();
+        _refreshSubscription = null;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

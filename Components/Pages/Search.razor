@@ -8,8 +8,9 @@
 <PageTitle>Tìm kiếm sản phẩm – Pet Toy Shop</PageTitle>
 
 <div class="search-products-page">
-    <TopBar />
-    <Header OnOpenCart="OpenCart" />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Search" />
+<TopBar />
+    <Header />
 
     <main class="search-products-main container">
         <div class="search-products-head">
@@ -142,7 +143,6 @@
     </main>
 
     <Footer />
-    <CartDrawer Open="cartDrawerOpen" OnClose="CloseCart" />
 </div>
 
 @code {
@@ -157,7 +157,6 @@
     private int currentPage = 1;
     private bool isLoading = true;
     private string? error;
-    private bool cartDrawerOpen;
 
     private static readonly (string Id, string Label)[] SortTabs =
     {
@@ -255,18 +254,6 @@
     }
 
     private void GoToPage(int page) => currentPage = page;
-
-    private Task OpenCart()
-    {
-        cartDrawerOpen = true;
-        return Task.CompletedTask;
-    }
-
-    private Task CloseCart()
-    {
-        cartDrawerOpen = false;
-        return Task.CompletedTask;
-    }
 
     private void HandleCartChanged() => InvokeAsync(StateHasChanged);
 

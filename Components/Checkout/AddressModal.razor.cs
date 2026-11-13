@@ -54,6 +54,23 @@ public partial class AddressModal : ComponentBase
     /// <summary>Field nào đã được "chạm" (blur) — quyết định có hiện lỗi hay không.</summary>
     [Parameter] public IReadOnlySet<string> Touched { get; set; } = new HashSet<string>();
 
+    /// <summary>
+    /// Lỗi CỤC BỘ của modal (key: fullName/phone/email/district/ward/address).
+    ///
+    /// <para>
+    /// <b>VÌ SAO CẦN STATE CỤC BỘ:</b> trước đây modal đọc lỗi/trạng thái chạm từ
+    /// parameter <c>Errors</c>/<c>Touched</c> do parent truyền vào. Nhưng parent
+    /// (Checkout) dùng key khác (<c>form.FullName</c>, <c>form.AddressDetail</c>…) cho
+    /// form thanh toán ⇒ hai bộ key song song ⇒ lỗi của modal không bao giờ hiển thị
+    /// và <c>ValidateAll()</c> của parent luôn thất bại vì còn lỗi "rác".
+    /// Nay modal tự quản lý lỗi/trạng thái chạm; vẫn PHÁT sự kiện
+    /// <see cref="OnSetErrors"/>/<see cref="OnSetTouched"/> để parent đồng bộ nếu cần.
+    /// </para>
+    /// </summary>
+    private Dictionary<string, string> _localErrors = new(StringComparer.OrdinalIgnoreCase);
+
+    private HashSet<string> _localTouched = new(StringComparer.OrdinalIgnoreCase);
+
     [Parameter] public EventCallback OnClose { get; set; }
 
     [Parameter] public EventCallback<SavedAddress> OnSelectAddress { get; set; }
@@ -106,20 +123,42 @@ public partial class AddressModal : ComponentBase
 
     protected override async Task OnParametersSetAsync()
     {
-        await EnsureDataLoadedAsync();
-        await RefreshSuggestionsAsync();
+        // KHÔNG gọi JS interop ở đây.
+        //
+        // VÌ SAO: OnParametersSetAsync chạy ở giai đoạn PRERENDER (static render)
+        // ⇒ JS interop bị chặn ⇒ sinh log warning "JavaScript interop calls cannot
+        // be issued at this time" mỗi lần mở trang ⇒ vừa gây log rác vừa tốn
+        // thêm một vòng render không cần thiết.
+        //
+        // Nay việc nạp dữ liệu JS được chuyển sang OnAfterRenderAsync (chỉ chạy
+        // khi circuit đã interactive ⇒ interop hợp lệ).
 
         // Nguồn: useEffect(() => { if (!isOpen) { setShowWardDropdown(false); setShowDistrictDropdown(false) } }, [isOpen, addressModalView])
         if (!IsOpen)
         {
             showWardDropdown = false;
             showDistrictDropdown = false;
+
+            // Reset lỗi/trạng thái chạm cục bộ khi modal đóng ⇒ mở lại không còn
+            // lỗi cũ của lần trước (và không còn lỗi "rác" chặn ValidateAll ở parent).
+            _localErrors.Clear();
+            _localTouched.Clear();
         }
 
         // Nguồn: useEffect(() => {
         //   document.body.style.overflow = showAddressModal ? 'hidden' : ''
         //   return () => { document.body.style.overflow = '' }
         // }, [showAddressModal])
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Nạp dữ liệu từ JS + khoá cuộn trang — chỉ chạy khi circuit đã interactive.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await EnsureDataLoadedAsync();
+        await RefreshSuggestionsAsync();
         await ApplyBodyScrollLockAsync();
     }
 
@@ -139,6 +178,22 @@ public partial class AddressModal : ComponentBase
     }
 
     /// <summary>
+    /// Danh sách quận/huyện dự phòng (C#) — dùng khi JS interop lỗi.
+    /// Tránh tình trạng dropdown quận/huyện rỗng ⇒ không lưu được địa chỉ.
+    /// </summary>
+    private static readonly string[] FallbackDistricts =
+    {
+        "Quận Hải Châu",
+        "Quận Thanh Khê",
+        "Quận Sơn Trà",
+        "Quận Ngũ Hành Sơn",
+        "Quận Liên Chiểu",
+        "Quận Cẩm Lệ",
+        "Huyện Hòa Vang",
+        "Huyện Hoàng Sa",
+    };
+
+    /// <summary>
     /// Nạp danh sách quận/huyện từ <c>daNangData.js</c> một lần duy nhất.
     /// </summary>
     private async Task EnsureDataLoadedAsync()
@@ -153,6 +208,10 @@ public partial class AddressModal : ComponentBase
         catch (Exception ex)
         {
             Logger.LineWarning($"[AddressModal] Không nạp được danh sách quận/huyện từ daNangData.js: {ex.GetType().Name} {ex.Message}");
+
+            // FALLBACK: dùng danh sách C# để dropdown vẫn có dữ liệu.
+            districtSuggestions = FallbackDistricts;
+            dataLoaded = true;
         }
     }
 
@@ -178,22 +237,30 @@ public partial class AddressModal : ComponentBase
     /// <summary>Trả về lỗi của field nếu đã chạm (touched) và có lỗi; ngược lại <c>null</c>.</summary>
     public string? GetFieldError(string fieldName)
     {
-        if (!Touched.Contains(fieldName)) return null;
-        return Errors.TryGetValue(fieldName, out var message) ? message : null;
+        if (!_localTouched.Contains(fieldName)) return null;
+
+        // Lỗi RỖNG (chuỗi "") KHÔNG phải lỗi — nếu trả về "" thì component vẽ
+        // thêm khung viền đỏ + <span class="error-message"></span> rỗng.
+        if (!_localErrors.TryGetValue(fieldName, out var message) || string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        return message;
     }
 
     /// <summary>Đánh dấu field đã chạm và validate ngay field đó (port <c>handleBlur</c>).</summary>
     public async Task HandleBlur(string fieldName)
     {
-        var touched = new HashSet<string>(Touched) { fieldName };
-        await OnSetTouched.InvokeAsync(touched);
+        _localTouched.Add(fieldName);
+        await OnSetTouched.InvokeAsync(new HashSet<string>(_localTouched, StringComparer.OrdinalIgnoreCase));
         await ValidateFieldAsync(fieldName);
     }
 
     /// <summary>Validate một field và phát sự kiện OnSetErrors (port <c>validateField</c>).</summary>
     private async Task ValidateFieldAsync(string fieldName)
     {
-        var newErrors = new Dictionary<string, string>(Errors);
+        var newErrors = new Dictionary<string, string>(_localErrors, StringComparer.OrdinalIgnoreCase);
 
         switch (fieldName)
         {
@@ -291,6 +358,7 @@ public partial class AddressModal : ComponentBase
                 break;
         }
 
+        _localErrors = newErrors;
         await OnSetErrors.InvokeAsync(newErrors);
     }
 
@@ -355,11 +423,15 @@ public partial class AddressModal : ComponentBase
             newErrors["address"] = "Địa chỉ phải có ít nhất 5 ký tự";
         }
 
-        await OnSetErrors.InvokeAsync(newErrors);
-        await OnSetTouched.InvokeAsync(new HashSet<string>
+        _localErrors = newErrors;
+
+        _localTouched = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "fullName", "phone", "email", "district", "ward", "address",
-        });
+        };
+
+        await OnSetErrors.InvokeAsync(newErrors);
+        await OnSetTouched.InvokeAsync(new HashSet<string>(_localTouched, StringComparer.OrdinalIgnoreCase));
         return newErrors.Count == 0;
     }
 
@@ -399,15 +471,14 @@ public partial class AddressModal : ComponentBase
         showDistrictDropdown = false;
         showWardDropdown = false;
 
-        var touched = new HashSet<string>(Touched) { "district" };
-        await OnSetTouched.InvokeAsync(touched);
+        _localTouched.Add("district");
 
-        var newErrors = new Dictionary<string, string>(Errors)
-        {
-            ["district"] = string.Empty,
-            ["ward"] = string.Empty,
-        };
-        await OnSetErrors.InvokeAsync(newErrors);
+        // Xoá lỗi "district" và "ward" (người dùng vừa chọn quận ⇒ phường cũ không còn hợp lệ).
+        _localErrors.Remove("district");
+        _localErrors.Remove("ward");
+
+        await OnSetTouched.InvokeAsync(new HashSet<string>(_localTouched, StringComparer.OrdinalIgnoreCase));
+        await OnSetErrors.InvokeAsync(new Dictionary<string, string>(_localErrors, StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>Chọn phường (port <c>handleWardSelect</c>).</summary>
@@ -416,14 +487,11 @@ public partial class AddressModal : ComponentBase
         await OnWard.InvokeAsync(item);
         showWardDropdown = false;
 
-        var touched = new HashSet<string>(Touched) { "ward" };
-        await OnSetTouched.InvokeAsync(touched);
+        _localTouched.Add("ward");
+        _localErrors.Remove("ward");
 
-        var newErrors = new Dictionary<string, string>(Errors)
-        {
-            ["ward"] = string.Empty,
-        };
-        await OnSetErrors.InvokeAsync(newErrors);
+        await OnSetTouched.InvokeAsync(new HashSet<string>(_localTouched, StringComparer.OrdinalIgnoreCase));
+        await OnSetErrors.InvokeAsync(new Dictionary<string, string>(_localErrors, StringComparer.OrdinalIgnoreCase));
     }
 
     /// <summary>Mở/đóng dropdown phường.</summary>

@@ -98,7 +98,7 @@
                                     <tr>
                                         <td>@row.Id</td>
                                         <td class="fw-semibold">@row.Name</td>
-                                        <td>@row.Price.ToString("N0") đ</td>
+                                        <td>@PetShop.Components.Shared.Format.Vnd((decimal)row.Price)</td>
                                         <td>@row.Stock</td>
                                         <td class="small text-muted">@row.Description</td>
                                         <td class="small">@row.Note</td>

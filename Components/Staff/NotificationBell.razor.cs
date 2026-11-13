@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.JSInterop;
-using PetShop.Hubs;
 using PetShop.Interfaces;
 using PetShop.Models;
 using PetShop.Services;
@@ -16,11 +14,12 @@ namespace PetShop_PRN222.Components.Staff;
 /// Dữ liệu lấy qua <see cref="INotificationClient"/> (self-HTTP tới <c>api/notifications/*</c>
 /// và <c>api/shift-exchange/*</c>) — không inject DbContext trực tiếp vào component.
 ///
-/// <para><b>LS-11 — realtime (SignalR):</b> component cũng kết nối hub
-/// <c>/hubs/notification</c> để nhận thông báo mới ngay khi có, thay cho việc chỉ
-/// tải dữ liệu theo thao tác của người dùng. Toàn bộ thao tác SignalR được bọc
-/// try/catch: nếu hub lỗi thì component vẫn hoạt động bình thường qua đường HTTP
-/// cũ (fallback) — UI hiển thị không thay đổi.
+/// <para><b>LS-11 — realtime (SignalR):</b> component cũng nhận thông báo mới ngay khi có,
+/// thay cho việc chỉ tải dữ liệu theo thao tác của người dùng. Kết nối SignalR được quản lý
+/// bởi <see cref="RealtimeHubService"/> — SCOPED, DÙNG CHUNG với widget chat ⇒ mỗi circuit
+/// chỉ mở 1 WebSocket thay vì 2 (tiết kiệm RAM + giảm 1 vòng handshake khi mở trang).
+/// Toàn bộ thao tác SignalR được bọc try/catch: nếu hub lỗi thì component vẫn hoạt động
+/// bình thường qua đường HTTP cũ (fallback) — UI hiển thị không thay đổi.
 /// </para>
 /// </summary>
 public partial class NotificationBell : ComponentBase, IAsyncDisposable
@@ -28,6 +27,8 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
     [Inject] private INotificationClient NotificationClient { get; set; } = default!;
 
     [Inject] private UserSessionService UserSession { get; set; } = default!;
+
+    [Inject] private RealtimeHubService Realtime { get; set; } = default!;
 
     [Inject] private IJSRuntime JS { get; set; } = default!;
 
@@ -58,6 +59,9 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
     private bool loading;
     private int? actionLoadingId;
     private string? error;
+
+    /// <summary>Cờ: đã tải đầy đủ (4 nguồn) hay chưa — dùng cho lazy-load.</summary>
+    private bool _fullDataLoaded;
 
     /// <summary>Panel thông báo có đang mở hay không.</summary>
     public bool PanelOpen => panelOpen;
@@ -92,26 +96,26 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
     {
         UserSession.Changed += HandleSessionChanged;
 
+        // Đăng ký nhận event realtime từ service DÙNG CHUNG.
+        // (Trước đây component tự mở 1 HubConnection riêng ⇒ mỗi circuit 2 WebSocket.)
+        Realtime.NotificationReceived += HandleNotificationReceived;
+        Realtime.ChatReceived += HandleChatReceived;
+
         try { await UserSession.LoadAsync(); }
         catch (Exception ex) { Logger.LineWarning($"[NotificationBell] UserSession.LoadAsync threw: {ex.GetType().Name}"); }
 
-        await LoadAllAsync();
+        await LoadBadgeAsync();
 
         // LS-11 — kết nối hub realtime (chạy nền, lỗi không ảnh hưởng UI).
         await StartRealtimeAsync();
     }
 
     // ---------------------------------------------------------------------
-    // LS-11 — SignalR realtime
+    // LS-11 — SignalR realtime (dùng chung qua RealtimeHubService)
     // ---------------------------------------------------------------------
 
-    /// <summary>Đường dẫn hub — phải khớp với <c>app.MapHub&lt;NotificationHub&gt;("/hubs/notification")</c>.</summary>
-    private const string HubPath = "/hubs/notification";
-
-    private HubConnection? _hubConnection;
-
     /// <summary>
-    /// Mở kết nối SignalR tới hub thông báo và vào group <c>user:{userId}</c>.
+    /// Bảo đảm có kết nối SignalR (dùng chung với widget chat).
     ///
     /// <para>
     /// Mọi lỗi đều bị nuốt kèm log: component tiếp tục hoạt động qua đường HTTP cũ
@@ -129,53 +133,11 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
                 return;
             }
 
-            if (_hubConnection is not null)
-            {
-                return;
-            }
-
-            var hubUrl = BuildHubUrl(staffId);
-
-            var connection = new HubConnectionBuilder()
-                .WithUrl(hubUrl)
-                .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10) })
-                .Build();
-
-            // Payload server gửi là 1 object DTO (RealtimeNotificationDto / ChatEnvelope)
-            // ⇒ handler phải khớp đúng số tham số, nếu không client sẽ không giải mã được.
-            connection.On<RealtimeNotificationDto>(
-                NotificationHub.NotificationReceivedEvent,
-                notification =>
-                {
-                    _ = HandleNotificationReceivedAsync(notification);
-                });
-
-            connection.On<ChatEnvelope>(
-                NotificationHub.ChatReceivedEvent,
-                chat =>
-                {
-                    _ = HandleChatReceivedAsync(chat);
-                });
-
-            connection.Closed += async _ =>
-            {
-                Logger.LineWarning("[NotificationBell] Kết nối SignalR đã đóng — sẽ thử kết nối lại ở lần render sau.");
-                await Task.CompletedTask;
-            };
-
-            await connection.StartAsync();
-
-            await connection.InvokeAsync("JoinGroup", staffId);
-
-            _hubConnection = connection;
-
-            Logger.Line($"[NotificationBell] Đã kết nối SignalR tới {hubUrl} và vào group user:{staffId}.");
+            await Realtime.EnsureConnectedAsync(BuildHubUrl(staffId), staffId);
         }
         catch (Exception ex)
         {
             Logger.LineWarning($"[NotificationBell] Không kết nối được SignalR (fallback sang HTTP): {ex.GetType().Name} — {ex.Message}");
-
-            await DisposeHubAsync();
         }
     }
 
@@ -193,7 +155,15 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
         var baseUri = Navigation.BaseUri;
         var separator = baseUri.Contains('?', StringComparison.Ordinal) ? '&' : '?';
 
-        return $"{baseUri.TrimEnd('/')}{HubPath}{separator}userId={staffId}";
+        return $"{baseUri.TrimEnd('/')}{RealtimeHubService.HubPath}{separator}userId={staffId}";
+    }
+
+    /// <summary>
+    /// Handler realtime từ <see cref="RealtimeHubService"/> (dùng chung).
+    /// </summary>
+    private void HandleNotificationReceived(RealtimeNotificationDto notification)
+    {
+        _ = HandleNotificationReceivedAsync(notification);
     }
 
     /// <summary>
@@ -207,7 +177,17 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
 
             await InvokeAsync(async () =>
             {
-                await LoadAllAsync();
+                // Nếu panel đang đóng ⇒ chỉ cập nhật badge (nhẹ).
+                // Nếu panel đang mở ⇒ tải lại đầy đủ để danh sách cập nhật.
+                if (panelOpen)
+                {
+                    await LoadAllAsync();
+                }
+                else
+                {
+                    await LoadBadgeAsync();
+                }
+
                 StateHasChanged();
             });
         }
@@ -215,6 +195,14 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
         {
             Logger.LineWarning($"[NotificationBell] Không xử lý được sự kiện thông báo realtime: {ex.GetType().Name}");
         }
+    }
+
+    /// <summary>
+    /// Handler realtime từ <see cref="RealtimeHubService"/> (dùng chung).
+    /// </summary>
+    private void HandleChatReceived(ChatEnvelope chat)
+    {
+        _ = HandleChatReceivedAsync(chat);
     }
 
     /// <summary>
@@ -233,25 +221,19 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>Huỷ kết nối SignalR (an toàn khi đã dispose).</summary>
-    private async Task DisposeHubAsync()
+    /// <summary>
+    /// Huỷ kết nối SignalR.
+    ///
+    /// <para>
+    /// KHÔNG ngắt kết nối ở đây vì <c>RealtimeHubService</c> được dùng CHUNG với
+    /// widget chat — nếu NotificationBell dispose mà ChatWidget còn dùng thì realtime
+    /// của chat sẽ đứt. Service tự dispose khi circuit kết thúc.
+    /// </para>
+    /// </summary>
+    private void DisposeHubAsync()
     {
-        var connection = _hubConnection;
-        _hubConnection = null;
-
-        if (connection is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await connection.DisposeAsync();
-        }
-        catch (Exception ex)
-        {
-            Logger.LineWarning($"[NotificationBell] Lỗi khi huỷ kết nối SignalR: {ex.GetType().Name}");
-        }
+        // Không làm gì — giữ vị trí để tương thích với code cũ gọi hàm này.
+        _ = Realtime;
     }
 
     /// <summary>
@@ -285,6 +267,8 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
             unreadCount = countResult.Data?.Count ?? 0;
             pendingRequests = pendingResult.Data ?? Array.Empty<PendingRequestDto>();
             myRequests = mineResult.Data ?? Array.Empty<MyRequestDto>();
+
+            _fullDataLoaded = true;
         }
         catch (OperationCanceledException)
         {
@@ -302,10 +286,62 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>Mở/đóng panel thông báo.</summary>
-    private void TogglePanel()
+    /// <summary>
+    /// Chỉ nạp badge số chưa đọc (1 request nhẹ) — dùng lúc init và khi có
+    /// thông báo realtime mới.
+    ///
+    /// <para>
+    /// Tránh việc tải cả 4 nguồn dữ liệu mỗi lần điều hướng (panel thường đóng).
+    /// </para>
+    /// </summary>
+    private async Task LoadBadgeAsync()
+    {
+        var staffId = EffectiveStaffId;
+        if (staffId <= 0) return;
+
+        try
+        {
+            var countResult = await NotificationClient.GetUnreadCountAsync(staffId);
+            unreadCount = countResult.Data?.Count ?? 0;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.LineWarning($"[NotificationBell] Không tải được số thông báo chưa đọc: {ex.GetType().Name}");
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Mở/đóng panel thông báo.
+    ///
+    /// <para>
+    /// <b>Tối ưu độ trễ + RAM:</b> trước đây component tải <b>4</b> nguồn dữ liệu
+    /// (thông báo / số chưa đọc / yêu cầu chờ duyệt / yêu cầu của tôi) ngay khi
+    /// khởi tạo — kể cả khi panel đang ĐÓNG và user không hề mở nó.
+    /// Vì <c>TopBar</c> nằm trên mọi trang ⇒ mỗi lần điều hướng là 4 self-HTTP
+    /// round-trip (TLS + MVC pipeline + EF query) ⇒ lag rõ rệt.
+    /// </para>
+    ///
+    /// <para>
+    /// Nay: lúc init chỉ lấy <b>số chưa đọc</b> (1 request nhẹ, cần cho badge),
+    /// phần còn lại chỉ tải khi user thực sự mở panel.
+    /// </para>
+    /// </summary>
+    private async Task TogglePanel()
     {
         panelOpen = !panelOpen;
+
+        if (panelOpen && !_fullDataLoaded)
+        {
+            await LoadAllAsync();
+        }
     }
 
     /// <summary>Đánh dấu toàn bộ thông báo đã đọc (port <c>handleMarkAllRead</c>).</summary>
@@ -464,7 +500,18 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
 
     private void HandleSessionChanged() => InvokeAsync(async () =>
     {
-        await LoadAllAsync();
+        // Đổi phiên ⇒ dữ liệu cũ không còn hợp lệ ⇒ reset cờ lazy-load.
+        _fullDataLoaded = false;
+
+        // Nếu panel đang mở ⇒ tải đầy đủ; ngược lại chỉ lấy badge.
+        if (panelOpen)
+        {
+            await LoadAllAsync();
+        }
+        else
+        {
+            await LoadBadgeAsync();
+        }
 
         // LS-11 — khi phiên đăng nhập có user id thì mới mở được kết nối hub.
         await StartRealtimeAsync();
@@ -475,15 +522,22 @@ public partial class NotificationBell : ComponentBase, IAsyncDisposable
     public void Dispose()
     {
         UserSession.Changed -= HandleSessionChanged;
+        Realtime.NotificationReceived -= HandleNotificationReceived;
+        Realtime.ChatReceived -= HandleChatReceived;
     }
 
     /// <summary>
-    /// Giải phóng kết nối SignalR khi component bị huỷ (Blazor Server gọi
+    /// Giải phóng khi component bị huỷ (Blazor Server gọi
     /// <see cref="IAsyncDisposable.DisposeAsync"/> khi circuit kết thúc).
+    ///
+    /// <para>
+    /// KHÔNG ngắt SignalR ở đây — <c>RealtimeHubService</c> dùng chung và tự
+    /// dispose khi circuit kết thúc (nếu ngắt ở đây thì ChatWidget mất realtime).
+    /// </para>
     /// </summary>
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         Dispose();
-        await DisposeHubAsync();
+        return ValueTask.CompletedTask;
     }
 }

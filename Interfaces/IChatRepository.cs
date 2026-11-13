@@ -35,11 +35,17 @@ namespace PetShop.Interfaces;
 public interface IChatRepository
 {
     /// <summary>
-    /// Lấy lịch sử chat giữa người dùng hiện tại và một đối tác.
+    /// Lấy lịch sử chat trong HỘP THƯ CHUNG của một khách hàng.
+    ///
+    /// <para>
+    /// <b>Thay đổi 13/11/2026:</b> trước đây lịch sử gắn với cặp 1-1
+    /// (khách ↔ 1 nhân viên). Nay là <b>hộp thư chung</b>: mọi nhân viên đều
+    /// đọc được (và ghi vào) cùng một luồng theo <c>CustomerID</c>.
+    /// </para>
     /// </summary>
     /// <param name="currentUserId">Id của người đang đăng nhập.</param>
     /// <param name="currentUserKind">Loại người gửi: <c>customer</c> / <c>staff</c> / <c>admin</c> / <c>doctor</c>.</param>
-    /// <param name="peerId">Id của đối tác.</param>
+    /// <param name="peerId">Id của đối tác (khách hàng khi nhân viên mở hộp thư).</param>
     /// <param name="peerKind">Loại đối tác.</param>
     /// <param name="take">Số tin gần nhất tối đa lấy (50–100).</param>
     /// <param name="ct">Token huỷ.</param>
@@ -55,10 +61,12 @@ public interface IChatRepository
     /// <summary>
     /// Ghi một tin nhắn mới vào bảng <c>ChatMessages</c>.
     /// </summary>
-    /// <param name="customerId">Id khách hàng của luồng chat.</param>
-    /// <param name="staffId">Id nhân viên của luồng chat (nullable).</param>
-    /// <param name="senderType"><c>customer</c> hoặc <c>staff</c>.</param>
+    /// <param name="customerId">Id khách hàng của luồng chat (khoá hộp thư).</param>
+    /// <param name="staffId">Id nhân viên gửi tin (nullable — khách gửi thì <c>null</c>).</param>
+    /// <param name="senderType"><c>staff</c> hoặc <c>customer</c> (cột bị CHECK constraint giới hạn).</param>
     /// <param name="message">Nội dung tin nhắn.</param>
+    /// <param name="senderName">Tên hiển thị của người gửi (hộp thư chung — nhiều người gửi).</param>
+    /// <param name="senderKind">Loại thật của người gửi: <c>staff</c> / <c>admin</c> / <c>doctor</c> / <c>customer</c>.</param>
     /// <param name="ct">Token huỷ.</param>
     /// <returns>Bản ghi vừa tạo (đã có <c>MessageID</c>).</returns>
     Task<ChatMessage> AddMessageAsync(
@@ -66,6 +74,8 @@ public interface IChatRepository
         int? staffId,
         string senderType,
         string message,
+        string? senderName = null,
+        string? senderKind = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -79,4 +89,24 @@ public interface IChatRepository
     /// </summary>
     /// <param name="ct">Token huỷ.</param>
     Task<IReadOnlyList<ChatPeerDto>> GetCustomerPeersAsync(CancellationToken ct = default);
+
+    /// <summary>Tra tên hiển thị của một nhân viên (bảng <c>Staff</c>).</summary>
+    /// <param name="staffId">Id nhân viên.</param>
+    /// <param name="ct">Token huỷ.</param>
+    Task<string?> GetStaffNameAsync(int staffId, CancellationToken ct = default);
+
+    /// <summary>Tra tên hiển thị của một quản trị viên (bảng <c>Admin</c>).</summary>
+    /// <param name="adminId">Id quản trị.</param>
+    /// <param name="ct">Token huỷ.</param>
+    Task<string?> GetAdminNameAsync(int adminId, CancellationToken ct = default);
+
+    /// <summary>Tra tên hiển thị của một bác sĩ (bảng <c>Doctor</c>).</summary>
+    /// <param name="doctorId">Id bác sĩ.</param>
+    /// <param name="ct">Token huỷ.</param>
+    Task<string?> GetDoctorNameAsync(int doctorId, CancellationToken ct = default);
+
+    /// <summary>Tra tên hiển thị của một khách hàng (bảng <c>Customer</c>).</summary>
+    /// <param name="customerId">Id khách hàng.</param>
+    /// <param name="ct">Token huỷ.</param>
+    Task<string?> GetCustomerNameAsync(int customerId, CancellationToken ct = default);
 }

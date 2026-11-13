@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace PetShop.Models
 {
@@ -23,9 +24,46 @@ namespace PetShop.Models
 
     public sealed record PayOSWebhookResult(bool Success, string Message);
 
-    public sealed record PayOSWebhookPayload(bool? Success, string? Code, PayOSWebhookData? Data);
+    /// <summary>
+    /// Envelope webhook PayOS.
+    ///
+    /// <para>
+    /// Theo tài liệu PayOS: <c>{ code, desc, success, data, signature }</c>.
+    /// </para>
+    /// </summary>
+    public sealed record PayOSWebhookPayload(
+        bool? Success,
+        [property: JsonConverter(typeof(FlexibleStringConverter))] string? Code,
+        [property: JsonConverter(typeof(FlexibleStringConverter))] string? Desc,
+        PayOSWebhookData? Data);
 
-    public sealed record PayOSWebhookData(int OrderCode, string? Status);
+    /// <summary>
+    /// Object <c>data</c> của webhook PayOS.
+    ///
+    /// <para>
+    /// <b>Lưu ý:</b> mẫu webhook chính thức <b>KHÔNG</b> có field <c>status</c> —
+    /// trạng thái thành công được suy ra từ <c>success = true</c> và
+    /// <c>data.code = "00"</c>. Field <c>status</c> vẫn được giữ để tương thích
+    /// với các biến thể webhook (ví dụ webhook hủy/timeout do hệ thống gửi thêm).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Lỗi đã sửa:</b> <c>Amount</c> trước đây khai báo <c>int?</c> ⇒ webhook có
+    /// amount dạng thập phân (vd <c>15.99</c>) làm <c>JsonException</c> ⇒
+    /// <c>HandleWebhookAsync</c> trả "Invalid payload" ⇒ thanh toán thành công
+    /// KHÔNG được ghi vào DB. Đổi sang <c>decimal?</c> (nhận được cả số nguyên
+    /// VND lẫn số thập phân).
+    /// </para>
+    /// </summary>
+    public sealed record PayOSWebhookData(
+        int OrderCode,
+        [property: JsonConverter(typeof(FlexibleStringConverter))] string? Status,
+        decimal? Amount,
+        string? Description,
+        [property: JsonConverter(typeof(FlexibleStringConverter))] string? Code,
+        [property: JsonConverter(typeof(FlexibleStringConverter))] string? Desc,
+        string? Reference,
+        string? PaymentLinkId);
 
     public sealed record PayOSPaymentStatusResult(int OrderCode, string Status, bool IsPaid, int Amount, string? CheckoutUrl);
 }

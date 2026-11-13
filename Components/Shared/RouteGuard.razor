@@ -1,0 +1,162 @@
+@inject NavigationManager Navigation
+@inject UserSessionService UserSession
+@inject ILogger<RouteGuard> Logger
+
+@* ------------------------------------------------------------------
+   RouteGuard — component bảo vệ route, thay thế AuthGuard + CustomerOnlyGuard.
+
+   VÌ SAO GỘP:
+   Trước đây AuthGuard.razor và CustomerOnlyGuard.razor có logic GIỐNG HẾT NHAU
+   (cùng copy-paste 100%), và logic đó sai ở 3 điểm:
+
+   1. Cả hai đều chặn staff khỏi trang khách hàng → OK.
+      NHƯNG không có guard nào chặn khách hàng khỏi trang staff (/system/*).
+      ⇒ "vai trò bị phá ranh giới": khách gõ /system là vào được.
+
+   2. Điều hướng bằng forceLoad: true ⇒ TẢI LẠI TOÀN TRANG.
+      Mỗi lần bị redirect là mất circuit Blazor, mất state giỏ hàng,
+      và UserSessionService phải đọc lại ProtectedLocalStorage từ đầu.
+      ⇒ Đây chính là nguồn gốc của cảm giác "điều hướng thảm hại" và
+      hiện tượng "tự ý đăng nhập bằng tài khoản khác" (circuit mới đọc lại
+      storage trong lúc storage chưa kịp đồng bộ).
+
+   3. Chỉ kiểm tra role == "staff" ⇒ bỏ sót "admin" và "doctor".
+      ⇒ admin lọt vào trang khách, doctor bị đẩy vào /system rồi không có quyền.
+
+   GIỜ ĐÂY:
+   - Dùng AppRoles.Normalize để chuẩn hoá role (user/customer → customer).
+   - Điều hướng bằng replace: true (KHÔNG forceLoad) ⇒ giữ circuit, giữ state.
+   - Hỗ trợ AllowedRoles + RequireStaffWorkspace để chặn đúng chiều.
+   ------------------------------------------------------------------ *@
+
+@if (_ready)
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Danh sách role được phép truy cập trang này (phân tách bằng dấu phẩy),
+    /// ví dụ <c>AllowedRoles="customer"</c> hoặc <c>AllowedRoles="staff,admin"</c>.
+    ///
+    /// <para>
+    /// Dùng CSV string thay vì <c>string[]</c> vì Razor không parse được attribute
+    /// kiểu mảng: <c>AllowedRoles="customer"</c> sẽ bị hiểu là biểu thức C# <c>customer</c>
+    /// (biến chưa khai báo) ⇒ lỗi compile.
+    /// </para>
+    /// </summary>
+    [Parameter]
+    public string? AllowedRoles { get; set; }
+
+    /// <summary>
+    /// Khi true ⇒ trang này thuộc workspace nhân viên ⇒ chỉ staff/admin/doctor
+    /// mới vào được, khách hàng bị đẩy về trang chủ.
+    /// </summary>
+    [Parameter]
+    public bool RequireStaffWorkspace { get; set; }
+
+    /// <summary>
+    /// Trang đích khi bị từ chối vì role. Mặc định: /system nếu là trang staff,
+    /// ngược lại / (trang chủ) — đúng như OJT gốc.
+    /// </summary>
+    [Parameter]
+    public string? DeniedRedirect { get; set; }
+
+    private bool _ready;
+    private bool _redirecting;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _redirecting)
+        {
+            return;
+        }
+
+        AuthResponseDto? user = null;
+        try
+        {
+            user = await UserSession.LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            // ProtectedLocalStorage chỉ dùng được SAU khi circuit interactive.
+            // Ở pha prerender, coi như chưa xác minh được ⇒ chờ render lần sau.
+            Logger.LogDebug("[RouteGuard] Session load unavailable during prerender: {Type}", ex.GetType().Name);
+            return;
+        }
+
+        // Nếu storage chưa sẵn sàng (prerender) ⇒ chờ render tiếp theo.
+        if (user is null && !UserSession.SessionResolved)
+        {
+            return;
+        }
+
+        if (!UserSession.IsAuthenticated)
+        {
+            await RedirectAsync("/login?returnUrl=" + Uri.EscapeDataString(RelativePath()));
+            return;
+        }
+
+        var role = UserSession.CurrentUser?.Role;
+
+        var allowedRoles = ParseAllowedRoles(AllowedRoles);
+
+        if (RequireStaffWorkspace && !AppRoles.CanAccessStaffWorkspace(role))
+        {
+            // Khách hàng (hoặc doctor bị chặn) ⇒ về trang chủ.
+            await RedirectAsync(DeniedRedirect ?? "/");
+            return;
+        }
+
+        if (allowedRoles.Length > 0 && !AppRoles.IsInAllowedRoles(role, allowedRoles))
+        {
+            // Có role nhưng không đủ quyền cho trang này.
+            // - Nếu là trang staff ⇒ đưa về workspace staff.
+            // - Nếu là trang khách ⇒ đưa về workspace staff (staff/admin) hoặc trang chủ.
+            var target = RequireStaffWorkspace
+                ? "/system"
+                : (AppRoles.IsStaff(role) ? "/system" : "/");
+            await RedirectAsync(DeniedRedirect ?? target);
+            return;
+        }
+
+        _ready = true;
+        StateHasChanged();
+    }
+
+    private async Task RedirectAsync(string url)
+    {
+        _redirecting = true;
+
+        // replace: true ⇒ KHÔNG tải lại trang, giữ nguyên circuit Blazor.
+        // Đây là điểm khác biệt quan trọng nhất so với bản cũ (forceLoad: true).
+        Navigation.NavigateTo(url, replace: true);
+
+        await Task.CompletedTask;
+    }
+
+    private string RelativePath()
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+        return string.IsNullOrWhiteSpace(relative) ? "/" : relative;
+    }
+
+    /// <summary>
+    /// Tách chuỗi CSV role thành mảng, bỏ khoảng trắng và rỗng.
+    /// </summary>
+    private static string[] ParseAllowedRoles(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv))
+        {
+            return Array.Empty<string>();
+        }
+
+        return csv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(r => r.Length > 0)
+            .ToArray();
+    }
+}

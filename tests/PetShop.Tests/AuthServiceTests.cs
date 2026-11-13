@@ -68,6 +68,18 @@ public class AuthServiceTests
         public Task<DateTime?> GetCustomerBirthDateAsync(int customerId, CancellationToken ct = default)
             => Task.FromResult(LastBirthDate);
 
+        public Task<bool> UpdateCustomerAddressAsync(int customerId, string? address, CancellationToken ct = default)
+            => Task.FromResult(true);
+
+        public Task<string?> GetCustomerAddressAsync(int customerId, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+
+        public Task<bool> UpdateCustomerPhoneAsync(int customerId, string? phone, CancellationToken ct = default)
+            => Task.FromResult(true);
+
+        public Task<string?> GetCustomerPhoneAsync(int customerId, CancellationToken ct = default)
+            => Task.FromResult<string?>(null);
+
         public Task<int> UpgradePasswordHashAsync(string email, string newPasswordHash, CancellationToken ct = default)
         {
             UpgradeCallCount++;
@@ -108,7 +120,7 @@ public class AuthServiceTests
     {
         var config = new ConfigurationBuilder().Build();
         var factory = new NullHttpClientFactory();
-        return (new AuthService(repo, config, new FakeEmailService(), factory), repo);
+        return (new AuthService(repo, config, new FakeEmailService(), factory, new NullLogger<AuthService>()), repo);
     }
 
     private sealed class NullHttpClientFactory : IHttpClientFactory

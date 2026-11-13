@@ -9,11 +9,12 @@
 <PageTitle>Thông tin thú cưng</PageTitle>
 
 <div class="home-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Profile" />
+<TopBar />
     <Header />
     <Navigation />
 
-    <CustomerOnlyGuard>
+    <RouteGuard AllowedRoles="customer">
         <main class="profile-page">
             <div class="container">
                 <section class="profile-card profile-shopee">
@@ -141,9 +142,9 @@
 
                                 <aside class="profile-shopee__aside--pet">
                                     <div class="profile-shopee__avatarRing" aria-hidden="true">
-                                        @if (!string.IsNullOrWhiteSpace(imagePath))
+                                        @if (PetShop.Components.Shared.ImageUrl.IsSafe(imagePath))
                                         {
-                                            <img src="@imagePath" alt="" class="profile-shopee__avatarImg" />
+                                            <img src="@PetShop.Components.Shared.ImageUrl.Safe(imagePath)" alt="" class="profile-shopee__avatarImg" loading="lazy" decoding="async" />
                                         }
                                         else
                                         {
@@ -178,9 +179,9 @@
                                 {
                                     <article class="pet-page__item">
                                         <div class="pet-page__itemImg">
-                                            @if (!string.IsNullOrWhiteSpace(pet.ImagePath))
+                                            @if (PetShop.Components.Shared.ImageUrl.IsSafe(pet.ImagePath))
                                             {
-                                                <img src="@pet.ImagePath" alt="@pet.PetName" />
+                                                <img src="@PetShop.Components.Shared.ImageUrl.Safe(pet.ImagePath)" alt="@pet.PetName" loading="lazy" decoding="async" />
                                             }
                                             else
                                             {
@@ -214,7 +215,7 @@
         </main>
 
         <Footer />
-    </CustomerOnlyGuard>
+    </RouteGuard>
 </div>
 
 @code {
@@ -294,7 +295,12 @@
         var customerId = UserSession.CurrentUser?.UserId ?? 0;
         if (customerId <= 0)
         {
-            Navigation.NavigateTo("/login", forceLoad: true);
+            // Điều hướng NỘI BỘ ⇒ KHÔNG forceLoad.
+            // forceLoad tải lại toàn trang ⇒ mất circuit Blazor, mất state giỏ hàng,
+            // và UserSessionService phải đọc lại ProtectedLocalStorage từ đầu
+            // ⇒ đây chính là nguồn "điều hướng rất thảm hại" + "tự ý đăng nhập
+            // bằng tài khoản khác" (circuit mới đọc storage lúc chưa kịp đồng bộ).
+            Navigation.NavigateTo("/login", replace: true);
             return;
         }
 

@@ -117,7 +117,13 @@
             }
 
             await Task.Delay(700);
-            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+
+            // KHÔNG reload toàn trang.
+            // forceLoad: true phá vỡ circuit Blazor ⇒ phải đọc lại ProtectedLocalStorage
+            // ⇒ nhiều khả năng "tự ý đăng nhập bằng tài khoản khác" + độ trễ.
+            // Tên trên thanh đã được cập nhật qua UserSession.SignInAsync
+            // => UserSession.Changed => layout tự render lại.
+            StateHasChanged();
         }
         catch (Exception ex)
         {

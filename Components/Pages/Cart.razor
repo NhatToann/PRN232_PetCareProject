@@ -9,10 +9,11 @@
 <PageTitle>Giỏ hàng</PageTitle>
 
 <div class="cart-page-wrapper">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.Cart" />
+<TopBar />
     <PageContextBar Title="Giỏ hàng" />
 
-    <AuthGuard>
+    <RouteGuard>
     <div class="cart-page">
         <div class="container">
             @if (!_cartReady)
@@ -56,9 +57,9 @@
                                            @onchange="() => ToggleItem(item.ProductId)" />
                                 </div>
                                 <div class="cart-item-image">
-                                    @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                    @if (!string.IsNullOrWhiteSpace(PetShop.Components.Shared.ImageUrl.SafeOrNull(item.ImageUrl)))
                                     {
-                                        <img src="@item.ImageUrl" alt="@item.Name" />
+                                        <img src="@PetShop.Components.Shared.ImageUrl.Safe(item.ImageUrl)" alt="@item.Name" loading="lazy" decoding="async" />
                                     }
                                     else
                                     {
@@ -116,7 +117,7 @@
             }
         </div>
     </div>
-    </AuthGuard>
+    </RouteGuard>
 
     <Footer />
 </div>
@@ -224,7 +225,7 @@
     private void HandleSessionChanged() => InvokeAsync(StateHasChanged);
 
     private static string FormatPrice(decimal value) =>
-        string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:C0}");
+        PetShop.Components.Shared.Format.Vnd(value);
 
     public void Dispose()
     {

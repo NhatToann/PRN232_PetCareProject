@@ -14,17 +14,20 @@ namespace PetShop.Services
         private readonly IConfiguration _configuration;
         private readonly IEmailService _emailService;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILogger<AuthService> _logger;
 
         public AuthService(
             IAuthRepository authRepository,
             IConfiguration configuration,
             IEmailService emailService,
-            IHttpClientFactory httpClientFactory)
+            IHttpClientFactory httpClientFactory,
+            ILogger<AuthService> logger)
         {
             _authRepository = authRepository;
             _configuration = configuration;
             _emailService = emailService;
             _httpClientFactory = httpClientFactory;
+            _logger = logger;
         }
 
         public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, CancellationToken ct = default)

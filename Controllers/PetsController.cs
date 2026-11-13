@@ -227,7 +227,7 @@ namespace PetShop.Controllers
                 WeightKg = request.WeightKg,
                 Description = NormalizeNullable(request.Description),
                 HealthStatus = NormalizeNullable(request.HealthStatus),
-                ImagePath = NormalizeNullable(request.ImagePath),
+                ImagePath = NormalizeImagePath(request.ImagePath),
                 BreedId = request.BreedId,
                 DeletedAt = null,
                 CreatedAt = DateTime.Now,
@@ -256,7 +256,9 @@ namespace PetShop.Controllers
                 return validation;
             }
 
-            var pet = await _db.Pets.FirstOrDefaultAsync(p => p.Id == petId && p.DeletedAt == null, ct);
+            var pet = await _db.Pets
+                .AsTracking()
+                .FirstOrDefaultAsync(p => p.Id == petId && p.DeletedAt == null, ct);
             if (pet is null)
             {
                 return NotFound(new { message = "Không tìm thấy thú cưng." });
@@ -273,7 +275,7 @@ namespace PetShop.Controllers
             pet.WeightKg = request.WeightKg;
             pet.Description = NormalizeNullable(request.Description);
             pet.HealthStatus = NormalizeNullable(request.HealthStatus);
-            pet.ImagePath = NormalizeNullable(request.ImagePath);
+            pet.ImagePath = NormalizeImagePath(request.ImagePath);
             pet.BreedId = request.BreedId;
             pet.UpdatedAt = DateTime.Now;
 
@@ -291,7 +293,9 @@ namespace PetShop.Controllers
                 return accessValidation;
             }
 
-            var pet = await _db.Pets.FirstOrDefaultAsync(p => p.Id == petId && p.DeletedAt == null, ct);
+            var pet = await _db.Pets
+                .AsTracking()
+                .FirstOrDefaultAsync(p => p.Id == petId && p.DeletedAt == null, ct);
             if (pet is null)
             {
                 return NotFound(new { message = "Không tìm thấy thú cưng." });
@@ -397,6 +401,27 @@ namespace PetShop.Controllers
         {
             var trimmed = value?.Trim();
             return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+        }
+
+        /// <summary>
+        /// Chuẩn hoá <c>image_path</c> trước khi lưu.
+        ///
+        /// <para>
+        /// Trước đây chỉ <c>Trim()</c> ⇒ người dùng gõ bất kỳ chuỗi nào ("a", "á",
+        /// "ðdasdadaasdasd") cũng được lưu vào DB ⇒ mỗi lần render thẻ <c>img</c>
+        /// trình duyệt gửi GET tới đường dẫn tương đối rác ⇒ console đầy lỗi 404.
+        /// Nay chỉ giữ lại URL ảnh hợp lệ, còn lại ⇒ <c>null</c> (hiển thị placeholder).
+        /// </para>
+        /// </summary>
+        private static string? NormalizeImagePath(string? value)
+        {
+            var trimmed = value?.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                return null;
+            }
+
+            return PetShop.Components.Shared.ImageUrl.IsSafe(trimmed) ? trimmed : null;
         }
 
         private static string? NormalizeGenderValue(string? value)

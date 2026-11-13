@@ -189,9 +189,21 @@ namespace PetShop.Controllers
         public async Task<IActionResult> Webhook([FromBody] JsonElement payload, [FromHeader(Name = "x-payos-signature")] string? signature, CancellationToken ct)
         {
             var raw = payload.GetRawText();
-            _logger.Line($"[PayOS] Webhook received. Signature: {signature ?? "(null)"}");
 
-            if (!_payOS.VerifyWebhook(raw, signature))
+            // Ưu tiên signature trong body (chuẩn PayOS: envelope = {code,desc,success,data,signature});
+            // header x-payos-signature chỉ là fallback cho tích hợp tự do.
+            var effectiveSignature = signature;
+            if (string.IsNullOrWhiteSpace(effectiveSignature)
+                && payload.ValueKind == JsonValueKind.Object
+                && payload.TryGetProperty("signature", out var sigElement)
+                && sigElement.ValueKind == JsonValueKind.String)
+            {
+                effectiveSignature = sigElement.GetString();
+            }
+
+            _logger.Line($"[PayOS] Webhook received. Signature: {effectiveSignature ?? "(null)"}");
+
+            if (!_payOS.VerifyWebhook(raw, effectiveSignature))
             {
                 _logger.Line("[PayOS] Invalid signature.");
                 return Unauthorized(new { message = "Invalid signature" });
@@ -214,7 +226,7 @@ namespace PetShop.Controllers
         public async Task<ActionResult<PayOSPaymentStatusResult>> GetPaymentStatus(int orderCode, CancellationToken ct)
         {
             var payment = await _db.Payments
-                .AsNoTracking()
+                .AsTracking()
                 .FirstOrDefaultAsync(p => p.PayosOrderCode == orderCode, ct);
 
             if (payment is null)
@@ -264,7 +276,9 @@ namespace PetShop.Controllers
 
                 if (string.Equals(payment.PaymentType, "order", StringComparison.OrdinalIgnoreCase))
                 {
-                    var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderId == payment.ReferenceId, ct);
+                    var order = await _db.Orders
+                        .AsTracking()
+                        .FirstOrDefaultAsync(o => o.OrderId == payment.ReferenceId, ct);
                     if (order is not null && string.Equals(order.Status, "Chờ thanh toán", StringComparison.OrdinalIgnoreCase))
                     {
                         order.Status = "Đã hủy";

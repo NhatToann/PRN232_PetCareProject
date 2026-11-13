@@ -49,6 +49,19 @@ public sealed class NotificationHub : Hub
     /// <summary>Prefix tên group theo user — dùng chung với service phía server.</summary>
     public const string UserGroupPrefix = "user:";
 
+    /// <summary>
+    /// Group NHÂN VIÊN — mọi nhân viên (staff / admin / doctor) cùng nhận tin.
+    ///
+    /// <para>
+    /// <b>VÌ SAO CẦN (13/11/2026):</b> luồng chat khách ↔ nhân viên nay là
+    /// <b>HỘP THƯ CHUNG</b> — khách nhắn 1 lần ⇒ MỌI nhân viên phải thấy
+    /// (không chỉ 1 người được chọn) ⇒ cần 1 group chung cho toàn bộ nhân viên.
+    /// Client nhân viên lọc theo <c>ToCustomerId</c> để biết tin đó thuộc hộp
+    /// thư của khách nào.
+    /// </para>
+    /// </summary>
+    public const string StaffGroup = "chat:staff";
+
     /// <summary>Tên event mà client nhận thông báo mới.</summary>
     public const string NotificationReceivedEvent = "NotificationReceived";
 
@@ -80,6 +93,12 @@ public sealed class NotificationHub : Hub
     /// dùng luôn <paramref name="userId"/> do client truyền — xem ghi chú ở
     /// phần tổng quan về chế độ LOCAL DEMO.
     /// </para>
+    ///
+    /// <para>
+    /// <b>Nhân viên (13/11/2026):</b> ngoài group cá nhân, nhân viên còn được
+    /// tham gia <see cref="StaffGroup"/> (hộp thư chung) để nhận tin của KHÁCH
+    /// mà không cần ai gán tay.
+    /// </para>
     /// </summary>
     public async Task JoinGroup(int userId)
     {
@@ -97,7 +116,13 @@ public sealed class NotificationHub : Hub
 
         await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(userId));
 
-        _logger.Line($"[NotificationHub] JoinGroup: connection={Context.ConnectionId}, userId={userId}, authenticated={identity.IsAuthenticated}");
+        // Hộp thư chung — chỉ nhân viên mới vào group này.
+        if (IsStaffKind(identity.Kind))
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, StaffGroup);
+        }
+
+        _logger.Line($"[NotificationHub] JoinGroup: connection={Context.ConnectionId}, userId={userId}, authenticated={identity.IsAuthenticated}, kind={identity.Kind}");
     }
 
     /// <summary>
@@ -212,6 +237,12 @@ public sealed class NotificationHub : Hub
     /// nhân viên, ta ghi <c>CustomerId</c> = id người nhận và <c>StaffId</c> =
     /// id người gửi (nếu id người gửi có tồn tại trong bảng <c>Staff</c>).
     /// </para>
+    ///
+    /// <para>
+    /// <b>HỘP THƯ CHUNG (13/11/2026):</b> ghi thêm <c>SenderName</c> +
+    /// <c>SenderKind</c> để mọi nhân viên thấy AI là người gửi (cột
+    /// <c>SenderType</c> bị CHECK constraint chỉ cho phép 'Staff'/'Customer').
+    /// </para>
     /// </summary>
     private async Task SaveChatMessageAsync(int senderId, int receiverId, string message)
     {
@@ -234,11 +265,19 @@ public sealed class NotificationHub : Hub
                 .AsNoTracking()
                 .AnyAsync(s => s.StaffId == senderId);
 
+            var senderName = await db.Staff
+                .AsNoTracking()
+                .Where(s => s.StaffId == senderId)
+                .Select(s => s.Name)
+                .FirstOrDefaultAsync();
+
             var entity = new ChatMessage
             {
                 CustomerId = receiverId,
                 StaffId = senderIsStaff ? senderId : null,
                 SenderType = senderIsStaff ? "staff" : "customer",
+                SenderName = senderName,
+                SenderKind = senderIsStaff ? "staff" : "customer",
                 Message = message,
                 SentAt = DateTime.Now,
                 IsRead = false,
@@ -264,9 +303,12 @@ public sealed class NotificationHub : Hub
         if (principal?.Identity?.IsAuthenticated == true)
         {
             var raw = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            var role = principal.FindFirstValue(ClaimTypes.Role);
+            var kind = NormalizeKind(role);
+
             if (int.TryParse(raw, out var userId) && userId > 0)
             {
-                return new HubIdentity(userId, true);
+                return new HubIdentity(userId, true, kind);
             }
         }
 
@@ -275,19 +317,40 @@ public sealed class NotificationHub : Hub
         if (query is not null)
         {
             var rawQuery = query["userId"].ToString();
+            var roleQuery = query["role"].ToString();
+            var kindQuery = NormalizeKind(roleQuery);
+
             if (int.TryParse(rawQuery, out var queryUserId) && queryUserId > 0)
             {
-                return new HubIdentity(queryUserId, false);
+                return new HubIdentity(queryUserId, false, kindQuery);
             }
         }
 
-        return new HubIdentity(requestedUserId, false);
+        return new HubIdentity(requestedUserId, false, string.Empty);
     }
+
+    /// <summary>
+    /// Chuẩn hoá role của người dùng về loại dùng trong chat.
+    /// </summary>
+    /// <param name="role">Role thô.</param>
+    /// <returns><c>staff</c> / <c>admin</c> / <c>doctor</c> / <c>customer</c>.</returns>
+    private static string NormalizeKind(string? role) => (role ?? string.Empty).Trim().ToLowerInvariant() switch
+    {
+        "admin" => "admin",
+        "doctor" => "doctor",
+        "staff" or "manager" or "employee" => "staff",
+        _ => "customer",
+    };
+
+    /// <summary>Kiểm tra loại người dùng có phải nhân viên (được vào hộp thư chung) không.</summary>
+    private static bool IsStaffKind(string? kind) =>
+        kind is "staff" or "admin" or "doctor";
 
     /// <summary>
     /// Kết quả resolve danh tính của một connection.
     /// </summary>
     /// <param name="UserId">Id người dùng suy ra được.</param>
     /// <param name="IsAuthenticated"><c>true</c> nếu danh tính đến từ claim hợp lệ.</param>
-    private readonly record struct HubIdentity(int UserId, bool IsAuthenticated);
+    /// <param name="Kind">Loại người dùng: <c>staff</c> / <c>admin</c> / <c>doctor</c> / <c>customer</c>.</param>
+    private readonly record struct HubIdentity(int UserId, bool IsAuthenticated, string Kind);
 }

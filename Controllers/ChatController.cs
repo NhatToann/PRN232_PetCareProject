@@ -37,10 +37,19 @@ public sealed class ChatController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy lịch sử chat với một đối tác.
+    /// Lấy lịch sử chat trong hộp thư.
+    ///
+    /// <para>
+    /// <b>HỘP THƯ CHUNG (13/11/2026):</b> khách gọi với <c>peerKind = "pool"</c>
+    /// ⇒ lấy hộp thư nhân viên của chính khách (mọi nhân viên đều ghi vào đây).
+    /// Nhân viên gọi với <c>peerKind = "customer"</c> ⇒ lấy hộp thư của khách đó.
+    /// </para>
     /// </summary>
     /// <param name="peerId">Id của đối tác (theo không gian id của role đối tác).</param>
-    /// <param name="peerKind">Loại đối tác: <c>staff</c> / <c>admin</c> / <c>doctor</c> / <c>customer</c>.</param>
+    /// <param name="peerKind">
+    /// Loại đối tác: <c>staff</c> / <c>admin</c> / <c>doctor</c> / <c>customer</c> /
+    /// <c>pool</c> (hộp thư chung của nhân viên).
+    /// </param>
     /// <param name="ct">Token huỷ.</param>
     [HttpGet("history/{peerId:int}")]
     [ProducesResponseType(typeof(IReadOnlyList<ChatMessageDto>), StatusCodes.Status200OK)]
@@ -77,7 +86,12 @@ public sealed class ChatController : ControllerBase
 
     /// <summary>
     /// Lấy danh sách đối tác có thể chat.
-    /// Khách hàng ⇒ nhân viên (staff / admin / doctor); nhân viên ⇒ khách hàng.
+    ///
+    /// <para>
+    /// <b>HỘP THƯ CHUNG (13/11/2026):</b> khách KHÔNG cần danh sách nhân viên
+    /// nữa (chỉ chọn "AI" hoặc "Nhân viên") ⇒ trả về mảng rỗng. Nhân viên ⇒
+    /// danh sách khách đang có hộp thư (mới nhất lên đầu).
+    /// </para>
     /// </summary>
     /// <param name="ct">Token huỷ.</param>
     [HttpGet("peers")]

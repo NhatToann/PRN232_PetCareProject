@@ -11,10 +11,11 @@
 <PageTitle>Kết quả thanh toán – Pet Toy Shop</PageTitle>
 
 <div class="checkout-result-page">
-    <TopBar />
+    <PageStyles CssFiles="@PetShop.Services.CssBundle.CheckoutResult" />
+<TopBar />
     <PageContextBar Title="Kết quả thanh toán" />
 
-    <AuthGuard>
+    <RouteGuard>
     <main class="checkout-result-main">
         <div class="container">
             @if (isLoading)
@@ -167,7 +168,7 @@
             }
         </div>
     </main>
-    </AuthGuard>
+    </RouteGuard>
 
     <Footer />
 </div>
@@ -194,8 +195,12 @@
     {
         if (firstRender)
         {
-            await CartState.LoadAsync();
-            await UserSession.LoadAsync();
+            // ⚠️ Bọc try/catch: JS interop lỗi (TaskCanceledException / JSDisconnectedException)
+            // sẽ ném ra ngoài ⇒ component crash ⇒ circuit Blazor Server bị đóng ⇒
+            // toàn bộ UI chết, buộc user phải F5. Xem CartStateService.LoadAsync.
+            try { await CartState.LoadAsync(); } catch (Exception ex) { Logger.LogWarning("[CheckoutResult] CartState.LoadAsync threw: {Type}", ex.GetType().Name); }
+            try { await UserSession.LoadAsync(); } catch (Exception ex) { Logger.LogWarning("[CheckoutResult] UserSession.LoadAsync threw: {Type}", ex.GetType().Name); }
+
             await CheckPaymentStatusAsync();
             isLoading = false;
             StateHasChanged();
@@ -370,7 +375,7 @@
     private void HandleSessionChanged() => InvokeAsync(StateHasChanged);
 
     private static string FormatPrice(decimal value) =>
-        string.Create(System.Globalization.CultureInfo.GetCultureInfo("vi-VN"), $"{value:C0}");
+        PetShop.Components.Shared.Format.Vnd(value);
 
     public void Dispose()
     {
