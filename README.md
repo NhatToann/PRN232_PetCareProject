@@ -377,3 +377,4 @@ Chi tiết về quy ước code, kết quả kiểm tra sức khoẻ codebase v�
 Dự án dùng các thư viện mã nguồn mở: EF Core, BCrypt.Net, MailKit, Google.Apis.Auth,
 Swashbuckle, xUnit, Handlebars.Net, Microsoft.AspNetCore.OData,
 Microsoft.AspNetCore.Authentication.JwtBearer.
+"# PRN232_PetCare" 
